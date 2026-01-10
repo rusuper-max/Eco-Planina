@@ -594,6 +594,34 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Delete master code (God only, only available codes)
+  const deleteMasterCode = async (codeId) => {
+    if (!isGod()) throw new Error('Samo GOD može da briše master kodove');
+    try {
+      // First check if code is available (not used)
+      const { data: codeData, error: fetchError } = await supabase
+        .from('master_codes')
+        .select('status')
+        .eq('id', codeId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (codeData.status === 'used') {
+        throw new Error('Ne možete obrisati iskorišćen kod. Prvo obrišite firmu koja ga koristi.');
+      }
+
+      const { error } = await supabase
+        .from('master_codes')
+        .delete()
+        .eq('id', codeId);
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting master code:', error);
+      throw error;
+    }
+  };
+
   // Fetch company with full details including equipment
   const fetchCompanyDetails = async (companyCode) => {
     if (!isAdmin()) return null;
@@ -655,6 +683,7 @@ export const AuthProvider = ({ children }) => {
     deleteCompany,
     updateCompany,
     fetchCompanyDetails,
+    deleteMasterCode,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import {
-  Key, RefreshCw, Plus, Copy, Check, X
+  Key, RefreshCw, Plus, Copy, Check, X, Trash2
 } from 'lucide-react';
 
 const AdminCodesPage = () => {
-  const { user, logout, fetchAllMasterCodes, generateMasterCode, isGod } = useAuth();
+  const { user, logout, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, isGod } = useAuth();
   const navigate = useNavigate();
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +58,22 @@ const AdminCodesPage = () => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleDeleteCode = async (codeId, codeValue, status) => {
+    if (status === 'used') {
+      alert('Ne možete obrisati iskorišćen kod. Prvo obrišite firmu koja ga koristi.');
+      return;
+    }
+    if (!window.confirm(`Da li ste sigurni da želite da obrišete kod "${codeValue}"?\n\nOva akcija je NEPOVRATNA!`)) {
+      return;
+    }
+    try {
+      await deleteMasterCode(codeId);
+      loadCodes();
+    } catch (error) {
+      alert('Greška: ' + error.message);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -192,6 +208,7 @@ const AdminCodesPage = () => {
                       <th>Firma</th>
                       <th>PIB</th>
                       <th>Napomena</th>
+                      {isGod() && <th>Akcije</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -219,6 +236,19 @@ const AdminCodesPage = () => {
                         <td>{code.company?.name || '-'}</td>
                         <td>{code.pib || '-'}</td>
                         <td className="note-cell">{code.note || '-'}</td>
+                        {isGod() && (
+                          <td>
+                            <button
+                              className={`btn-icon ${code.status === 'available' ? 'danger' : ''}`}
+                              onClick={() => handleDeleteCode(code.id, code.code, code.status)}
+                              title={code.status === 'used' ? 'Prvo obrišite firmu' : 'Obriši kod'}
+                              disabled={code.status === 'used'}
+                              style={code.status === 'used' ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
