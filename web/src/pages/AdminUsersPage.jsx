@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
+import toast from 'react-hot-toast';
 import {
   Users, RefreshCw, Search, ChevronUp, ChevronDown, X,
   Trash2, Pencil, Save, Phone, MapPin, Building2
@@ -53,8 +54,9 @@ const AdminUsersPage = () => {
       await promoteToAdmin(userId);
       loadUsers();
       setSelectedUser(null);
+      toast.success('Korisnik promovisan u admina!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     }
   };
 
@@ -64,8 +66,9 @@ const AdminUsersPage = () => {
       await demoteFromAdmin(userId);
       loadUsers();
       setSelectedUser(null);
+      toast.success('Admin status uklonjen!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     }
   };
 
@@ -75,8 +78,9 @@ const AdminUsersPage = () => {
       await deleteUser(userId);
       loadUsers();
       setSelectedUser(null);
+      toast.success('Korisnik obrisan!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     }
   };
 
@@ -97,8 +101,9 @@ const AdminUsersPage = () => {
       await updateUser(editingUser.id, editForm);
       loadUsers();
       setEditingUser(null);
+      toast.success('Korisnik uspešno ažuriran!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     } finally {
       setSaving(false);
     }

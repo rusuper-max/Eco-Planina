@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
+import toast from 'react-hot-toast';
 import {
   Building2, RefreshCw, Search, X, Users, Trash2, Pencil,
   Save, Package, UserCheck
@@ -53,8 +54,9 @@ const AdminCompaniesPage = () => {
       await deleteCompany(code);
       loadCompanies();
       setSelectedCompany(null);
+      toast.success('Firma uspešno obrisana!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     }
   };
 
@@ -87,8 +89,9 @@ const AdminCompaniesPage = () => {
       await updateCompany(editingCompany.code, editForm);
       loadCompanies();
       setEditingCompany(null);
+      toast.success('Firma uspešno ažurirana!');
     } catch (error) {
-      alert('Greska: ' + error.message);
+      toast.error('Greška: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -371,8 +374,9 @@ const AdminCompaniesPage = () => {
                                 loadCompanies();
                                 setSelectedCompany(null);
                                 setCompanyDetails(null);
+                                toast.success('Firma uspešno obrisana!');
                               })
-                              .catch(err => alert('Greska: ' + err.message));
+                              .catch(err => toast.error('Greška: ' + err.message));
                           }
                         }}
                       >

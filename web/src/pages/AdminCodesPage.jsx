@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
+import toast from 'react-hot-toast';
 import {
   Key, RefreshCw, Plus, Copy, Check, X, Trash2
 } from 'lucide-react';
@@ -47,8 +48,9 @@ const AdminCodesPage = () => {
       setShowGenerateModal(false);
       setNewCodeNote('');
       loadCodes();
+      toast.success('Master kod uspešno generisan!');
     } catch (error) {
-      alert('Greska pri generisanju koda: ' + error.message);
+      toast.error('Greška: ' + error.message);
     } finally {
       setGenerating(false);
     }
@@ -57,12 +59,13 @@ const AdminCodesPage = () => {
   const copyToClipboard = (code) => {
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
+    toast.success('Kod kopiran u clipboard!');
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
   const handleDeleteCode = async (codeId, codeValue, status) => {
     if (status === 'used') {
-      alert('Ne možete obrisati iskorišćen kod. Prvo obrišite firmu koja ga koristi.');
+      toast.error('Ne možete obrisati iskorišćen kod. Prvo obrišite firmu.');
       return;
     }
     if (!window.confirm(`Da li ste sigurni da želite da obrišete kod "${codeValue}"?\n\nOva akcija je NEPOVRATNA!`)) {
@@ -71,8 +74,9 @@ const AdminCodesPage = () => {
     try {
       await deleteMasterCode(codeId);
       loadCodes();
+      toast.success('Master kod obrisan!');
     } catch (error) {
-      alert('Greška: ' + error.message);
+      toast.error('Greška: ' + error.message);
     }
   };
 

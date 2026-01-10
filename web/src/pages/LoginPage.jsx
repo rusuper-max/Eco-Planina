@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 import { Mountain, Phone, Lock, LogIn, ChevronDown } from 'lucide-react';
 
 const COUNTRY_CODES = [
@@ -40,6 +41,7 @@ const LoginPage = () => {
       }
     } catch (err) {
       setError(err.message || 'Greska pri prijavi');
+      toast.error(err.message || 'Greška pri prijavi');
     } finally {
       setLoading(false);
     }
