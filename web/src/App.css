@@ -1429,6 +1429,12 @@ body {
   cursor: pointer;
   color: var(--gray-500);
   transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.copy-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .copy-btn:hover {
