@@ -1806,3 +1806,111 @@ body {
     gap: 16px;
   }
 }
+
+/* ========================================
+   PHONE INPUT WITH COUNTRY CODE
+   ======================================== */
+.input-hint {
+  font-size: 12px;
+  color: var(--gray-400);
+  margin-bottom: 10px;
+  font-style: italic;
+}
+
+.phone-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.country-code-wrapper {
+  position: relative;
+}
+
+.country-code-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--white);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.country-code-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.country-code-btn .country-flag {
+  font-size: 18px;
+}
+
+.country-code-btn .country-code {
+  font-weight: 500;
+}
+
+.country-code-btn svg {
+  color: var(--gray-400);
+}
+
+.country-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: var(--gray-800);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xl);
+  z-index: 100;
+  min-width: 220px;
+  max-height: 280px;
+  overflow-y: auto;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.country-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--gray-300);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+}
+
+.country-option:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.country-option.selected {
+  background: var(--primary-bg);
+  color: var(--primary-light);
+}
+
+.country-option .country-flag {
+  font-size: 18px;
+}
+
+.country-option .country-name {
+  flex: 1;
+}
+
+.country-option .country-code {
+  color: var(--gray-500);
+  font-size: 13px;
+}
+
+.phone-input {
+  flex: 1;
+}
