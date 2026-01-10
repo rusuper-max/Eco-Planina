@@ -1,29 +1,62 @@
 {
   "expo": {
-    "name": "EcoLogistics",
-    "slug": "EcoLogistics",
+    "name": "Eco Planina",
+    "slug": "EcoPlanina",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#10B981"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ecoplanina.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyDND-OkRxWmKkNuoZ6hdFgkQ5crVhyXpX0"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "EcoLogistics needs your location to show nearby pickup requests on the map.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#10B981"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.ecoplanina.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDND-OkRxWmKkNuoZ6hdFgkQ5crVhyXpX0"
+        }
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "EcoLogistics needs your location to show nearby pickup requests."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f7ec23e5-6fd1-44a2-9273-6e241959e906"
+      }
     }
   }
 }
