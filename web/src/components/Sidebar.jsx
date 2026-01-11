@@ -55,7 +55,7 @@ const Sidebar = ({ activeItem, user, isGod, onLogout }) => {
                     </div>
                     <div className="user-info">
                         <span className="user-name">{user?.name}</span>
-                        <span className="user-role">{isGod ? 'GOD' : 'Admin'}</span>
+                        <span className="user-role">{isGod ? 'Super Admin' : 'Admin'}</span>
                     </div>
                     <button className="logout-btn" onClick={onLogout} title="Odjavi se">
                         <LogOut size={18} />

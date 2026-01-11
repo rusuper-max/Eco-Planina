@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { Mountain, Phone, Lock, LogIn, ChevronDown } from 'lucide-react';
@@ -136,7 +136,7 @@ const LoginPage = () => {
         </form>
 
         <p className="app-hint">
-          Nemate nalog? Registrujte se preko mobilne aplikacije.
+          Nemate nalog? <Link to="/register" className="link">Registrujte se</Link>
         </p>
       </div>
     </div>
