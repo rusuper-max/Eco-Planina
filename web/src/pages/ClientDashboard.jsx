@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LogOut, MapPin, Send, Package, Clock, CheckCircle, X, Mountain,
-  AlertTriangle, RefreshCw
+  AlertTriangle, RefreshCw, Menu
 } from 'lucide-react';
 
 const WASTE_TYPES = [
@@ -45,6 +45,7 @@ const ClientDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('form');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (fetchClientRequests) {
@@ -126,8 +127,17 @@ const ClientDashboard = () => {
 
   return (
     <div className="dashboard-layout">
+      {/* Mobile sidebar overlay */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
       {/* Sidebar */}
-      <aside className="sidebar client-sidebar">
+      <aside className={`sidebar client-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
+          <X size={20} />
+        </button>
         <div className="sidebar-header">
           <div className="sidebar-brand">
             <div className="brand-icon">
@@ -160,7 +170,7 @@ const ClientDashboard = () => {
           </div>
 
           {clientRequests && clientRequests.length > 0 && (
-            <div className="active-requests-badge" onClick={() => setActiveTab('requests')}>
+            <div className="active-requests-badge" onClick={() => { setActiveTab('requests'); setSidebarOpen(false); }}>
               <Clock size={18} />
               <span>{clientRequests.length} aktivan{clientRequests.length === 1 ? '' : clientRequests.length < 5 ? 'a' : 'ih'} zahtev{clientRequests.length === 1 ? '' : 'a'}</span>
             </div>
@@ -178,9 +188,12 @@ const ClientDashboard = () => {
       {/* Main Content Area */}
       <main className="main-content client-main-content">
         <header className="page-header">
-          <div>
-            <h1>{activeTab === 'form' ? 'Novi zahtev za preuzimanje' : 'Moji zahtevi'}</h1>
-            <p>{activeTab === 'form' ? 'Popunite formu da posaljete zahtev menadzeru' : 'Pregled vasih aktivnih zahteva'}</p>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+            <Menu size={20} />
+          </button>
+          <div className="page-header-content">
+            <h1>{activeTab === 'form' ? 'Novi zahtev' : 'Moji zahtevi'}</h1>
+            <p>{activeTab === 'form' ? 'Posaljite zahtev menadzeru' : 'Pregled aktivnih zahteva'}</p>
           </div>
           <div className="header-actions">
             <div className="tab-buttons">
