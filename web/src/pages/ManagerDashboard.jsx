@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   LogOut, Users, Clock, Package, MapPin, Phone, FileText,
   Trash2, CheckCircle, Settings, Copy, History, X, AlertTriangle,
-  LayoutDashboard, Mountain, Map, Filter, Printer, Plus, Edit2, Save, Wrench
+  LayoutDashboard, Mountain, Map, Filter, Printer, Plus, Edit2, Save, Wrench, Menu
 } from 'lucide-react';
 
 const WASTE_ICONS = {
@@ -57,6 +57,9 @@ const ManagerDashboard = () => {
   const [editingClient, setEditingClient] = useState(null);
   const [clientNote, setClientNote] = useState('');
   const [selectedEquipment, setSelectedEquipment] = useState([]);
+
+  // Mobile menu state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const printRef = useRef();
 
@@ -317,8 +320,17 @@ const ManagerDashboard = () => {
 
   return (
     <div className="dashboard-layout">
+      {/* Mobile sidebar overlay */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
+          <X size={20} />
+        </button>
         <div className="sidebar-header">
           <div className="sidebar-brand">
             <div className="brand-icon">
@@ -334,16 +346,16 @@ const ManagerDashboard = () => {
         <nav className="sidebar-nav">
           <div className="nav-section">
             <div className="nav-section-title">Glavna</div>
-            <a href="#" className="nav-item active">
+            <a href="#" className="nav-item active" onClick={() => setSidebarOpen(false)}>
               <LayoutDashboard size={20} />
               <span>Dashboard</span>
               {urgentCount > 0 && <span className="badge">{urgentCount}</span>}
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/map'); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); navigate('/map'); }}>
               <Map size={20} />
               <span>Mapa klijenata</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/requests-map'); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); navigate('/requests-map'); }}>
               <MapPin size={20} />
               <span>Mapa zahteva</span>
             </a>
@@ -351,19 +363,19 @@ const ManagerDashboard = () => {
 
           <div className="nav-section">
             <div className="nav-section-title">Upravljanje</div>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setShowClients(true); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); setShowClients(true); }}>
               <Users size={20} />
               <span>Klijenti</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setShowEquipment(true); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); setShowEquipment(true); }}>
               <Wrench size={20} />
               <span>Vrste opreme</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/history'); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); navigate('/history'); }}>
               <History size={20} />
               <span>Istorija</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setShowSettings(true); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); setSidebarOpen(false); setShowSettings(true); }}>
               <Settings size={20} />
               <span>Podesavanja</span>
             </a>
@@ -387,7 +399,10 @@ const ManagerDashboard = () => {
       {/* Main Content */}
       <main className="main-content">
         <header className="page-header">
-          <div>
+          <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
+            <Menu size={20} />
+          </button>
+          <div className="page-header-content">
             <h1>Dashboard</h1>
             <p>Pregled aktivnih zahteva za preuzimanje</p>
           </div>
