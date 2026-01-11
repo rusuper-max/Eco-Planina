@@ -100,6 +100,10 @@ const LoginPage = () => {
                 <Phone size={20} />
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="641234567"

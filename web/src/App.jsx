@@ -6,6 +6,7 @@ import ManagerDashboard from './pages/ManagerDashboard';
 import ClientDashboard from './pages/ClientDashboard';
 import HistoryPage from './pages/HistoryPage';
 import MapPage from './pages/MapPage';
+import RequestsMapPage from './pages/RequestsMapPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminCompaniesPage from './pages/AdminCompaniesPage';
@@ -144,6 +145,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['manager']}>
             <MapPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/requests-map"
+        element={
+          <ProtectedRoute allowedRoles={['manager']}>
+            <RequestsMapPage />
           </ProtectedRoute>
         }
       />

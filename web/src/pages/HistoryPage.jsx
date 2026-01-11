@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Download, Calendar, RefreshCw, LayoutDashboard, Users, History,
-  Settings, LogOut, Mountain, Map, Clock
+  Settings, LogOut, Mountain, Map, Clock, Wrench, MapPin
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -143,7 +143,7 @@ const HistoryPage = () => {
             <div className="brand-icon">
               <Mountain size={24} />
             </div>
-            <div>
+            <div className="brand-text">
               <h1>EcoPlanina</h1>
               <p>{companyName}</p>
             </div>
@@ -161,6 +161,10 @@ const HistoryPage = () => {
               <Map size={20} />
               <span>Mapa klijenata</span>
             </a>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/requests-map'); }}>
+              <MapPin size={20} />
+              <span>Mapa zahteva</span>
+            </a>
           </div>
 
           <div className="nav-section">
@@ -169,11 +173,15 @@ const HistoryPage = () => {
               <Users size={20} />
               <span>Klijenti</span>
             </a>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/manager?tab=equipment'); }}>
+              <Wrench size={20} />
+              <span>Vrste opreme</span>
+            </a>
             <a href="#" className="nav-item active">
               <History size={20} />
               <span>Istorija</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/manager'); }}>
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/manager?tab=settings'); }}>
               <Settings size={20} />
               <span>Podesavanja</span>
             </a>
@@ -187,7 +195,7 @@ const HistoryPage = () => {
               <span className="user-name">{user?.name}</span>
               <span className="user-role">Menadzer</span>
             </div>
-            <button className="logout-btn-icon" onClick={handleLogout} title="Odjavi se">
+            <button className="logout-btn" onClick={handleLogout} title="Odjavi se">
               <LogOut size={18} />
             </button>
           </div>

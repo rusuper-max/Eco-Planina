@@ -26,7 +26,8 @@ const RegisterPage = () => {
     confirmPassword: '',
     address: '',
     companyCode: '',
-    role: 'client'
+    role: 'client',
+    joinExisting: false
   });
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [error, setError] = useState('');
@@ -87,7 +88,8 @@ const RegisterPage = () => {
         password: formData.password,
         address: formData.address.trim(),
         companyCode: formData.companyCode.trim().toUpperCase(),
-        role: formData.role
+        role: formData.role,
+        joinExisting: formData.joinExisting
       });
 
       toast.success('Uspešno ste se registrovali!');
@@ -178,6 +180,10 @@ const RegisterPage = () => {
                     <Phone size={20} />
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="tel"
                       value={formData.phone}
                       onChange={(e) => updateForm('phone', e.target.value)}
                       placeholder="641234567"
@@ -222,15 +228,64 @@ const RegisterPage = () => {
           ) : (
             <>
               <div className="input-group">
-                <label>Kod firme</label>
-                <p className="input-hint">Dobijate od administratora firme</p>
+                <label>Registrujem se kao</label>
+                <div className="role-selector">
+                  <button
+                    type="button"
+                    className={`role-option ${formData.role === 'client' ? 'active' : ''}`}
+                    onClick={() => {
+                      updateForm('role', 'client');
+                      updateForm('joinExisting', false);
+                    }}
+                  >
+                    <User size={20} />
+                    <span>Klijent</span>
+                    <p>Saljem zahteve za odvoz</p>
+                  </button>
+                  <button
+                    type="button"
+                    className={`role-option ${formData.role === 'manager' ? 'active' : ''}`}
+                    onClick={() => updateForm('role', 'manager')}
+                  >
+                    <Building2 size={20} />
+                    <span>Menadzer</span>
+                    <p>Upravljam zahtevima</p>
+                  </button>
+                </div>
+              </div>
+
+              {formData.role === 'manager' && (
+                <div className="input-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={formData.joinExisting}
+                      onChange={(e) => updateForm('joinExisting', e.target.checked)}
+                    />
+                    <span>Pridruzite se postojecoj firmi</span>
+                  </label>
+                  <p className="input-hint">
+                    {formData.joinExisting
+                      ? 'Unesite kod firme kojoj se pridruzujete'
+                      : 'Unesite master kod za kreiranje nove firme'}
+                  </p>
+                </div>
+              )}
+
+              <div className="input-group">
+                <label>{formData.role === 'manager' && formData.joinExisting ? 'Kod firme' : 'Kod firme / Master kod'}</label>
+                <p className="input-hint">
+                  {formData.role === 'manager' && formData.joinExisting
+                    ? 'Dobijate od menadžera postojeće firme'
+                    : 'Dobijate od administratora'}
+                </p>
                 <div className="input-wrapper">
                   <Building2 size={20} />
                   <input
                     type="text"
                     value={formData.companyCode}
                     onChange={(e) => updateForm('companyCode', e.target.value.toUpperCase())}
-                    placeholder="ABC123"
+                    placeholder={formData.role === 'manager' && formData.joinExisting ? 'ECO-XXXX' : 'ABC123'}
                     required
                     style={{ textTransform: 'uppercase' }}
                   />
@@ -247,30 +302,6 @@ const RegisterPage = () => {
                     onChange={(e) => updateForm('address', e.target.value)}
                     placeholder="Ulica i broj, grad"
                   />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Registrujem se kao</label>
-                <div className="role-selector">
-                  <button
-                    type="button"
-                    className={`role-option ${formData.role === 'client' ? 'active' : ''}`}
-                    onClick={() => updateForm('role', 'client')}
-                  >
-                    <User size={20} />
-                    <span>Klijent</span>
-                    <p>Saljem zahteve za odvoz</p>
-                  </button>
-                  <button
-                    type="button"
-                    className={`role-option ${formData.role === 'manager' ? 'active' : ''}`}
-                    onClick={() => updateForm('role', 'manager')}
-                  >
-                    <Building2 size={20} />
-                    <span>Menadzer</span>
-                    <p>Upravljam zahtevima</p>
-                  </button>
                 </div>
               </div>
 

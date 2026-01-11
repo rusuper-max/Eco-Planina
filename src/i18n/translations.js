@@ -332,6 +332,16 @@ export const translations = {
     unableToAddEquipment: 'Nije moguce dodati opremu',
     unableToDeleteEquipment: 'Nije moguce obrisati opremu',
     deleteQuestion: 'Da li zelite da obrisete',
+
+    // Client Requests Tab
+    myRequests: 'Moji Zahtevi',
+    noMyRequests: 'Nemate aktivnih zahteva',
+    noMyRequestsDesc: 'Poslati zahtevi ce se prikazati ovde',
+    requestProcessedNotification: 'Vas zahtev je obradjen!',
+    requestProcessedDesc: 'Menadzer je obradio vas zahtev za',
+    pending: 'Na cekanju',
+    sentAt: 'Poslato',
+    refreshing: 'Osvezavanje...',
   },
 
   en: {
@@ -660,6 +670,16 @@ export const translations = {
     unableToAddEquipment: 'Unable to add equipment',
     unableToDeleteEquipment: 'Unable to delete equipment',
     deleteQuestion: 'Do you want to delete',
+
+    // Client Requests Tab
+    myRequests: 'My Requests',
+    noMyRequests: 'No active requests',
+    noMyRequestsDesc: 'Sent requests will appear here',
+    requestProcessedNotification: 'Your request has been processed!',
+    requestProcessedDesc: 'Manager has processed your request for',
+    pending: 'Pending',
+    sentAt: 'Sent',
+    refreshing: 'Refreshing...',
   },
 };
 

@@ -45,6 +45,10 @@ export const AppProvider = ({ children }) => {
   // Pickup requests from Supabase
   const [pickupRequests, setPickupRequests] = useState([]);
 
+  // Client's own requests (for client view)
+  const [clientRequests, setClientRequests] = useState([]);
+  const [processedNotification, setProcessedNotification] = useState(null);
+
   // Selected suppliers for printing
   const [selectedForPrint, setSelectedForPrint] = useState([]);
 
@@ -65,6 +69,32 @@ export const AppProvider = ({ children }) => {
     } catch (error) {
       console.error('Error fetching requests:', error);
     }
+  };
+
+  // Fetch client's own requests
+  const fetchClientRequests = async () => {
+    if (!user?.id) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setClientRequests(data || []);
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching client requests:', error);
+      return [];
+    }
+  };
+
+  // Clear processed notification
+  const clearProcessedNotification = () => {
+    setProcessedNotification(null);
   };
 
   // Persistence Helper
@@ -175,6 +205,60 @@ export const AppProvider = ({ children }) => {
     };
   }, [companyCode]);
 
+  // Subscribe to real-time updates for client's own requests
+  useEffect(() => {
+    if (!user || user.role !== 'client') return;
+
+    // Initial fetch
+    fetchClientRequests();
+
+    // Real-time subscription for client's own requests
+    const channelName = `client_requests_${user.id}`;
+
+    const subscription = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pickup_requests',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('Client request event:', payload);
+
+          // Check if request was just processed
+          if (payload.eventType === 'UPDATE' &&
+              payload.new.status === 'processed' &&
+              payload.old?.status === 'pending') {
+            setProcessedNotification({
+              wasteLabel: payload.new.waste_label || payload.new.waste_type,
+              processedAt: payload.new.processed_at
+            });
+          }
+
+          // Also check for DELETE (when request is marked as processed and removed)
+          if (payload.eventType === 'DELETE') {
+            // Request was deleted (processed), show notification
+            setProcessedNotification({
+              wasteLabel: payload.old?.waste_label || payload.old?.waste_type || 'Zahtev',
+              processedAt: new Date().toISOString()
+            });
+          }
+
+          fetchClientRequests();
+        }
+      )
+      .subscribe((status) => {
+        console.log('Client subscription status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [user]);
+
   // Verify company code exists
   const verifyCompanyCode = async (code) => {
     try {
@@ -218,12 +302,65 @@ export const AppProvider = ({ children }) => {
       // If multiple users found, take the first one (or the one matching company code)
       const userData = data[0];
 
-      // Get company info
-      const { data: companyData } = await supabase
+      // Fetch company - try by user's company_code first, then by manager_id for older accounts
+      let companyData = null;
+      const { data: companyByCode } = await supabase
         .from('companies')
         .select('*')
         .eq('code', userData.company_code)
         .single();
+
+      if (companyByCode) {
+        companyData = companyByCode;
+      } else if (userData.role === 'manager') {
+        // Fallback for older accounts where company_code might be master code
+        const { data: companyByManager } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('manager_id', userData.id)
+          .single();
+        companyData = companyByManager;
+      }
+
+      // Check if company still has old MC- code and needs ECO- code
+      let actualCompanyCode = companyData?.code || userData.company_code;
+
+      if (companyData && actualCompanyCode.startsWith('MC-') && userData.role === 'manager') {
+        // Generate new ECO code for this company
+        const generateEcoCode = async () => {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          let code;
+          let isUnique = false;
+          while (!isUnique) {
+            code = 'ECO-' + Array.from({ length: 4 }, () =>
+              chars[Math.floor(Math.random() * chars.length)]
+            ).join('');
+            const { data: existing } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('code', code)
+              .single();
+            if (!existing) isUnique = true;
+          }
+          return code;
+        };
+
+        const newEcoCode = await generateEcoCode();
+
+        // Update company with new ECO code
+        await supabase
+          .from('companies')
+          .update({ code: newEcoCode })
+          .eq('id', companyData.id);
+
+        // Update all users with this company_code
+        await supabase
+          .from('users')
+          .update({ company_code: newEcoCode })
+          .eq('company_code', actualCompanyCode);
+
+        actualCompanyCode = newEcoCode;
+      }
 
       setUser({
         id: userData.id,
@@ -234,7 +371,7 @@ export const AppProvider = ({ children }) => {
         latitude: userData.latitude,
         longitude: userData.longitude,
       });
-      setCompanyCode(userData.company_code);
+      setCompanyCode(actualCompanyCode);
       setCompanyName(companyData?.name || 'Nepoznato');
       setIsRegistered(true);
 
@@ -246,7 +383,7 @@ export const AppProvider = ({ children }) => {
         phone: userData.phone,
         latitude: userData.latitude,
         longitude: userData.longitude,
-      }, userData.company_code, companyData?.name || 'Nepoznato');
+      }, actualCompanyCode, companyData?.name || 'Nepoznato');
 
       return { success: true, role: userData.role };
     } catch (error) {
@@ -1022,8 +1159,30 @@ export const AppProvider = ({ children }) => {
         throw new Error('Firma sa ovim PIB-om već postoji');
       }
 
-      // USE MASTER CODE AS COMPANY CODE (no generation!)
-      const companyCode = masterCode.toUpperCase();
+      // Generate unique company code (ECO-XXXX format)
+      const generateCompanyCode = async () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code;
+        let isUnique = false;
+
+        while (!isUnique) {
+          code = 'ECO-' + Array.from({ length: 4 }, () =>
+            chars[Math.floor(Math.random() * chars.length)]
+          ).join('');
+
+          // Check if code already exists
+          const { data: existing } = await supabase
+            .from('companies')
+            .select('id')
+            .eq('code', code)
+            .single();
+
+          if (!existing) isUnique = true;
+        }
+        return code;
+      };
+
+      const companyCode = await generateCompanyCode();
 
       // Create company with PIB and master_code reference
       const { data: companyData, error: companyError } = await supabase
@@ -1106,6 +1265,11 @@ export const AppProvider = ({ children }) => {
     fetchPickupRequests,
     fetchProcessedRequests,
     fetchCompanyClients,
+    // Client request tracking
+    clientRequests,
+    fetchClientRequests,
+    processedNotification,
+    clearProcessedNotification,
     selectedForPrint,
     toggleSelectForPrint,
     clearPrintSelection,

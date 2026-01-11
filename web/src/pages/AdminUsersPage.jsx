@@ -376,7 +376,7 @@ const AdminUsersPage = () => {
                   />
                 </div>
               </div>
-              {isGod() && editingUser.role !== 'god' && (
+              {editingUser.role !== 'god' && (
                 <div className="form-group">
                   <label>Uloga</label>
                   <select
@@ -386,7 +386,7 @@ const AdminUsersPage = () => {
                   >
                     <option value="client">Klijent</option>
                     <option value="manager">Menadzer</option>
-                    <option value="admin">Admin</option>
+                    {isGod() && <option value="admin">Admin</option>}
                   </select>
                 </div>
               )}

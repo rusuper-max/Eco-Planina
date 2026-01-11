@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppContext } from '../context/AppContext';
@@ -53,7 +54,16 @@ const URGENCY_CONFIG = [
 ];
 
 const ClientViewScreen = ({ navigation }) => {
-  const { addPickupRequest, user, logout, updateClientLocation } = useAppContext();
+  const {
+    addPickupRequest,
+    user,
+    logout,
+    updateClientLocation,
+    clientRequests,
+    fetchClientRequests,
+    processedNotification,
+    clearProcessedNotification,
+  } = useAppContext();
   const { language, changeLanguage, t } = useLanguage();
 
   const [selectedWaste, setSelectedWaste] = useState(null);
@@ -64,6 +74,12 @@ const ClientViewScreen = ({ navigation }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showFillLevel, setShowFillLevel] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Load requests on mount
+  useEffect(() => {
+    fetchClientRequests();
+  }, []);
 
   // Location update state
   const handleLocationSelect = async (location) => {
@@ -74,6 +90,12 @@ const ClientViewScreen = ({ navigation }) => {
     } catch (error) {
       Alert.alert(t('error'), t('locationUpdateError'));
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchClientRequests();
+    setRefreshing(false);
   };
 
   const handleSubmit = async () => {
@@ -110,6 +132,7 @@ const ClientViewScreen = ({ navigation }) => {
               setFillLevel(null);
               setUrgency(null);
               setNote('');
+              fetchClientRequests();
             },
           },
         ]
@@ -131,11 +154,43 @@ const ClientViewScreen = ({ navigation }) => {
           text: t('yes'),
           onPress: () => {
             logout();
-            // Navigation handled by App.js
           },
         },
       ]
     );
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('sr-RS', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('sr-RS', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getUrgencyColor = (urgencyValue) => {
+    switch (urgencyValue) {
+      case '24h': return COLORS.red;
+      case '48h': return COLORS.orange;
+      default: return COLORS.primary;
+    }
+  };
+
+  const getUrgencyBgColor = (urgencyValue) => {
+    switch (urgencyValue) {
+      case '24h': return COLORS.redLight;
+      case '48h': return COLORS.orangeLight;
+      default: return COLORS.primaryLight;
+    }
   };
 
   return (
@@ -144,26 +199,111 @@ const ClientViewScreen = ({ navigation }) => {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[COLORS.primary]}
+              tintColor={COLORS.primary}
+            />
+          }
+        >
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.greeting}>{t('hello')},</Text>
               <Text style={styles.userName}>{user?.name || t('user')}</Text>
             </View>
-            <TouchableOpacity style={styles.logoutButton} onPress={() => setShowSettings(true)}>
-              <Text style={styles.logoutIcon}>⚙️</Text>
+            <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettings(true)}>
+              <Text style={styles.settingsIcon}>⚙️</Text>
             </TouchableOpacity>
           </View>
 
-          {/* User Info Banner */}
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoIcon}>📍</Text>
-            <View style={styles.infoTextContainer}>
-              <Text style={styles.infoLabel}>{t('yourLocation')}:</Text>
-              <Text style={styles.infoValue}>{user?.address || t('notEntered')}</Text>
+          {/* Processed Notification Banner */}
+          {processedNotification && (
+            <View style={styles.processedBanner}>
+              <View style={styles.processedContent}>
+                <Text style={styles.processedIcon}>✅</Text>
+                <View style={styles.processedTextContainer}>
+                  <Text style={styles.processedTitle}>{t('requestProcessedNotification')}</Text>
+                  <Text style={styles.processedMessage}>
+                    {t('requestProcessedDesc')} "{processedNotification.wasteLabel}"
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={clearProcessedNotification}
+              >
+                <Text style={styles.confirmButtonText}>{t('confirm')}</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          )}
+
+          {/* Active Requests Section */}
+          {clientRequests.length > 0 && (
+            <View style={styles.activeRequestsSection}>
+              <Text style={styles.activeRequestsTitle}>
+                {t('myRequests')} ({clientRequests.length})
+              </Text>
+              {clientRequests.map((request) => (
+                <View key={request.id} style={styles.activeRequestCard}>
+                  <View style={styles.requestRow}>
+                    <View style={styles.requestWasteInfo}>
+                      <Text style={styles.requestWasteIcon}>
+                        {WASTE_TYPE_CONFIG.find(w => w.id === request.waste_type)?.icon || '📦'}
+                      </Text>
+                      <View>
+                        <Text style={styles.requestWasteLabel}>
+                          {request.waste_label || request.waste_type}
+                        </Text>
+                        <Text style={styles.requestDateSmall}>
+                          {formatDate(request.created_at)} {formatTime(request.created_at)}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.requestBadges}>
+                      <View style={[
+                        styles.urgencyBadgeSmall,
+                        { backgroundColor: getUrgencyBgColor(request.urgency) }
+                      ]}>
+                        <Text style={[
+                          styles.urgencyBadgeTextSmall,
+                          { color: getUrgencyColor(request.urgency) }
+                        ]}>
+                          {request.urgency}
+                        </Text>
+                      </View>
+                      <View style={styles.pendingBadge}>
+                        <View style={styles.pendingDot} />
+                        <Text style={styles.pendingText}>{t('pending')}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  {request.fill_level && (
+                    <View style={styles.fillLevelRowSmall}>
+                      <View style={styles.fillBarSmall}>
+                        <View style={[styles.fillBarProgressSmall, { width: `${request.fill_level}%` }]} />
+                      </View>
+                      <Text style={styles.fillPercentSmall}>{request.fill_level}%</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Divider */}
+          {clientRequests.length > 0 && (
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>{t('newRequest')}</Text>
+              <View style={styles.dividerLine} />
+            </View>
+          )}
 
           {/* Waste Type Selection */}
           <View style={styles.section}>
@@ -399,7 +539,7 @@ const ClientViewScreen = ({ navigation }) => {
         onSelect={handleLocationSelect}
         initialLocation={user?.latitude && user?.longitude ? { lat: user.latitude, lng: user.longitude } : null}
       />
-    </SafeAreaView >
+    </SafeAreaView>
   );
 };
 
@@ -420,6 +560,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 10,
+    paddingBottom: 10,
   },
   headerLeft: {
     flex: 1,
@@ -433,7 +574,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.darkGray,
   },
-  logoutButton: {
+  settingsButton: {
     width: 44,
     height: 44,
     borderRadius: 12,
@@ -441,32 +582,168 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoutIcon: {
+  settingsIcon: {
     fontSize: 22,
   },
-  infoBanner: {
+  // Processed notification banner
+  processedBanner: {
+    backgroundColor: COLORS.primaryLight,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  processedContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  processedIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  processedTextContainer: {
+    flex: 1,
+  },
+  processedTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.primaryDark,
+    marginBottom: 4,
+  },
+  processedMessage: {
+    fontSize: 14,
+    color: COLORS.darkGray,
+  },
+  confirmButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Active requests section
+  activeRequestsSection: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  activeRequestsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+    marginBottom: 10,
+  },
+  activeRequestCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  requestRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  requestWasteInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  requestWasteIcon: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  requestWasteLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+  },
+  requestDateSmall: {
+    fontSize: 11,
+    color: COLORS.mediumGray,
+    marginTop: 2,
+  },
+  requestBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  urgencyBadgeSmall: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  urgencyBadgeTextSmall: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.orange,
+    marginRight: 4,
+  },
+  pendingText: {
+    fontSize: 11,
+    color: COLORS.orange,
+    fontWeight: '500',
+  },
+  fillLevelRowSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  fillBarSmall: {
+    flex: 1,
+    height: 6,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 3,
+    marginRight: 8,
+  },
+  fillBarProgressSmall: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 3,
+  },
+  fillPercentSmall: {
+    fontSize: 11,
+    color: COLORS.darkGray,
+    fontWeight: '600',
+    width: 30,
+  },
+  // Divider
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 20,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
-    marginBottom: 10,
+    marginVertical: 8,
   },
-  infoIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  infoTextContainer: {
+  dividerLine: {
     flex: 1,
+    height: 1,
+    backgroundColor: COLORS.mediumGray,
+    opacity: 0.3,
   },
-  infoLabel: {
-    fontSize: 12,
-    color: COLORS.primaryDark,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: COLORS.darkGray,
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    color: COLORS.mediumGray,
     fontWeight: '500',
   },
   section: {
@@ -656,9 +933,6 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  bottomPadding: {
-    height: 40,
   },
   bottomPadding: {
     height: 40,

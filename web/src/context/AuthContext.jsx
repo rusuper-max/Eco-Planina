@@ -17,6 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [companyName, setCompanyName] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pickupRequests, setPickupRequests] = useState([]);
+  const [clientRequests, setClientRequests] = useState([]);
+  const [processedNotification, setProcessedNotification] = useState(null);
 
   // Load session from localStorage
   useEffect(() => {
@@ -49,6 +51,53 @@ export const AuthProvider = ({ children }) => {
     };
   }, [companyCode]);
 
+  // Subscribe to client's own requests (for client role)
+  useEffect(() => {
+    if (!user || user.role !== 'client') return;
+
+    fetchClientRequests();
+
+    const channelName = `client_requests_${user.id}`;
+    const subscription = supabase
+      .channel(channelName)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests', filter: `client_id=eq.${user.id}` }, (payload) => {
+        // Check if request was processed
+        if (payload.eventType === 'UPDATE' && payload.new.status === 'processed' && payload.old.status === 'pending') {
+          setProcessedNotification({
+            wasteLabel: payload.new.waste_label || payload.new.waste_type,
+            processedAt: payload.new.processed_at
+          });
+        }
+        fetchClientRequests();
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pickup_requests' }, () => fetchClientRequests())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [user]);
+
+  const fetchClientRequests = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('pickup_requests')
+        .select('*')
+        .eq('client_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setClientRequests(data || []);
+    } catch (error) {
+      console.error('Error fetching client requests:', error);
+    }
+  };
+
+  const clearProcessedNotification = () => {
+    setProcessedNotification(null);
+  };
+
   const fetchPickupRequests = async (code = companyCode) => {
     if (!code) return;
     try {
@@ -80,11 +129,66 @@ export const AuthProvider = ({ children }) => {
       }
 
       const userData = data[0];
-      const { data: companyData } = await supabase
+
+      // Fetch company - try by user's company_code first, then by manager_id for older accounts
+      let companyData = null;
+      const { data: companyByCode } = await supabase
         .from('companies')
         .select('*')
         .eq('code', userData.company_code)
         .single();
+
+      if (companyByCode) {
+        companyData = companyByCode;
+      } else if (userData.role === 'manager') {
+        // Fallback for older accounts where company_code might be master code
+        const { data: companyByManager } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('manager_id', userData.id)
+          .single();
+        companyData = companyByManager;
+      }
+
+      // Check if company still has old MC- code and needs ECO- code
+      let actualCompanyCode = companyData?.code || userData.company_code;
+
+      if (companyData && actualCompanyCode.startsWith('MC-') && userData.role === 'manager') {
+        // Generate new ECO code for this company
+        const generateEcoCode = async () => {
+          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+          let code;
+          let isUnique = false;
+          while (!isUnique) {
+            code = 'ECO-' + Array.from({ length: 4 }, () =>
+              chars[Math.floor(Math.random() * chars.length)]
+            ).join('');
+            const { data: existing } = await supabase
+              .from('companies')
+              .select('id')
+              .eq('code', code)
+              .single();
+            if (!existing) isUnique = true;
+          }
+          return code;
+        };
+
+        const newEcoCode = await generateEcoCode();
+
+        // Update company with new ECO code
+        await supabase
+          .from('companies')
+          .update({ code: newEcoCode })
+          .eq('id', companyData.id);
+
+        // Update user's company_code reference
+        await supabase
+          .from('users')
+          .update({ company_code: newEcoCode })
+          .eq('company_code', actualCompanyCode);
+
+        actualCompanyCode = newEcoCode;
+      }
 
       const userObj = {
         id: userData.id,
@@ -97,12 +201,12 @@ export const AuthProvider = ({ children }) => {
       };
 
       setUser(userObj);
-      setCompanyCode(userData.company_code);
+      setCompanyCode(actualCompanyCode);
       setCompanyName(companyData?.name || 'Nepoznato');
 
       localStorage.setItem('eco_session', JSON.stringify({
         user: userObj,
-        companyCode: userData.company_code,
+        companyCode: actualCompanyCode,
         companyName: companyData?.name || 'Nepoznato'
       }));
 
@@ -120,6 +224,169 @@ export const AuthProvider = ({ children }) => {
     setCompanyName(null);
     setPickupRequests([]);
     localStorage.removeItem('eco_session');
+  };
+
+  // Registration function
+  const register = async ({ name, phone, password, address, companyCode: inputCode, role, joinExisting }) => {
+    setIsLoading(true);
+    try {
+      // Check if phone already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone', phone)
+        .single();
+
+      if (existingUser) {
+        throw new Error('Korisnik sa ovim brojem telefona vec postoji');
+      }
+
+      if (role === 'client') {
+        // Client registration - verify company code
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('code', inputCode.toUpperCase())
+          .single();
+
+        if (companyError || !company) {
+          throw new Error('Nevažeći kod firme');
+        }
+
+        // Create client user
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .insert([{
+            name,
+            phone,
+            password,
+            address,
+            role: 'client',
+            company_code: inputCode.toUpperCase()
+          }])
+          .select()
+          .single();
+
+        if (userError) throw userError;
+        return { success: true };
+
+      } else if (role === 'manager') {
+        if (joinExisting) {
+          // Manager joining existing company - verify company code
+          const { data: company, error: companyError } = await supabase
+            .from('companies')
+            .select('*')
+            .eq('code', inputCode.toUpperCase())
+            .single();
+
+          if (companyError || !company) {
+            throw new Error('Nevažeći kod firme');
+          }
+
+          // Create manager user linked to existing company
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .insert([{
+              name,
+              phone,
+              password,
+              address,
+              role: 'manager',
+              company_code: inputCode.toUpperCase()
+            }])
+            .select()
+            .single();
+
+          if (userError) throw userError;
+          return { success: true };
+
+        } else {
+          // Manager creating new company - verify master code
+          const { data: masterCodeData, error: mcError } = await supabase
+            .from('master_codes')
+            .select('*')
+            .eq('code', inputCode.toUpperCase())
+            .eq('status', 'available')
+            .single();
+
+          if (mcError || !masterCodeData) {
+            throw new Error('Nevažeći ili vec iskorišceni Master Code');
+          }
+
+          // Generate unique company code (ECO-XXXX format)
+          const generateCompanyCode = async () => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code;
+            let isUnique = false;
+
+            while (!isUnique) {
+              code = 'ECO-' + Array.from({ length: 4 }, () =>
+                chars[Math.floor(Math.random() * chars.length)]
+              ).join('');
+
+              // Check if code already exists
+              const { data: existing } = await supabase
+                .from('companies')
+                .select('id')
+                .eq('code', code)
+                .single();
+
+              if (!existing) isUnique = true;
+            }
+            return code;
+          };
+
+          const companyCode = await generateCompanyCode();
+
+          // Create company with generated company code
+          const { data: companyData, error: companyError } = await supabase
+            .from('companies')
+            .insert([{
+              code: companyCode,
+              name: name + ' Firma',
+              master_code_id: masterCodeData.id
+            }])
+            .select()
+            .single();
+
+          if (companyError) throw companyError;
+
+          // Create manager user
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .insert([{
+              name,
+              phone,
+              password,
+              address,
+              role: 'manager',
+              company_code: companyCode
+            }])
+            .select()
+            .single();
+
+          if (userError) throw userError;
+
+          // Update company with manager_id and mark master code as used
+          await supabase
+            .from('companies')
+            .update({ manager_id: userData.id })
+            .eq('id', companyData.id);
+
+          await supabase
+            .from('master_codes')
+            .update({ status: 'used', used_by_company: companyData.id })
+            .eq('id', masterCodeData.id);
+
+          return { success: true };
+        }
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const removePickupRequest = async (id) => {
@@ -216,6 +483,21 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error fetching equipment types:', error);
       return [];
+    }
+  };
+
+  const updateCompanyEquipmentTypes = async (equipmentTypes) => {
+    if (!companyCode) throw new Error('Niste povezani sa firmom');
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ equipment_types: equipmentTypes })
+        .eq('code', companyCode);
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating equipment types:', error);
+      throw error;
     }
   };
 
@@ -657,13 +939,19 @@ export const AuthProvider = ({ children }) => {
     companyName,
     isLoading,
     pickupRequests,
+    clientRequests,
+    processedNotification,
+    clearProcessedNotification,
+    fetchClientRequests,
     login,
     logout,
+    register,
     removePickupRequest,
     markRequestAsProcessed,
     fetchCompanyClients,
     fetchProcessedRequests,
     fetchCompanyEquipmentTypes,
+    updateCompanyEquipmentTypes,
     updateClientDetails,
     addPickupRequest,
     fetchPickupRequests,

@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet';
 import {
   LogOut, Users, History, Settings, Mountain, Map, MapPin, Phone,
-  LayoutDashboard, X, Printer, Wrench
+  LayoutDashboard, X, Printer, Wrench, Clock, AlertTriangle, CheckCircle, Package
 } from 'lucide-react';
 
 // Fix for default marker icons in Leaflet with webpack/vite
@@ -15,6 +15,13 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
+
+const WASTE_ICONS = {
+  cardboard: '📦',
+  glass: '🍾',
+  plastic: '♻️',
+  trash: '🗑️',
+};
 
 // Custom marker icon creator
 const createCustomIcon = (color, emoji) => {
@@ -41,45 +48,29 @@ const createCustomIcon = (color, emoji) => {
 };
 
 // Component to fit map bounds
-const FitBounds = ({ clients }) => {
+const FitBounds = ({ items }) => {
   const map = useMap();
 
   useEffect(() => {
-    if (clients.length > 0) {
-      const validClients = clients.filter(c => c.latitude && c.longitude);
-      if (validClients.length > 0) {
+    if (items.length > 0) {
+      const validItems = items.filter(item => item.latitude && item.longitude);
+      if (validItems.length > 0) {
         const bounds = L.latLngBounds(
-          validClients.map(c => [c.latitude, c.longitude])
+          validItems.map(item => [item.latitude, item.longitude])
         );
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
       }
     }
-  }, [clients, map]);
+  }, [items, map]);
 
   return null;
 };
 
-const MapPage = () => {
-  const { user, companyName, logout, fetchCompanyClients } = useAuth();
+const RequestsMapPage = () => {
+  const { user, companyName, logout, pickupRequests } = useAuth();
   const navigate = useNavigate();
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadClients();
-  }, []);
-
-  const loadClients = async () => {
-    try {
-      const data = await fetchCompanyClients();
-      setClients(data);
-    } catch (error) {
-      console.error('Error loading clients:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const handleLogout = () => {
     if (window.confirm('Da li ste sigurni da zelite da se odjavite?')) {
@@ -88,34 +79,71 @@ const MapPage = () => {
     }
   };
 
-  // Filter clients with valid coordinates
-  const clientsWithCoords = useMemo(() => {
-    return clients.filter(c => c.latitude && c.longitude && !isNaN(c.latitude) && !isNaN(c.longitude));
-  }, [clients]);
+  // Filter only pending requests with valid coordinates
+  const requestsWithCoords = useMemo(() => {
+    return pickupRequests
+      .filter(r => r.status === 'pending')
+      .filter(r => r.latitude && r.longitude && !isNaN(r.latitude) && !isNaN(r.longitude));
+  }, [pickupRequests]);
+
+  const pendingRequests = pickupRequests.filter(r => r.status === 'pending');
 
   // Calculate map center
   const mapCenter = useMemo(() => {
-    if (clientsWithCoords.length === 0) {
-      // Default to Belgrade, Serbia
-      return [44.8176, 20.4633];
+    if (requestsWithCoords.length === 0) {
+      return [44.8176, 20.4633]; // Default to Belgrade
     }
-    const lats = clientsWithCoords.map(c => c.latitude);
-    const lngs = clientsWithCoords.map(c => c.longitude);
+    const lats = requestsWithCoords.map(r => r.latitude);
+    const lngs = requestsWithCoords.map(r => r.longitude);
     return [
       (Math.min(...lats) + Math.max(...lats)) / 2,
       (Math.min(...lngs) + Math.max(...lngs)) / 2
     ];
-  }, [clientsWithCoords]);
+  }, [requestsWithCoords]);
 
-  const clientIcon = createCustomIcon('#3B82F6', '🏢');
+  // Get marker color based on urgency
+  const getMarkerColor = (urgency) => {
+    switch (urgency) {
+      case '24h': return '#EF4444'; // Red
+      case '48h': return '#F59E0B'; // Orange
+      default: return '#10B981'; // Green
+    }
+  };
 
-  // Print clients list
-  const handlePrintClients = () => {
+  // Get marker icon based on waste type and urgency
+  const getRequestIcon = (request) => {
+    const color = getMarkerColor(request.urgency);
+    const emoji = WASTE_ICONS[request.waste_type] || '📦';
+    return createCustomIcon(color, emoji);
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('sr-RS', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString) => {
+    return new Date(dateString).toLocaleTimeString('sr-RS', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // Print requests list
+  const handlePrintRequests = () => {
+    if (pendingRequests.length === 0) {
+      alert('Nema zahteva za stampanje');
+      return;
+    }
+
     const printContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Lista klijenata - ${companyName}</title>
+        <title>Aktivni zahtevi - ${companyName}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: Arial, sans-serif; padding: 20px; }
@@ -125,33 +153,37 @@ const MapPage = () => {
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 11px; }
           th { background: #f5f5f5; font-weight: bold; }
           .footer { margin-top: 20px; font-size: 10px; color: #666; }
-          .equipment { color: #059669; font-size: 10px; }
+          .urgent { color: #EF4444; font-weight: bold; }
+          .warning { color: #F59E0B; }
+          .normal { color: #10B981; }
           @media print { body { padding: 10px; } }
         </style>
       </head>
       <body>
-        <h1>Lista klijenata</h1>
-        <div class="subtitle">${companyName} | ${new Date().toLocaleString('sr-RS')} | ${clients.length} klijenata</div>
+        <h1>Aktivni zahtevi za preuzimanje</h1>
+        <div class="subtitle">${companyName} | ${new Date().toLocaleString('sr-RS')} | ${pendingRequests.length} zahteva</div>
         <table>
           <thead>
             <tr>
               <th>#</th>
-              <th>Ime</th>
-              <th>Telefon</th>
+              <th>Klijent</th>
               <th>Adresa</th>
-              <th>Oprema</th>
-              <th>Lokacija</th>
+              <th>Telefon</th>
+              <th>Tip otpada</th>
+              <th>Hitnost</th>
+              <th>Datum</th>
             </tr>
           </thead>
           <tbody>
-            ${clients.map((client, idx) => `
+            ${pendingRequests.map((req, idx) => `
               <tr>
                 <td>${idx + 1}</td>
-                <td>${client.name}</td>
-                <td>${client.phone}</td>
-                <td>${client.address || '-'}</td>
-                <td class="equipment">${client.equipment_types?.join(', ') || '-'}</td>
-                <td>${client.latitude ? 'Da' : 'Ne'}</td>
+                <td>${req.client_name || '-'}</td>
+                <td>${req.client_address || '-'}</td>
+                <td>${req.client_phone || '-'}</td>
+                <td>${req.waste_label || req.waste_type || '-'}</td>
+                <td class="${req.urgency === '24h' ? 'urgent' : req.urgency === '48h' ? 'warning' : 'normal'}">${req.urgency || '-'}</td>
+                <td>${formatDate(req.created_at)}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -191,11 +223,11 @@ const MapPage = () => {
               <LayoutDashboard size={20} />
               <span>Dashboard</span>
             </a>
-            <a href="#" className="nav-item active">
+            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/map'); }}>
               <Map size={20} />
               <span>Mapa klijenata</span>
             </a>
-            <a href="#" className="nav-item" onClick={(e) => { e.preventDefault(); navigate('/requests-map'); }}>
+            <a href="#" className="nav-item active">
               <MapPin size={20} />
               <span>Mapa zahteva</span>
             </a>
@@ -240,17 +272,17 @@ const MapPage = () => {
       <main className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
         <header className="page-header">
           <div>
-            <h1>Mapa klijenata</h1>
-            <p>Pregled lokacija svih klijenata</p>
+            <h1>Mapa zahteva</h1>
+            <p>Pregled lokacija aktivnih zahteva ({pendingRequests.length} zahteva)</p>
           </div>
           <div className="header-actions">
             <button
               className="btn btn-secondary"
-              onClick={handlePrintClients}
-              disabled={clients.length === 0}
+              onClick={handlePrintRequests}
+              disabled={pendingRequests.length === 0}
             >
               <Printer size={18} />
-              Stampaj listu
+              Stampaj zahteve
             </button>
           </div>
         </header>
@@ -273,35 +305,44 @@ const MapPage = () => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                <FitBounds clients={clientsWithCoords} />
+                <FitBounds items={requestsWithCoords} />
 
-                {clientsWithCoords.map(client => (
+                {requestsWithCoords.map(request => (
                   <Marker
-                    key={client.id}
-                    position={[client.latitude, client.longitude]}
-                    icon={clientIcon}
+                    key={request.id}
+                    position={[request.latitude, request.longitude]}
+                    icon={getRequestIcon(request)}
                     eventHandlers={{
-                      click: () => setSelectedClient(client)
+                      click: () => setSelectedRequest(request)
                     }}
                   >
                     <Popup>
-                      <div style={{ minWidth: '150px' }}>
-                        <strong>{client.name}</strong>
+                      <div style={{ minWidth: '180px' }}>
+                        <strong>{request.client_name}</strong>
                         <br />
-                        <small>{client.address}</small>
+                        <small>{request.client_address}</small>
+                        <br />
+                        <span style={{
+                          color: getMarkerColor(request.urgency),
+                          fontWeight: 'bold'
+                        }}>
+                          {request.urgency}
+                        </span>
+                        {' - '}
+                        {request.waste_label || request.waste_type}
                       </div>
                     </Popup>
                   </Marker>
                 ))}
 
-                {clientsWithCoords.map(client => (
+                {requestsWithCoords.map(request => (
                   <Circle
-                    key={`circle-${client.id}`}
-                    center={[client.latitude, client.longitude]}
-                    radius={80}
+                    key={`circle-${request.id}`}
+                    center={[request.latitude, request.longitude]}
+                    radius={60}
                     pathOptions={{
-                      color: '#3B82F6',
-                      fillColor: '#3B82F6',
+                      color: getMarkerColor(request.urgency),
+                      fillColor: getMarkerColor(request.urgency),
                       fillOpacity: 0.2,
                       weight: 2
                     }}
@@ -313,51 +354,72 @@ const MapPage = () => {
             {/* Legend */}
             {!loading && (
               <div className="map-legend">
-                <div className="legend-title">Legenda:</div>
+                <div className="legend-title">Hitnost:</div>
                 <div className="legend-item">
-                  <div className="legend-dot" style={{ backgroundColor: '#3B82F6' }}></div>
-                  <span>Klijent</span>
+                  <div className="legend-dot" style={{ backgroundColor: '#EF4444' }}></div>
+                  <span>24h (Hitno)</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ backgroundColor: '#F59E0B' }}></div>
+                  <span>48h (Srednje)</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-dot" style={{ backgroundColor: '#10B981' }}></div>
+                  <span>7 dana (Normalno)</span>
                 </div>
               </div>
             )}
 
-            {/* No locations message */}
-            {!loading && clientsWithCoords.length === 0 && (
+            {/* No requests message */}
+            {!loading && requestsWithCoords.length === 0 && (
               <div className="map-no-data">
-                <MapPin size={48} />
-                <h3>Nema klijenata sa lokacijama</h3>
-                <p>Klijenti ce se pojaviti kada se registruju sa lokacijom</p>
+                <CheckCircle size={48} />
+                <h3>Nema aktivnih zahteva</h3>
+                <p>Svi zahtevi su obradjeni ili nemaju lokaciju</p>
               </div>
             )}
           </div>
 
-          {/* Clients Sidebar */}
+          {/* Requests Sidebar */}
           <div className="map-sidebar">
             <div className="map-sidebar-header">
-              <h3>Klijenti ({clients.length})</h3>
+              <h3>Zahtevi ({pendingRequests.length})</h3>
             </div>
             <div className="map-client-list">
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px', color: 'var(--gray-500)' }}>
                   Ucitavanje...
                 </div>
-              ) : clients.length === 0 ? (
+              ) : pendingRequests.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '20px', color: 'var(--gray-500)' }}>
-                  Nema registrovanih klijenata
+                  Nema aktivnih zahteva
                 </div>
               ) : (
-                clients.map(client => (
+                pendingRequests.map(request => (
                   <div
-                    key={client.id}
-                    className={`map-client-item ${selectedClient?.id === client.id ? 'active' : ''}`}
-                    onClick={() => setSelectedClient(client)}
+                    key={request.id}
+                    className={`map-client-item ${selectedRequest?.id === request.id ? 'active' : ''}`}
+                    onClick={() => setSelectedRequest(request)}
+                    style={{ borderLeft: `4px solid ${getMarkerColor(request.urgency)}` }}
                   >
-                    <h4>{client.name}</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h4>{request.client_name}</h4>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        color: getMarkerColor(request.urgency)
+                      }}>
+                        {request.urgency}
+                      </span>
+                    </div>
                     <p>
                       <MapPin size={12} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                      {client.address}
+                      {request.client_address}
                     </p>
-                    {!client.latitude && (
+                    <p style={{ fontSize: '11px', color: 'var(--gray-500)' }}>
+                      {WASTE_ICONS[request.waste_type]} {request.waste_label || request.waste_type}
+                    </p>
+                    {!request.latitude && (
                       <span className="no-location-badge">Bez lokacije</span>
                     )}
                   </div>
@@ -368,46 +430,78 @@ const MapPage = () => {
         </div>
       </main>
 
-      {/* Client Detail Modal */}
-      {selectedClient && (
-        <div className="modal-overlay" onClick={() => setSelectedClient(null)}>
+      {/* Request Detail Modal */}
+      {selectedRequest && (
+        <div className="modal-overlay" onClick={() => setSelectedRequest(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>{selectedClient.name}</h3>
-              <button className="modal-close" onClick={() => setSelectedClient(null)}>
+              <h3>{selectedRequest.client_name}</h3>
+              <button className="modal-close" onClick={() => setSelectedRequest(null)}>
                 <X size={20} />
               </button>
             </div>
             <div className="modal-body">
               <div className="detail-group">
+                <div className="detail-label">Hitnost</div>
+                <div className="detail-item">
+                  <AlertTriangle size={18} style={{ color: getMarkerColor(selectedRequest.urgency) }} />
+                  <span style={{
+                    fontWeight: 'bold',
+                    color: getMarkerColor(selectedRequest.urgency)
+                  }}>
+                    {selectedRequest.urgency}
+                  </span>
+                </div>
+              </div>
+              <div className="detail-group">
+                <div className="detail-label">Tip otpada</div>
+                <div className="detail-item">
+                  <Package size={18} />
+                  <span>{selectedRequest.waste_label || selectedRequest.waste_type}</span>
+                </div>
+              </div>
+              <div className="detail-group">
                 <div className="detail-label">Lokacija</div>
                 <div className="detail-item">
                   <MapPin size={18} />
-                  <span>{selectedClient.address}</span>
+                  <span>{selectedRequest.client_address}</span>
                 </div>
               </div>
               <div className="detail-group">
                 <div className="detail-label">Kontakt</div>
                 <div className="detail-item">
                   <Phone size={18} />
-                  <a href={`tel:${selectedClient.phone}`}>{selectedClient.phone}</a>
+                  <a href={`tel:${selectedRequest.client_phone}`}>{selectedRequest.client_phone}</a>
                 </div>
               </div>
-              {selectedClient.equipment_types?.length > 0 && (
+              <div className="detail-group">
+                <div className="detail-label">Datum zahteva</div>
+                <div className="detail-item">
+                  <Clock size={18} />
+                  <span>{formatDate(selectedRequest.created_at)} u {formatTime(selectedRequest.created_at)}</span>
+                </div>
+              </div>
+              {selectedRequest.fill_level && (
                 <div className="detail-group">
-                  <div className="detail-label">Oprema</div>
-                  <div className="equipment-tags" style={{ paddingTop: 8 }}>
-                    {selectedClient.equipment_types.map((eq, i) => (
-                      <span key={i} className="equipment-tag">{eq}</span>
-                    ))}
+                  <div className="detail-label">Popunjenost</div>
+                  <div className="detail-item">
+                    <span>{selectedRequest.fill_level}%</span>
                   </div>
                 </div>
               )}
-              {selectedClient.latitude && selectedClient.longitude && (
+              {selectedRequest.note && (
+                <div className="detail-group">
+                  <div className="detail-label">Napomena</div>
+                  <div className="detail-item">
+                    <span>{selectedRequest.note}</span>
+                  </div>
+                </div>
+              )}
+              {selectedRequest.latitude && selectedRequest.longitude && (
                 <div className="detail-group">
                   <div className="detail-label">Koordinate</div>
                   <div className="detail-item">
-                    <span>{selectedClient.latitude.toFixed(6)}, {selectedClient.longitude.toFixed(6)}</span>
+                    <span>{selectedRequest.latitude.toFixed(6)}, {selectedRequest.longitude.toFixed(6)}</span>
                   </div>
                 </div>
               )}
@@ -419,4 +513,4 @@ const MapPage = () => {
   );
 };
 
-export default MapPage;
+export default RequestsMapPage;

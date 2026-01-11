@@ -331,19 +331,24 @@ const styles = StyleSheet.create({
   filterRow: {
     paddingHorizontal: 16,
     marginBottom: 8,
+    maxHeight: 50,
   },
   filterContent: {
     flexDirection: 'row',
     gap: 8,
     paddingBottom: 8,
+    alignItems: 'center',
   },
   filterPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: COLORS.white,
     borderWidth: 1,
     borderColor: COLORS.lightGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   filterPillActive: {
     backgroundColor: COLORS.purple,
