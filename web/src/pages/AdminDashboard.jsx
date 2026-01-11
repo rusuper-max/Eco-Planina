@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import {
-  Users, Building2, Key, Shield, UserCheck, RefreshCw
+  Users, Building2, Key, Shield, UserCheck, RefreshCw,
+  TrendingUp, ArrowRight, Sparkles
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -29,14 +30,67 @@ const AdminDashboard = () => {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Da li ste sigurni da zelite da se odjavite?')) {
+    if (window.confirm('Da li ste sigurni da želite da se odjavite?')) {
       logout();
       navigate('/');
     }
   };
 
+  const StatCard = ({ icon: Icon, value, label, gradient, trend }) => (
+    <div className="group relative bg-white rounded-2xl p-6 border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/50 hover:-translate-y-1">
+      <div className="flex items-start justify-between">
+        <div className={`w-14 h-14 rounded-xl flex items-center justify-center bg-gradient-to-br ${gradient} shadow-lg`}>
+          <Icon size={24} className="text-white" />
+        </div>
+        {trend && (
+          <div className="flex items-center gap-1 text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full text-xs font-medium">
+            <TrendingUp size={12} />
+            {trend}
+          </div>
+        )}
+      </div>
+      <div className="mt-4">
+        <div className="text-3xl font-bold text-slate-900">{value}</div>
+        <div className="text-sm text-slate-500 mt-1">{label}</div>
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity rounded-b-2xl" style={{ backgroundImage: `linear-gradient(to right, var(--tw-gradient-stops))` }} />
+    </div>
+  );
+
+  const QuickAction = ({ icon: Icon, label, description, onClick, color }) => (
+    <button
+      onClick={onClick}
+      className="group w-full text-left p-5 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/50"
+    >
+      <div className="flex items-start gap-4">
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color} transition-transform group-hover:scale-110`}>
+          <Icon size={22} className="text-white" />
+        </div>
+        <div className="flex-1">
+          <div className="font-semibold text-slate-900 group-hover:text-emerald-600 transition-colors flex items-center gap-2">
+            {label}
+            <ArrowRight size={16} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+          </div>
+          <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+        </div>
+      </div>
+    </button>
+  );
+
+  const UserBreakdown = ({ icon: Icon, value, label, color }) => (
+    <div className="flex items-center gap-4 p-4 rounded-xl bg-slate-50/50 border border-slate-100">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
+        <Icon size={20} className="text-white" />
+      </div>
+      <div>
+        <div className="text-2xl font-bold text-slate-900">{value}</div>
+        <div className="text-sm text-slate-500">{label}</div>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="dashboard-layout">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30">
       <Sidebar
         activeItem="dashboard"
         user={user}
@@ -44,133 +98,149 @@ const AdminDashboard = () => {
         onLogout={handleLogout}
       />
 
-      <main className="main-content">
-        <header className="page-header">
-          <div>
-            <h1>Admin Dashboard</h1>
-            <p>Pregled sistema EcoPlanina</p>
-          </div>
-          <div className="header-actions">
-            <button className="btn btn-secondary" onClick={loadStats} disabled={loading}>
-              <RefreshCw size={18} className={loading ? 'spin' : ''} />
-              Osvezi
-            </button>
+      {/* Main Content */}
+      <main className="lg:ml-72 min-h-screen">
+        {/* Header */}
+        <header className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl border-b border-slate-100">
+          <div className="px-4 sm:px-6 lg:px-8 py-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="pt-10 lg:pt-0">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Dashboard</h1>
+                  <span className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 text-sm font-medium rounded-full">
+                    <Sparkles size={14} />
+                    Admin
+                  </span>
+                </div>
+                <p className="text-slate-500 mt-1">Dobrodošli nazad, {user?.name?.split(' ')[0] || 'Admin'}!</p>
+              </div>
+              <button
+                onClick={loadStats}
+                disabled={loading}
+                className="btn-secondary"
+              >
+                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                <span>Osveži</span>
+              </button>
+            </div>
           </div>
         </header>
 
-        <div className="page-content">
+        {/* Content */}
+        <div className="p-4 sm:p-6 lg:p-8">
           {loading ? (
-            <div className="empty-state">
-              <RefreshCw size={48} className="spin" />
-              <p>Ucitavanje statistika...</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl p-6 border border-slate-100">
+                  <div className="skeleton w-14 h-14 rounded-xl mb-4" />
+                  <div className="skeleton w-20 h-8 mb-2" />
+                  <div className="skeleton w-32 h-4" />
+                </div>
+              ))}
             </div>
           ) : stats ? (
             <>
               {/* Stats Grid */}
-              <div className="admin-stats-grid">
-                <div className="admin-stat-card">
-                  <div className="stat-icon users">
-                    <Users size={26} />
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-value">{stats.totalUsers}</div>
-                    <div className="stat-label">Ukupno korisnika</div>
-                  </div>
-                </div>
-
-                <div className="admin-stat-card">
-                  <div className="stat-icon companies">
-                    <Building2 size={26} />
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-value">{stats.totalCompanies}</div>
-                    <div className="stat-label">Registrovanih firmi</div>
-                  </div>
-                </div>
-
-                <div className="admin-stat-card">
-                  <div className="stat-icon codes">
-                    <Key size={26} />
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-value">{stats.totalCodes}</div>
-                    <div className="stat-label">Master kodova</div>
-                  </div>
-                </div>
-
-                <div className="admin-stat-card">
-                  <div className="stat-icon available">
-                    <Key size={26} />
-                  </div>
-                  <div className="stat-content">
-                    <div className="stat-value">{stats.availableCodes}</div>
-                    <div className="stat-label">Slobodnih kodova</div>
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+                <StatCard
+                  icon={Users}
+                  value={stats.totalUsers}
+                  label="Ukupno korisnika"
+                  gradient="from-blue-500 to-blue-600"
+                  trend="+12%"
+                />
+                <StatCard
+                  icon={Building2}
+                  value={stats.totalCompanies}
+                  label="Registrovanih firmi"
+                  gradient="from-emerald-500 to-emerald-600"
+                />
+                <StatCard
+                  icon={Key}
+                  value={stats.totalCodes}
+                  label="Master kodova"
+                  gradient="from-amber-500 to-orange-500"
+                />
+                <StatCard
+                  icon={Key}
+                  value={stats.availableCodes}
+                  label="Slobodnih kodova"
+                  gradient="from-purple-500 to-pink-500"
+                />
               </div>
 
-              {/* User breakdown */}
-              <div className="content-card" style={{ marginTop: 32 }}>
-                <div className="card-header">
-                  <h2>Pregled korisnika</h2>
-                </div>
-                <div className="user-breakdown">
-                  <div className="breakdown-item">
-                    <div className="breakdown-icon admin">
-                      <Shield size={22} />
-                    </div>
-                    <div className="breakdown-info">
-                      <span className="breakdown-value">{stats.totalAdmins}</span>
-                      <span className="breakdown-label">Administratora</span>
-                    </div>
-                  </div>
-                  <div className="breakdown-item">
-                    <div className="breakdown-icon manager">
-                      <UserCheck size={22} />
-                    </div>
-                    <div className="breakdown-info">
-                      <span className="breakdown-value">{stats.totalManagers}</span>
-                      <span className="breakdown-label">Menadzera</span>
-                    </div>
-                  </div>
-                  <div className="breakdown-item">
-                    <div className="breakdown-icon client">
-                      <Users size={22} />
-                    </div>
-                    <div className="breakdown-info">
-                      <span className="breakdown-value">{stats.totalClients}</span>
-                      <span className="breakdown-label">Klijenata</span>
-                    </div>
+              {/* Two Column Layout */}
+              <div className="grid lg:grid-cols-5 gap-6">
+                {/* User Breakdown */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-6">
+                  <h2 className="text-lg font-semibold text-slate-900 mb-5">Pregled korisnika</h2>
+                  <div className="space-y-3">
+                    <UserBreakdown
+                      icon={Shield}
+                      value={stats.totalAdmins}
+                      label="Administratora"
+                      color="bg-gradient-to-br from-red-500 to-rose-500"
+                    />
+                    <UserBreakdown
+                      icon={UserCheck}
+                      value={stats.totalManagers}
+                      label="Menadžera"
+                      color="bg-gradient-to-br from-blue-500 to-cyan-500"
+                    />
+                    <UserBreakdown
+                      icon={Users}
+                      value={stats.totalClients}
+                      label="Klijenata"
+                      color="bg-gradient-to-br from-emerald-500 to-teal-500"
+                    />
                   </div>
                 </div>
-              </div>
 
-              {/* Quick Actions */}
-              <div className="content-card" style={{ marginTop: 32 }}>
-                <div className="card-header">
-                  <h2>Brze akcije</h2>
-                </div>
-                <div className="quick-actions">
-                  <button className="action-card" onClick={() => navigate('/admin/codes')}>
-                    <Key size={36} />
-                    <span>Generiši novi Master Code</span>
-                  </button>
-                  <button className="action-card" onClick={() => navigate('/admin/users')}>
-                    <Users size={36} />
-                    <span>Pregledaj korisnike</span>
-                  </button>
-                  <button className="action-card" onClick={() => navigate('/admin/companies')}>
-                    <Building2 size={36} />
-                    <span>Pregledaj firme</span>
-                  </button>
+                {/* Quick Actions */}
+                <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-100 p-6">
+                  <h2 className="text-lg font-semibold text-slate-900 mb-5">Brze akcije</h2>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <QuickAction
+                      icon={Key}
+                      label="Generiši kod"
+                      description="Kreiraj novi Master Code"
+                      onClick={() => navigate('/admin/codes')}
+                      color="bg-gradient-to-br from-amber-500 to-orange-500"
+                    />
+                    <QuickAction
+                      icon={Users}
+                      label="Korisnici"
+                      description="Pregledaj sve korisnike"
+                      onClick={() => navigate('/admin/users')}
+                      color="bg-gradient-to-br from-blue-500 to-cyan-500"
+                    />
+                    <QuickAction
+                      icon={Building2}
+                      label="Firme"
+                      description="Upravljaj firmama"
+                      onClick={() => navigate('/admin/companies')}
+                      color="bg-gradient-to-br from-emerald-500 to-teal-500"
+                    />
+                    <QuickAction
+                      icon={Shield}
+                      label="Kodovi"
+                      description="Svi Master Kodovi"
+                      onClick={() => navigate('/admin/codes')}
+                      color="bg-gradient-to-br from-purple-500 to-pink-500"
+                    />
+                  </div>
                 </div>
               </div>
             </>
           ) : (
             <div className="empty-state">
-              <Shield size={64} />
-              <h3>Greska pri ucitavanju</h3>
-              <p>Pokusajte ponovo</p>
+              <Shield size={64} className="text-slate-300" />
+              <h3>Greška pri učitavanju</h3>
+              <p>Pokušajte ponovo</p>
+              <button onClick={loadStats} className="btn-primary mt-4">
+                <RefreshCw size={18} />
+                Pokušaj ponovo
+              </button>
             </div>
           )}
         </div>

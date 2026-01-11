@@ -12,8 +12,8 @@ const COUNTRY_CODES = [
   { code: '+386', flag: '🇸🇮', name: 'Slovenija' },
   { code: '+389', flag: '🇲🇰', name: 'S. Makedonija' },
   { code: '+43', flag: '🇦🇹', name: 'Austrija' },
-  { code: '+49', flag: '🇩🇪', name: 'Nemacka' },
-  { code: '+41', flag: '🇨🇭', name: 'Svajcarska' },
+  { code: '+49', flag: '🇩🇪', name: 'Nemačka' },
+  { code: '+41', flag: '🇨🇭', name: 'Švajcarska' },
 ];
 
 const LoginPage = () => {
@@ -37,10 +37,10 @@ const LoginPage = () => {
       const fullPhone = countryCode + phone.trim().replace(/^0+/, '');
       const result = await login(fullPhone, password);
       if (result.success) {
-        navigate(result.role === 'manager' ? '/manager' : '/client');
+        navigate(result.role === 'manager' ? '/manager' : result.role === 'admin' || result.role === 'god' ? '/admin' : '/client');
       }
     } catch (err) {
-      setError(err.message || 'Greska pri prijavi');
+      setError(err.message || 'Greška pri prijavi');
       toast.error(err.message || 'Greška pri prijavi');
     } finally {
       setLoading(false);
@@ -58,13 +58,13 @@ const LoginPage = () => {
 
         <form onSubmit={handleSubmit} className="login-form">
           <h2>Prijava</h2>
-          <p className="form-subtitle">Ulogujte se na postojeci nalog</p>
+          <p className="form-subtitle">Ulogujte se na postojeći nalog</p>
 
           {error && <div className="error-message">{error}</div>}
 
           <div className="input-group">
             <label>Broj telefona</label>
-            <p className="input-hint">Unesite broj bez vodece nule (npr. 641234567)</p>
+            <p className="input-hint">Unesite broj bez vodeće nule (npr. 641234567)</p>
             <div className="phone-input-row">
               <div className="country-code-wrapper">
                 <button

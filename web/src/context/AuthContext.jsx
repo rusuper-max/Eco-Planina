@@ -55,22 +55,24 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!user || user.role !== 'client') return;
 
-    fetchClientRequests();
+    console.log('Client user detected, fetching requests for:', user.id);
+    fetchClientRequests(user);
 
     const channelName = `client_requests_${user.id}`;
     const subscription = supabase
       .channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests', filter: `client_id=eq.${user.id}` }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests', filter: `user_id=eq.${user.id}` }, (payload) => {
+        console.log('Client request change:', payload);
         // Check if request was processed
-        if (payload.eventType === 'UPDATE' && payload.new.status === 'processed' && payload.old.status === 'pending') {
+        if (payload.eventType === 'UPDATE' && payload.new.status === 'processed' && payload.old?.status === 'pending') {
           setProcessedNotification({
             wasteLabel: payload.new.waste_label || payload.new.waste_type,
             processedAt: payload.new.processed_at
           });
         }
-        fetchClientRequests();
+        fetchClientRequests(user);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pickup_requests' }, () => fetchClientRequests())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pickup_requests' }, () => fetchClientRequests(user))
       .subscribe();
 
     return () => {
@@ -78,16 +80,17 @@ export const AuthProvider = ({ children }) => {
     };
   }, [user]);
 
-  const fetchClientRequests = async () => {
-    if (!user) return;
+  const fetchClientRequests = async (currentUser = user) => {
+    if (!currentUser) return;
     try {
       const { data, error } = await supabase
         .from('pickup_requests')
         .select('*')
-        .eq('client_id', user.id)
+        .eq('user_id', currentUser.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
       if (error) throw error;
+      console.log('Fetched client requests:', data);
       setClientRequests(data || []);
     } catch (error) {
       console.error('Error fetching client requests:', error);
