@@ -345,14 +345,25 @@ export const AuthProvider = ({ children }) => {
 
     const fetchCompanyWasteTypes = async () => {
         if (!companyCode) return null;
-        try { const { data, error } = await supabase.from('companies').select('waste_types').eq('code', companyCode).single(); if (error) throw error; return data?.waste_types || null; }
-        catch { return null; }
+        try {
+            console.log('Fetching waste types for:', companyCode);
+            const { data, error } = await supabase.from('companies').select('waste_types').eq('code', companyCode).single();
+            console.log('Fetch result:', data, error);
+            if (error) throw error;
+            return data?.waste_types || null;
+        }
+        catch (e) { console.error('Fetch error:', e); return null; }
     };
 
     const updateCompanyWasteTypes = async (wasteTypes) => {
         if (!companyCode) throw new Error('Niste povezani sa firmom');
-        try { const { error } = await supabase.from('companies').update({ waste_types: wasteTypes }).eq('code', companyCode); if (error) throw error; return { success: true }; }
-        catch (error) { throw error; }
+        try {
+            console.log('Updating waste types for:', companyCode, wasteTypes);
+            const { error } = await supabase.from('companies').update({ waste_types: wasteTypes }).eq('code', companyCode);
+            if (error) { console.error('Update error details:', error); throw error; }
+            return { success: true };
+        }
+        catch (error) { console.error('Update throw:', error); throw error; }
     };
 
     const updateClientDetails = async (clientId, equipmentTypes, note, pib) => {

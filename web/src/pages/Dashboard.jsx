@@ -140,6 +140,7 @@ export default function Dashboard() {
             } else if (userRole === 'manager' || userRole === 'client') {
                 // Fetch company specific settings
                 const companyWasteTypes = await fetchCompanyWasteTypes();
+                console.log('Client loaded waste types:', companyWasteTypes);
                 if (companyWasteTypes && companyWasteTypes.length > 0) {
                     setWasteTypes(companyWasteTypes);
                 } else if (userRole === 'manager') {
@@ -367,9 +368,9 @@ export default function Dashboard() {
             return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} />;
         }
         if (userRole === 'client') {
-            if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} />;
-            if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={WASTE_TYPES} />;
-            if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={WASTE_TYPES} />;
+            if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} wasteTypes={wasteTypes} />;
+            if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} />;
+            if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
             // Dashboard/Početna for client
             return (
                 <div className="space-y-6">
