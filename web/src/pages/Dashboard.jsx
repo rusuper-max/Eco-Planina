@@ -365,7 +365,7 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
                                     Datum <SortIcon column="date" />
                                 </button>
                             </th>
-                            <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
+                            <th className="px-2 md:px-4 py-3 text-center">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -390,7 +390,7 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
                                     </td>
                                     <td className="px-3 md:px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span></td>
                                     <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
-                                    <td className="px-2 md:px-4 py-3 text-right whitespace-nowrap">
+                                    <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
                                         <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
                                         <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
                                         <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
