@@ -385,7 +385,7 @@ export const AuthProvider = ({ children }) => {
         } catch { return null; }
     };
 
-    const deleteUser = async (userId) => { if (!isDeveloper()) throw new Error('Samo Developer može da briše korisnike'); try { await supabase.from('users').delete().eq('id', userId); return { success: true }; } catch (error) { throw error; } };
+    const deleteUser = async (userId) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('users').delete().eq('id', userId); return { success: true }; } catch (error) { throw error; } };
     const updateUser = async (userId, updates) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('users').update(updates).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
 
     // Update current user's profile (name)
@@ -421,7 +421,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const deleteCompany = async (companyCodeToDelete) => {
-        if (!isDeveloper()) throw new Error('Samo Developer može da briše firme');
+        if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
             const { data: companyData } = await supabase.from('companies').select('id').eq('code', companyCodeToDelete).single();
             if (companyData) { await supabase.from('master_codes').update({ used_by_company: null, status: 'available', pib: null }).eq('used_by_company', companyData.id); }
@@ -434,7 +434,7 @@ export const AuthProvider = ({ children }) => {
     const updateCompany = async (companyCodeToUpdate, updates) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('companies').update(updates).eq('code', companyCodeToUpdate); return { success: true }; } catch (error) { throw error; } };
 
     const deleteMasterCode = async (codeId) => {
-        if (!isDeveloper()) throw new Error('Samo Developer može da briše master kodove');
+        if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
             const { data: codeData } = await supabase.from('master_codes').select('status').eq('id', codeId).single();
             if (codeData.status === 'used') throw new Error('Ne možete obrisati iskorišćen kod.');

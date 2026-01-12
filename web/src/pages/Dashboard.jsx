@@ -2191,22 +2191,33 @@ const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
 };
 
 // Admin Tables
-const AdminCompaniesTable = ({ companies, onView }) => {
+const AdminCompaniesTable = ({ companies, onEdit }) => {
     if (!companies?.length) return <EmptyState icon={Building2} title="Nema firmi" desc="Firme će se prikazati ovde" />;
     return (
         <div className="bg-white rounded-2xl border overflow-hidden">
             <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-500 border-b">
-                    <tr><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">ECO Kod</th><th className="px-6 py-4">Menadžeri</th><th className="px-6 py-4">Klijenti</th><th className="px-6 py-4 text-right">Akcije</th></tr>
+                    <tr><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">ECO Kod</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4">Menadžeri</th><th className="px-6 py-4">Klijenti</th><th className="px-6 py-4 text-right">Akcije</th></tr>
                 </thead>
                 <tbody className="divide-y">
                     {companies.map(c => (
                         <tr key={c.id} className="hover:bg-slate-50">
                             <td className="px-6 py-4 font-medium">{c.name}</td>
                             <td className="px-6 py-4"><code className="px-2 py-1 bg-slate-100 rounded text-xs">{c.code}</code></td>
+                            <td className="px-6 py-4">
+                                {c.status === 'frozen' ? (
+                                    <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><Lock size={12} /> Zamrznuta</span>
+                                ) : (
+                                    <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">Aktivna</span>
+                                )}
+                            </td>
                             <td className="px-6 py-4 text-center">{c.managerCount || 0}</td>
                             <td className="px-6 py-4 text-center">{c.clientCount || 0}</td>
-                            <td className="px-6 py-4 text-right"><button onClick={() => onView(c)} className="p-2 hover:bg-slate-100 rounded-lg"><Eye size={18} /></button></td>
+                            <td className="px-6 py-4 text-right">
+                                <button onClick={() => onEdit(c)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600" title="Izmeni firmu">
+                                    <Edit3 size={18} />
+                                </button>
+                            </td>
                         </tr>
                     ))}
                 </tbody>
@@ -2215,7 +2226,7 @@ const AdminCompaniesTable = ({ companies, onView }) => {
     );
 };
 
-const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser }) => {
+const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser, isAdmin }) => {
     // State
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
@@ -2340,7 +2351,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                         className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                     />
                 </div>
-                {selectedUsers.size > 0 && isDeveloper && (
+                {selectedUsers.size > 0 && isAdmin && (
                     <button
                         onClick={() => setDeleteModal({ type: 'bulk', ids: [...selectedUsers], expected: 'DELETE' })}
                         className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-medium transition-colors"
@@ -2449,8 +2460,8 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                                                     {changingRole === u.id ? <Loader2 size={18} className="animate-spin" /> : (u.role === 'client' ? <ArrowUp size={18} /> : <ArrowDown size={18} />)}
                                                 </button>
                                             )}
-                                            {/* Delete button - only for developer */}
-                                            {isDeveloper && !isProtected(u.role) && (
+                                            {/* Delete button - for admin/developer */}
+                                            {isAdmin && !isProtected(u.role) && (
                                                 <button
                                                     onClick={() => setDeleteModal({ type: 'single', ids: [u.id], expected: 'DELETE' })}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -2520,7 +2531,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
     );
 };
 
-const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) => {
+const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper, isAdmin }) => {
     const { toggleCompanyStatus } = useAuth();
     const [deleteModal, setDeleteModal] = useState(null);
     const [freezing, setFreezing] = useState(null);
@@ -2583,7 +2594,7 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
                                             </button>
                                         )}
 
-                                        {isDeveloper && (
+                                        {isAdmin && (
                                             <button onClick={() => setDeleteModal({ id: c.id, code: c.code })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
                                                 <Trash2 size={16} />
                                             </button>
@@ -3011,6 +3022,126 @@ const UserDetailsModal = ({ user, onClose }) => {
     );
 };
 
+const CompanyEditModal = ({ company, onClose, onSave, onDelete }) => {
+    const [formData, setFormData] = useState({
+        name: company?.name || ''
+    });
+    const [saving, setSaving] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteInput, setDeleteInput] = useState('');
+    const [deleting, setDeleting] = useState(false);
+
+    if (!company) return null;
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            await onSave(company.code, formData);
+            onClose();
+        } catch (err) {
+            alert(err.message || 'Greška pri čuvanju');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        setDeleting(true);
+        try {
+            await onDelete(company.code);
+            onClose();
+        } catch (err) {
+            alert(err.message || 'Greška pri brisanju');
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Izmeni firmu</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20} /></button>
+                </div>
+                {showDeleteConfirm ? (
+                    <div className="p-6">
+                        <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600 mx-auto">
+                            <AlertTriangle size={24} />
+                        </div>
+                        <h3 className="text-xl font-bold text-center mb-2">Obriši firmu?</h3>
+                        <p className="text-slate-500 text-center mb-4">Ovo će trajno obrisati firmu "{company.name}" i sve povezane korisnike!</p>
+                        <div className="mb-4">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Ukucajte "DELETE" za potvrdu</label>
+                            <input
+                                type="text"
+                                className="w-full px-4 py-3 border-2 border-red-200 rounded-xl focus:border-red-500 focus:ring-0 outline-none font-bold"
+                                placeholder="DELETE"
+                                value={deleteInput}
+                                onChange={e => setDeleteInput(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium">Odustani</button>
+                            <button onClick={handleDelete} disabled={deleteInput !== 'DELETE' || deleting} className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-bold">
+                                {deleting ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Obriši'}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-6 space-y-4">
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                                    <Building2 size={28} />
+                                </div>
+                                <div>
+                                    <code className="text-sm px-2 py-1 bg-slate-100 rounded-lg">{company.code}</code>
+                                    <p className="text-xs text-slate-400 mt-1">{company.managerCount || 0} menadžera • {company.clientCount || 0} klijenata</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Naziv firme</label>
+                                <input
+                                    type="text"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                    required
+                                />
+                            </div>
+
+                            {company.status === 'frozen' && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                                    <p className="text-sm text-red-700 font-medium flex items-center gap-2">
+                                        <Lock size={16} /> Ova firma je zamrznuta
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 bg-slate-50 border-t flex justify-between">
+                            <button type="button" onClick={() => setShowDeleteConfirm(true)} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-medium flex items-center gap-2">
+                                <Trash2 size={18} /> Obriši
+                            </button>
+                            <div className="flex gap-3">
+                                <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl font-medium text-slate-700">
+                                    Otkaži
+                                </button>
+                                <button type="submit" disabled={saving} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50">
+                                    {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                                    Sačuvaj
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const UserEditModal = ({ user, onClose, onSave }) => {
     const [formData, setFormData] = useState({
         name: user?.name || '',
@@ -3152,7 +3283,7 @@ const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose, onCon
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -3191,6 +3322,7 @@ export default function Dashboard() {
     const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '' });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
     const [editingUser, setEditingUser] = useState(null);
+    const [editingCompany, setEditingCompany] = useState(null);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
@@ -3282,6 +3414,7 @@ export default function Dashboard() {
         } catch (err) { alert(err.message); }
     };
     const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
+    const refreshCompanies = async () => { setCompanies(await fetchAllCompanies()); };
 
     // Equipment handlers (local state for now, later connect to Supabase)
     const handleAddEquipment = (newEq) => {
@@ -3395,6 +3528,55 @@ export default function Dashboard() {
     const statCards = getStats();
     const pending = pickupRequests?.filter(r => r.status === 'pending') || [];
 
+    // Export functions
+    const exportToCSV = (data, filename, headers) => {
+        const csvContent = [
+            headers.map(h => h.label).join(','),
+            ...data.map(row => headers.map(h => `"${(row[h.key] || '').toString().replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    };
+
+    const handleExportUsers = () => {
+        const headers = [
+            { key: 'name', label: 'Ime' },
+            { key: 'phone', label: 'Telefon' },
+            { key: 'role', label: 'Uloga' },
+            { key: 'companyName', label: 'Firma' },
+            { key: 'address', label: 'Adresa' }
+        ];
+        const data = users.map(u => ({
+            name: u.name,
+            phone: u.phone,
+            role: u.role === 'developer' ? 'Developer' : u.role === 'admin' ? 'Admin' : u.role === 'manager' ? 'Menadžer' : 'Klijent',
+            companyName: u.company?.name || '',
+            address: u.address || ''
+        }));
+        exportToCSV(data, 'korisnici', headers);
+    };
+
+    const handleExportCompanies = () => {
+        const headers = [
+            { key: 'name', label: 'Naziv' },
+            { key: 'code', label: 'ECO Kod' },
+            { key: 'status', label: 'Status' },
+            { key: 'managerCount', label: 'Menadžeri' },
+            { key: 'clientCount', label: 'Klijenti' }
+        ];
+        const data = companies.map(c => ({
+            name: c.name,
+            code: c.code,
+            status: c.status === 'frozen' ? 'Zamrznuta' : 'Aktivna',
+            managerCount: c.managerCount || 0,
+            clientCount: c.clientCount || 0
+        }));
+        exportToCSV(data, 'firme', headers);
+    };
+
     const renderContent = () => {
         // Chat is available for both managers and clients
         if (activeTab === 'messages') {
@@ -3416,10 +3598,10 @@ export default function Dashboard() {
             return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Nedavni zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={pending.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} /></div>}</div>;
         }
         if (userRole === 'admin') {
-            if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onView={(c) => alert(`${c.name}\n${c.code}`)} />;
-            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
-            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} />;
-            return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div></div>;
+            if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;
+            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} isAdmin={true} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
+            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} isAdmin={true} />;
+            return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Export podataka</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"><button onClick={handleExportUsers} className="p-4 bg-blue-50 rounded-xl hover:bg-blue-100 text-left flex items-center gap-3"><Download size={20} className="text-blue-600" /><div><p className="font-semibold text-blue-900">Korisnici</p><p className="text-xs text-blue-600">Export u CSV</p></div></button><button onClick={handleExportCompanies} className="p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 text-left flex items-center gap-3"><Download size={20} className="text-emerald-600" /><div><p className="font-semibold text-emerald-900">Firme</p><p className="text-xs text-emerald-600">Export u CSV</p></div></button></div></div></div>;
         }
     };
 
@@ -3768,6 +3950,22 @@ export default function Dashboard() {
                         await updateUser(userId, data);
                         refreshUsers();
                         setEditingUser(null);
+                    }}
+                />
+            )}
+            {editingCompany && (
+                <CompanyEditModal
+                    company={editingCompany}
+                    onClose={() => setEditingCompany(null)}
+                    onSave={async (companyCode, data) => {
+                        await updateCompany(companyCode, data);
+                        refreshCompanies();
+                        setEditingCompany(null);
+                    }}
+                    onDelete={async (companyCode) => {
+                        await deleteCompany(companyCode);
+                        refreshCompanies();
+                        setEditingCompany(null);
                     }}
                 />
             )}
