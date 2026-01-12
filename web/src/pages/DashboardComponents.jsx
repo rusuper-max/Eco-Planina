@@ -4199,6 +4199,30 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
     const weightByDate = getWeightByDate();
     const requestsWithWeight = filteredRequests.filter(r => r.weight).length;
 
+    // Calculate average fulfillment time (in hours)
+    const calculateAverageTime = () => {
+        const requestsWithBothDates = filteredRequests.filter(r => r.created_at && r.processed_at);
+        if (requestsWithBothDates.length === 0) return null;
+
+        const totalMinutes = requestsWithBothDates.reduce((total, r) => {
+            const created = new Date(r.created_at).getTime();
+            const processed = new Date(r.processed_at).getTime();
+            return total + (processed - created) / (1000 * 60); // in minutes
+        }, 0);
+
+        return totalMinutes / requestsWithBothDates.length;
+    };
+
+    const averageTimeMinutes = calculateAverageTime();
+
+    // Format average time for display
+    const formatAverageTime = (minutes) => {
+        if (minutes === null) return 'N/A';
+        if (minutes < 60) return `${Math.round(minutes)} min`;
+        if (minutes < 1440) return `${(minutes / 60).toFixed(1)} h`;
+        return `${(minutes / 1440).toFixed(1)} dana`;
+    };
+
     // Format weight for display
     const formatWeight = (kg) => {
         if (kg >= 1000) {
@@ -4251,7 +4275,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-white rounded-2xl border p-5">
                     <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
                         <Scale className="w-6 h-6 text-emerald-600" />
@@ -4279,6 +4303,13 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
                     </div>
                     <p className="text-2xl font-bold text-slate-800">{weightByType.length}</p>
                     <p className="text-sm text-slate-500">Vrsta otpada</p>
+                </div>
+                <div className="bg-white rounded-2xl border p-5">
+                    <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center mb-3">
+                        <Clock className="w-6 h-6 text-cyan-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{formatAverageTime(averageTimeMinutes)}</p>
+                    <p className="text-sm text-slate-500">Prosečno vreme</p>
                 </div>
             </div>
 
@@ -4487,9 +4518,9 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
                                         <tr key={idx} className="border-t hover:bg-slate-50">
                                             <td className="py-3 px-5">
                                                 <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-amber-100 text-amber-700' :
-                                                        idx === 1 ? 'bg-slate-200 text-slate-700' :
-                                                            idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                                                'bg-slate-100 text-slate-600'
+                                                    idx === 1 ? 'bg-slate-200 text-slate-700' :
+                                                        idx === 2 ? 'bg-orange-100 text-orange-700' :
+                                                            'bg-slate-100 text-slate-600'
                                                     }`}>
                                                     {idx + 1}
                                                 </span>
