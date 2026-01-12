@@ -112,12 +112,15 @@ export const AuthProvider = ({ children }) => {
                 // Let's rely on companyData fetch above.
             }
 
-            let actualCompanyCode = companyData?.code || userData.company_code;
+            // Admin/developer roles don't belong to a company
+            const isAdminRole = userData.role === 'developer' || userData.role === 'admin';
+            let actualCompanyCode = isAdminRole ? null : (companyData?.code || userData.company_code);
+            let actualCompanyName = isAdminRole ? null : (companyData?.name || 'Nepoznato');
             const userObj = { id: userData.id, name: userData.name, role: userData.role, address: userData.address, phone: userData.phone, latitude: userData.latitude, longitude: userData.longitude };
             setUser(userObj);
             setCompanyCode(actualCompanyCode);
-            setCompanyName(companyData?.name || 'Nepoznato');
-            localStorage.setItem('eco_session', JSON.stringify({ user: userObj, companyCode: actualCompanyCode, companyName: companyData?.name || 'Nepoznato' }));
+            setCompanyName(actualCompanyName);
+            localStorage.setItem('eco_session', JSON.stringify({ user: userObj, companyCode: actualCompanyCode, companyName: actualCompanyName }));
             return { success: true, role: userData.role };
         } catch (error) { throw error; }
         finally { setIsLoading(false); }
@@ -492,7 +495,7 @@ export const AuthProvider = ({ children }) => {
 
     // Subscribe to new messages
     useEffect(() => {
-        if (!user || !companyCode) return;
+        if (!user) return;
         fetchUnreadCount();
         const channelName = `messages_${user.id}`;
         const subscription = supabase
@@ -502,7 +505,7 @@ export const AuthProvider = ({ children }) => {
             })
             .subscribe();
         return () => { supabase.removeChannel(subscription); };
-    }, [user, companyCode]);
+    }, [user]);
 
     // Fetch all admin users (for contact admin feature)
     const fetchAdmins = async () => {
