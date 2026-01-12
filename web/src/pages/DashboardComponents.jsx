@@ -1216,13 +1216,15 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
 };
 
 // History Table (Processed/Rejected Requests)
-export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit }) => {
+export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit, onDelete }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
     const [editingRequest, setEditingRequest] = useState(null);
+    const [deletingRequest, setDeletingRequest] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
@@ -1385,13 +1387,24 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit }) => 
                                     )}
                                 </td>
                                 <td className="px-2 py-3 text-center">
-                                    <button
-                                        onClick={() => setEditingRequest(req)}
-                                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
-                                        title="Dopuni podatke"
-                                    >
-                                        <Edit3 size={18} />
-                                    </button>
+                                    <div className="flex items-center justify-center gap-1">
+                                        <button
+                                            onClick={() => setEditingRequest(req)}
+                                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
+                                            title="Dopuni podatke"
+                                        >
+                                            <Edit3 size={18} />
+                                        </button>
+                                        {onDelete && (
+                                            <button
+                                                onClick={() => setDeletingRequest(req)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Obriši iz istorije"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -1467,6 +1480,56 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit }) => 
                     }}
                     onClose={() => setEditingRequest(null)}
                 />
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingRequest && (
+                <Modal open={!!deletingRequest} onClose={() => setDeletingRequest(null)} title="Obriši iz istorije">
+                    <div className="space-y-4">
+                        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                                    <AlertTriangle size={20} />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-red-800">Obriši zahtev?</p>
+                                    <p className="text-sm text-red-600">Ova akcija se ne može poništiti.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                            <p className="text-sm text-slate-500">Klijent</p>
+                            <p className="font-medium">{deletingRequest.client_name}</p>
+                            <p className="text-xs text-slate-400 mt-1">{deletingRequest.waste_label} • {formatDateTime(deletingRequest.processed_at)}</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingRequest(null)}
+                                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium"
+                            >
+                                Odustani
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setIsDeleting(true);
+                                    try {
+                                        await onDelete(deletingRequest.id);
+                                        setDeletingRequest(null);
+                                    } catch (err) {
+                                        alert('Greška: ' + err.message);
+                                    } finally {
+                                        setIsDeleting(false);
+                                    }
+                                }}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                Obriši
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

@@ -295,6 +295,18 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { throw error; }
     };
 
+    // Delete processed request from history
+    const deleteProcessedRequest = async (requestId) => {
+        try {
+            const { error } = await supabase
+                .from('processed_requests')
+                .delete()
+                .eq('id', requestId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
     const fetchCompanyClients = async () => {
         if (!companyCode) return [];
         try { const { data, error } = await supabase.from('users').select('*').eq('role', 'client').eq('company_code', companyCode); if (error) throw error; return data || []; }
@@ -714,7 +726,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests, fetchClientHistory,
-        login, logout, register, removePickupRequest, markRequestAsProcessed, updateProcessedRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
+        login, logout, register, removePickupRequest, markRequestAsProcessed, updateProcessedRequest, deleteProcessedRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
