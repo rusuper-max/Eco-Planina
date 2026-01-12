@@ -311,8 +311,9 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
                 <h3 className="font-semibold mb-4">Hitnost</h3>
                 <div className="grid grid-cols-3 gap-3">
                     {[{ v: '24h', l: 'Hitno', h: '24h', c: 'red' }, { v: '48h', l: 'Srednje', h: '48h', c: 'amber' }, { v: '72h', l: 'Normalno', h: '72h', c: 'emerald' }].map(u => (
-                        <button key={u.v} onClick={() => setUrgency(u.v)} className={`p-4 rounded-xl border-2 text-center ${urgency === u.v ? `border-${u.c}-500 bg-${u.c}-50` : 'border-slate-200'}`}>
-                            <span className="text-sm font-bold">{u.l} ({u.h})</span>
+                        <button key={u.v} onClick={() => setUrgency(u.v)} className={`p-4 rounded-xl border-2 flex flex-col items-center justify-center gap-1 ${urgency === u.v ? `border-${u.c}-500 bg-${u.c}-50` : 'border-slate-200'}`}>
+                            <span className="text-sm font-bold block">{u.l}</span>
+                            <span className={`text-xs ${urgency === u.v ? `text-${u.c}-700` : 'text-slate-500'}`}>({u.h})</span>
                         </button>
                     ))}
                 </div>
