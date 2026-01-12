@@ -114,6 +114,19 @@ const getRemainingTime = (createdAt, urgency) => {
     return { text, color: 'text-emerald-600', bg: 'bg-emerald-100', ms: diff };
 };
 
+// Get current urgency based on remaining time (not original urgency)
+const getCurrentUrgency = (createdAt, originalUrgency) => {
+    const hours = originalUrgency === '24h' ? 24 : originalUrgency === '48h' ? 48 : 72;
+    const deadline = new Date(new Date(createdAt).getTime() + hours * 60 * 60 * 1000);
+    const diff = deadline - new Date();
+    const remainingHours = diff / (1000 * 60 * 60);
+
+    if (remainingHours <= 0) return '24h';  // Expired = most urgent
+    if (remainingHours <= 24) return '24h'; // Less than 24h = urgent (red)
+    if (remainingHours <= 48) return '48h'; // Less than 48h = medium (orange)
+    return '72h';                            // More than 48h = not urgent (green)
+};
+
 const WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
     { id: 'plastic', label: 'Plastika', icon: '♻️' },
@@ -1678,11 +1691,21 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 24h, 48h, 72h
     const items = type === 'requests' ? requests : clients;
 
-    // Filter items by urgency
+    // Add current urgency to each request based on remaining time
+    const itemsWithCurrentUrgency = useMemo(() => {
+        if (type !== 'requests') return items || [];
+        return (items || []).map(item => ({
+            ...item,
+            currentUrgency: getCurrentUrgency(item.created_at, item.urgency)
+        }));
+    }, [items, type]);
+
+    // Filter items by CURRENT urgency (not original)
     const filteredItems = useMemo(() => {
-        if (type !== 'requests' || urgencyFilter === 'all') return items || [];
-        return (items || []).filter(item => item.urgency === urgencyFilter);
-    }, [items, type, urgencyFilter]);
+        if (type !== 'requests') return items || [];
+        if (urgencyFilter === 'all') return itemsWithCurrentUrgency;
+        return itemsWithCurrentUrgency.filter(item => item.currentUrgency === urgencyFilter);
+    }, [itemsWithCurrentUrgency, items, type, urgencyFilter]);
 
     // Calculate positions for all items
     const markers = useMemo(() => {
@@ -1725,14 +1748,14 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
     // Extract all positions for bounds fitting
     const allPositions = useMemo(() => markers.map(m => m.position), [markers]);
 
-    // Count by urgency
+    // Count by CURRENT urgency (not original)
     const urgencyCounts = useMemo(() => {
         if (type !== 'requests') return {};
-        return (items || []).reduce((acc, item) => {
-            acc[item.urgency] = (acc[item.urgency] || 0) + 1;
+        return itemsWithCurrentUrgency.reduce((acc, item) => {
+            acc[item.currentUrgency] = (acc[item.currentUrgency] || 0) + 1;
             return acc;
         }, {});
-    }, [items, type]);
+    }, [itemsWithCurrentUrgency, type]);
 
     return (
         <div className="bg-white rounded-2xl border overflow-hidden" style={{ height: '500px' }}>
@@ -1744,7 +1767,7 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
                         onClick={() => setUrgencyFilter('all')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${urgencyFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'}`}
                     >
-                        Svi ({items?.length || 0})
+                        Svi ({itemsWithCurrentUrgency?.length || 0})
                     </button>
                     <button
                         onClick={() => setUrgencyFilter('24h')}
@@ -1776,7 +1799,7 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
                     <Marker
                         key={item.id || `marker-${index}`}
                         position={position}
-                        icon={createCustomIcon(item.urgency, item.waste_type, type === 'clients')}
+                        icon={createCustomIcon(item.currentUrgency || item.urgency, item.waste_type, type === 'clients')}
                         opacity={hasCoords ? 1 : 0.7}
                     >
                         <Popup>
