@@ -31,11 +31,14 @@ const getRemainingTime = (createdAt, urgency) => {
     const hours = urgency === '24h' ? 24 : urgency === '48h' ? 48 : 72;
     const deadline = new Date(new Date(createdAt).getTime() + hours * 60 * 60 * 1000);
     const diff = deadline - new Date();
-    if (diff <= 0) return { text: 'Isteklo', color: 'text-red-600', bg: 'bg-red-100' };
+    if (diff <= 0) return { text: '00:00:00', color: 'text-red-600', bg: 'bg-red-100' };
     const h = Math.floor(diff / (1000 * 60 * 60));
-    if (h < 6) return { text: `${h}h`, color: 'text-red-600', bg: 'bg-red-100' };
-    if (h < 24) return { text: `${h}h`, color: 'text-amber-600', bg: 'bg-amber-100' };
-    return { text: `${h}h`, color: 'text-emerald-600', bg: 'bg-emerald-100' };
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const s = Math.floor((diff % (1000 * 60)) / 1000);
+    const text = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    if (h < 6) return { text, color: 'text-red-600', bg: 'bg-red-100' };
+    if (h < 24) return { text, color: 'text-amber-600', bg: 'bg-amber-100' };
+    return { text, color: 'text-emerald-600', bg: 'bg-emerald-100' };
 };
 
 const WASTE_TYPES = [
@@ -400,10 +403,46 @@ export default function Dashboard() {
     const [submitLoading, setSubmitLoading] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [prevRequestCount, setPrevRequestCount] = useState(0);
+    const [prevClientCount, setPrevClientCount] = useState(0);
 
     const userRole = user?.role === 'developer' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
 
     useEffect(() => { loadData(); }, [userRole, activeTab]);
+
+    // Track new requests/clients for notifications
+    useEffect(() => {
+        if (userRole === 'manager' && pickupRequests) {
+            const currentCount = pickupRequests.filter(r => r.status === 'pending').length;
+            if (prevRequestCount > 0 && currentCount > prevRequestCount) {
+                const newCount = currentCount - prevRequestCount;
+                setNotifications(prev => [{ id: Date.now(), type: 'request', text: `${newCount} novi zahtev${newCount > 1 ? 'a' : ''}`, time: new Date() }, ...prev.slice(0, 9)]);
+            }
+            setPrevRequestCount(currentCount);
+        }
+    }, [pickupRequests, userRole]);
+
+    useEffect(() => {
+        if (userRole === 'manager' && clients.length > 0) {
+            if (prevClientCount > 0 && clients.length > prevClientCount) {
+                const newClient = clients[0];
+                setNotifications(prev => [{ id: Date.now(), type: 'client', text: `Novi klijent: ${newClient.name}`, time: new Date() }, ...prev.slice(0, 9)]);
+            }
+            setPrevClientCount(clients.length);
+        }
+    }, [clients, userRole]);
+
+    const clearNotification = (id) => setNotifications(prev => prev.filter(n => n.id !== id));
+    const clearAllNotifications = () => setNotifications([]);
+
+    // Real-time countdown refresh
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     const loadData = async () => {
         setLoading(true);
@@ -487,7 +526,46 @@ export default function Dashboard() {
                         <div className="hidden md:flex items-center bg-slate-100 rounded-full px-4 py-2.5 w-72"><Search size={18} className="text-slate-400 mr-2" /><input placeholder="Pretraži..." className="bg-transparent outline-none text-sm w-full" /></div>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full"><Bell size={20} />{(processedNotification || pending.some(r => r.urgency === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}</button>
+                        <div className="relative">
+                            <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full">
+                                <Bell size={20} />
+                                {(notifications.length > 0 || pending.some(r => r.urgency === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
+                            </button>
+                            {showNotifications && (
+                                <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                                    <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+                                        <h3 className="font-bold text-slate-800">Obaveštenja</h3>
+                                        {notifications.length > 0 && <button onClick={clearAllNotifications} className="text-xs text-emerald-600 hover:text-emerald-700">Obriši sve</button>}
+                                    </div>
+                                    <div className="max-h-80 overflow-y-auto">
+                                        {pending.filter(r => r.urgency === '24h').length > 0 && (
+                                            <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-start gap-3">
+                                                <AlertCircle size={18} className="text-red-500 mt-0.5" />
+                                                <div>
+                                                    <p className="text-sm font-medium text-red-700">{pending.filter(r => r.urgency === '24h').length} hitnih zahteva</p>
+                                                    <p className="text-xs text-red-500">Potrebna hitna akcija</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {notifications.length > 0 ? notifications.map(n => (
+                                            <div key={n.id} className="px-4 py-3 border-b border-slate-50 hover:bg-slate-50 flex items-start gap-3">
+                                                {n.type === 'request' ? <Truck size={18} className="text-emerald-500 mt-0.5" /> : <Users size={18} className="text-blue-500 mt-0.5" />}
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-slate-700">{n.text}</p>
+                                                    <p className="text-xs text-slate-400">{new Date(n.time).toLocaleTimeString('sr-RS')}</p>
+                                                </div>
+                                                <button onClick={() => clearNotification(n.id)} className="p-1 text-slate-300 hover:text-slate-500"><X size={14} /></button>
+                                            </div>
+                                        )) : pending.filter(r => r.urgency === '24h').length === 0 && (
+                                            <div className="px-4 py-8 text-center text-slate-400">
+                                                <Bell size={24} className="mx-auto mb-2 opacity-50" />
+                                                <p className="text-sm">Nema novih obaveštenja</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex items-center gap-3 pl-4 border-l"><div className="text-right hidden sm:block"><p className="text-sm font-bold">{user?.name}</p><p className="text-xs text-slate-500">{companyName || (userRole === 'admin' ? 'Administrator' : 'Korisnik')}</p></div><div className="w-11 h-11 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg">{user?.name?.charAt(0)}</div></div>
                     </div>
                 </header>
