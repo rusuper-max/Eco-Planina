@@ -2194,26 +2194,33 @@ const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
 const AdminCompaniesTable = ({ companies, onEdit }) => {
     if (!companies?.length) return <EmptyState icon={Building2} title="Nema firmi" desc="Firme će se prikazati ovde" />;
     return (
-        <div className="bg-white rounded-2xl border overflow-hidden">
-            <table className="w-full text-sm">
+        <div className="bg-white rounded-2xl border overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
                 <thead className="bg-slate-50 text-slate-500 border-b">
-                    <tr><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">ECO Kod</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4">Menadžeri</th><th className="px-6 py-4">Klijenti</th><th className="px-6 py-4 text-right">Akcije</th></tr>
+                    <tr>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">Firma</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">ECO Kod</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">Status</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-center whitespace-nowrap">Menadžeri</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-center whitespace-nowrap">Klijenti</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-slate-50">Akcije</th>
+                    </tr>
                 </thead>
                 <tbody className="divide-y">
                     {companies.map(c => (
                         <tr key={c.id} className="hover:bg-slate-50">
-                            <td className="px-6 py-4 font-medium">{c.name}</td>
-                            <td className="px-6 py-4"><code className="px-2 py-1 bg-slate-100 rounded text-xs">{c.code}</code></td>
-                            <td className="px-6 py-4">
+                            <td className="px-3 md:px-6 py-3 md:py-4 font-medium whitespace-nowrap">{c.name}</td>
+                            <td className="px-3 md:px-6 py-3 md:py-4"><code className="px-2 py-1 bg-slate-100 rounded text-xs">{c.code}</code></td>
+                            <td className="px-3 md:px-6 py-3 md:py-4">
                                 {c.status === 'frozen' ? (
-                                    <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 w-fit"><Lock size={12} /> Zamrznuta</span>
+                                    <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1 w-fit whitespace-nowrap"><Lock size={12} /> Zamrznuta</span>
                                 ) : (
-                                    <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium">Aktivna</span>
+                                    <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium whitespace-nowrap">Aktivna</span>
                                 )}
                             </td>
-                            <td className="px-6 py-4 text-center">{c.managerCount || 0}</td>
-                            <td className="px-6 py-4 text-center">{c.clientCount || 0}</td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-3 md:px-6 py-3 md:py-4 text-center">{c.managerCount || 0}</td>
+                            <td className="px-3 md:px-6 py-3 md:py-4 text-center">{c.clientCount || 0}</td>
+                            <td className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-white">
                                 <button onClick={() => onEdit(c)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600" title="Izmeni firmu">
                                     <Edit3 size={18} />
                                 </button>
@@ -2229,7 +2236,7 @@ const AdminCompaniesTable = ({ companies, onEdit }) => {
 const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser, isAdmin }) => {
     // State
     const [searchQuery, setSearchQuery] = useState('');
-    const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'role', direction: 'asc' });
     const [selectedUsers, setSelectedUsers] = useState(new Set());
     const [deleteModal, setDeleteModal] = useState(null);
     const [detailsModal, setDetailsModal] = useState(null);
@@ -2362,11 +2369,11 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                 )}
             </div>
 
-            <div className="bg-white rounded-2xl border overflow-hidden">
-                <table className="w-full text-sm">
+            <div className="bg-white rounded-2xl border overflow-x-auto">
+                <table className="w-full text-sm min-w-[800px]">
                     <thead className="bg-slate-50 text-slate-500 border-b">
                         <tr>
-                            <th className="px-6 py-4 w-10">
+                            <th className="px-3 md:px-6 py-3 md:py-4 w-10">
                                 <input
                                     type="checkbox"
                                     checked={filteredUsers.length > 0 && selectedUsers.size === filteredUsers.filter(u => !isProtected(u.role)).length}
@@ -2380,14 +2387,14 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                                 { key: 'role', label: 'Uloga' },
                                 { key: 'company', label: 'Firma' }
                             ].map(col => (
-                                <th key={col.key} className="px-6 py-4 text-left cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort(col.key)}>
+                                <th key={col.key} className="px-3 md:px-6 py-3 md:py-4 text-left cursor-pointer hover:bg-slate-100 transition-colors whitespace-nowrap" onClick={() => handleSort(col.key)}>
                                     <div className="flex items-center gap-1">
                                         {col.label}
                                         {sortConfig.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
                                     </div>
                                 </th>
                             ))}
-                            <th className="px-6 py-4 text-right">Akcije</th>
+                            <th className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-slate-50">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -2396,7 +2403,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                         ) : (
                             paginatedUsers.map(u => (
                                 <tr key={u.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setDetailsModal(u)}>
-                                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                    <td className="px-3 md:px-6 py-3 md:py-4" onClick={(e) => e.stopPropagation()}>
                                         {!isProtected(u.role) && (
                                             <input
                                                 type="checkbox"
@@ -2406,20 +2413,20 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                                             />
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 font-medium">{u.name}</td>
-                                    <td className="px-6 py-4 text-slate-600">{u.phone}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleConfig(u.role).className}`}>
+                                    <td className="px-3 md:px-6 py-3 md:py-4 font-medium whitespace-nowrap">{u.name}</td>
+                                    <td className="px-3 md:px-6 py-3 md:py-4 text-slate-600 whitespace-nowrap">{u.phone}</td>
+                                    <td className="px-3 md:px-6 py-3 md:py-4">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${getRoleConfig(u.role).className}`}>
                                             {getRoleConfig(u.role).label}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
+                                    <td className="px-3 md:px-6 py-3 md:py-4">
+                                        <div className="flex items-center gap-2 whitespace-nowrap">
                                             <span className="text-slate-600">{u.company?.name || '-'}</span>
                                             {u.company?.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                    <td className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-white" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex items-center justify-end gap-1">
                                             {/* Edit button */}
                                             {!isProtected(u.role) && (
