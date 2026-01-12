@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Leaf, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight,
-    Phone, RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3
+    Phone, RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -1049,10 +1049,246 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
     </div>
 );
 
+// Chat Interface Component
+const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients }) => {
+    const [conversations, setConversations] = useState([]);
+    const [selectedChat, setSelectedChat] = useState(null);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [sending, setSending] = useState(false);
+    const [contacts, setContacts] = useState([]);
+    const [showNewChat, setShowNewChat] = useState(false);
+    const messagesEndRef = useRef(null);
+
+    useEffect(() => {
+        loadConversations();
+        loadContacts();
+    }, []);
+
+    useEffect(() => {
+        if (selectedChat) {
+            loadMessages(selectedChat.partnerId);
+            markMessagesAsRead(selectedChat.partnerId);
+        }
+    }, [selectedChat]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages]);
+
+    // Real-time subscription for selected chat
+    useEffect(() => {
+        if (!selectedChat) return;
+        const interval = setInterval(() => {
+            loadMessages(selectedChat.partnerId);
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [selectedChat]);
+
+    const loadConversations = async () => {
+        setLoading(true);
+        const convs = await getConversations();
+        setConversations(convs);
+        setLoading(false);
+    };
+
+    const loadContacts = async () => {
+        const clients = await fetchCompanyClients();
+        setContacts(clients || []);
+    };
+
+    const loadMessages = async (partnerId) => {
+        const msgs = await fetchMessages(partnerId);
+        setChatMessages(msgs);
+    };
+
+    const handleSend = async () => {
+        if (!newMessage.trim() || !selectedChat) return;
+        setSending(true);
+        try {
+            await sendMessage(selectedChat.partnerId, newMessage);
+            setNewMessage('');
+            await loadMessages(selectedChat.partnerId);
+            await loadConversations();
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
+        setSending(false);
+    };
+
+    const startNewChat = (contact) => {
+        setSelectedChat({
+            partnerId: contact.id,
+            partner: { name: contact.name, role: contact.role, phone: contact.phone }
+        });
+        setShowNewChat(false);
+    };
+
+    const formatTime = (dateStr) => {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return date.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' });
+        if (diffDays === 1) return 'Juče';
+        if (diffDays < 7) return date.toLocaleDateString('sr-RS', { weekday: 'short' });
+        return date.toLocaleDateString('sr-RS', { day: 'numeric', month: 'short' });
+    };
+
+    return (
+        <div className="bg-white rounded-2xl border overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
+            <div className="flex h-full">
+                {/* Conversations List */}
+                <div className={`w-full md:w-80 border-r flex flex-col ${selectedChat ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="p-4 border-b flex justify-between items-center">
+                        <h2 className="font-bold text-lg">Poruke</h2>
+                        <button onClick={() => setShowNewChat(true)} className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200">
+                            <Plus size={20} />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        {loading ? (
+                            <div className="flex items-center justify-center h-32"><Loader2 className="animate-spin text-emerald-600" size={24} /></div>
+                        ) : conversations.length === 0 ? (
+                            <div className="p-6 text-center text-slate-500">
+                                <MessageCircle size={40} className="mx-auto mb-3 text-slate-300" />
+                                <p className="text-sm">Nema poruka</p>
+                                <button onClick={() => setShowNewChat(true)} className="mt-3 text-emerald-600 text-sm font-medium">Započni razgovor</button>
+                            </div>
+                        ) : (
+                            conversations.map(conv => (
+                                <button
+                                    key={conv.partnerId}
+                                    onClick={() => setSelectedChat(conv)}
+                                    className={`w-full p-4 flex items-center gap-3 hover:bg-slate-50 border-b text-left ${selectedChat?.partnerId === conv.partnerId ? 'bg-emerald-50' : ''}`}
+                                >
+                                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold flex-shrink-0">
+                                        {conv.partner.name?.charAt(0) || '?'}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center">
+                                            <span className="font-medium truncate">{conv.partner.name}</span>
+                                            <span className="text-xs text-slate-400">{formatTime(conv.lastMessageAt)}</span>
+                                        </div>
+                                        <p className="text-sm text-slate-500 truncate">{conv.lastMessage}</p>
+                                    </div>
+                                    {conv.unread > 0 && (
+                                        <span className="w-5 h-5 bg-emerald-600 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0">{conv.unread}</span>
+                                    )}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Chat Area */}
+                <div className={`flex-1 flex flex-col ${selectedChat ? 'flex' : 'hidden md:flex'}`}>
+                    {selectedChat ? (
+                        <>
+                            {/* Chat Header */}
+                            <div className="p-4 border-b flex items-center gap-3">
+                                <button onClick={() => setSelectedChat(null)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg">
+                                    <ArrowLeft size={20} />
+                                </button>
+                                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">
+                                    {selectedChat.partner.name?.charAt(0) || '?'}
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold">{selectedChat.partner.name}</h3>
+                                    <p className="text-xs text-slate-500">{selectedChat.partner.role === 'client' ? 'Klijent' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}</p>
+                                </div>
+                            </div>
+
+                            {/* Messages */}
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                                {chatMessages.map(msg => (
+                                    <div key={msg.id} className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender_id === user.id
+                                            ? 'bg-emerald-600 text-white rounded-br-md'
+                                            : 'bg-white border rounded-bl-md'
+                                        }`}>
+                                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                            <p className={`text-xs mt-1 ${msg.sender_id === user.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                                {formatTime(msg.created_at)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Message Input */}
+                            <div className="p-4 border-t bg-white">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newMessage}
+                                        onChange={(e) => setNewMessage(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                                        placeholder="Napišite poruku..."
+                                        className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                    />
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={sending || !newMessage.trim()}
+                                        className="px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-slate-500">
+                            <div className="text-center">
+                                <MessageCircle size={48} className="mx-auto mb-4 text-slate-300" />
+                                <p>Izaberite razgovor ili započnite novi</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* New Chat Modal */}
+            {showNewChat && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
+                        <div className="p-4 border-b flex justify-between items-center">
+                            <h3 className="font-bold">Nova poruka</h3>
+                            <button onClick={() => setShowNewChat(false)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={20} /></button>
+                        </div>
+                        <div className="overflow-y-auto max-h-96">
+                            {contacts.length === 0 ? (
+                                <div className="p-6 text-center text-slate-500">Nema kontakata</div>
+                            ) : (
+                                contacts.map(contact => (
+                                    <button
+                                        key={contact.id}
+                                        onClick={() => startNewChat(contact)}
+                                        className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 border-b text-left"
+                                    >
+                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">
+                                            {contact.name?.charAt(0) || '?'}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{contact.name}</p>
+                                            <p className="text-sm text-slate-500">{contact.phone}</p>
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Main Dashboard
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -1188,11 +1424,17 @@ export default function Dashboard() {
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
             { id: 'clients', icon: Users, label: 'Klijenti' },
+            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null },
             { id: 'equipment', icon: Box, label: 'Oprema' },
             { id: 'wastetypes', icon: Recycle, label: 'Vrste robe' },
             { id: 'map', icon: MapPin, label: 'Mapa' }
         ];
-        return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Početna' }, { id: 'new', icon: Plus, label: 'Novi zahtev' }, { id: 'requests', icon: Truck, label: 'Moji zahtevi', badge: clientRequests?.length }];
+        return [
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Početna' },
+            { id: 'new', icon: Plus, label: 'Novi zahtev' },
+            { id: 'requests', icon: Truck, label: 'Moji zahtevi', badge: clientRequests?.length },
+            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }
+        ];
     };
 
     const getStats = () => {
@@ -1218,6 +1460,10 @@ export default function Dashboard() {
     const pending = pickupRequests?.filter(r => r.status === 'pending') || [];
 
     const renderContent = () => {
+        // Chat is available for both managers and clients
+        if (activeTab === 'messages') {
+            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} />;
+        }
         if (userRole === 'client') {
             if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} />;
             if (activeTab === 'requests') return clientRequests?.length ? <div className="space-y-4">{clientRequests.map(r => <div key={r.id} className="bg-white rounded-xl border p-5"><div className="flex justify-between"><div className="flex items-center gap-3"><span className="text-2xl">{WASTE_TYPES.find(w => w.id === r.waste_type)?.icon}</span><div><h4 className="font-semibold">{r.waste_label}</h4><p className="text-xs text-slate-500">{new Date(r.created_at).toLocaleString('sr-RS')}</p></div></div><span className={`px-3 py-1 text-xs font-medium rounded-full ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100'}`}>{r.urgency === '24h' ? 'Hitno' : r.urgency === '48h' ? 'Srednje' : 'Normalno'}</span></div></div>)}</div> : <EmptyState icon={CheckCircle2} title="Nema zahteva" desc="Vaši zahtevi će se prikazati ovde" />;

@@ -19,6 +19,8 @@ export const AuthProvider = ({ children }) => {
     const [pickupRequests, setPickupRequests] = useState([]);
     const [clientRequests, setClientRequests] = useState([]);
     const [processedNotification, setProcessedNotification] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
         const savedSession = localStorage.getItem('eco_session');
@@ -311,12 +313,123 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { throw error; }
     };
 
+    // Chat functions
+    const fetchMessages = async (otherUserId = null) => {
+        if (!user || !companyCode) return [];
+        try {
+            let query = supabase.from('messages').select('*').eq('company_code', companyCode);
+            if (otherUserId) {
+                query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
+            } else {
+                query = query.or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
+            }
+            const { data, error } = await query.order('created_at', { ascending: true });
+            if (error) throw error;
+            setMessages(data || []);
+            return data || [];
+        } catch (error) { console.error('Error fetching messages:', error); return []; }
+    };
+
+    const sendMessage = async (receiverId, content) => {
+        if (!user || !companyCode) throw new Error('Niste prijavljeni');
+        try {
+            const { data, error } = await supabase.from('messages').insert([{
+                sender_id: user.id,
+                receiver_id: receiverId,
+                company_code: companyCode,
+                content: content.trim()
+            }]).select().single();
+            if (error) throw error;
+            return data;
+        } catch (error) { throw error; }
+    };
+
+    const markMessagesAsRead = async (senderId) => {
+        if (!user) return;
+        try {
+            await supabase.from('messages')
+                .update({ read_at: new Date().toISOString() })
+                .eq('sender_id', senderId)
+                .eq('receiver_id', user.id)
+                .is('read_at', null);
+            fetchUnreadCount();
+        } catch (error) { console.error('Error marking messages as read:', error); }
+    };
+
+    const fetchUnreadCount = async () => {
+        if (!user) return 0;
+        try {
+            const { count, error } = await supabase.from('messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('receiver_id', user.id)
+                .is('read_at', null);
+            if (error) throw error;
+            setUnreadCount(count || 0);
+            return count || 0;
+        } catch { return 0; }
+    };
+
+    const getConversations = async () => {
+        if (!user || !companyCode) return [];
+        try {
+            const { data: allMessages, error } = await supabase.from('messages')
+                .select('*')
+                .eq('company_code', companyCode)
+                .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+
+            // Group by conversation partner
+            const conversationsMap = new Map();
+            for (const msg of (allMessages || [])) {
+                const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+                if (!conversationsMap.has(partnerId)) {
+                    conversationsMap.set(partnerId, {
+                        partnerId,
+                        lastMessage: msg.content,
+                        lastMessageAt: msg.created_at,
+                        unread: msg.receiver_id === user.id && !msg.read_at ? 1 : 0
+                    });
+                } else if (msg.receiver_id === user.id && !msg.read_at) {
+                    conversationsMap.get(partnerId).unread++;
+                }
+            }
+
+            // Fetch partner details
+            const partnerIds = [...conversationsMap.keys()];
+            if (partnerIds.length === 0) return [];
+            const { data: partners } = await supabase.from('users').select('id, name, role, phone').in('id', partnerIds);
+            const partnerMap = (partners || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
+
+            return [...conversationsMap.values()].map(conv => ({
+                ...conv,
+                partner: partnerMap[conv.partnerId] || { name: 'Nepoznat', role: 'unknown' }
+            })).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+        } catch (error) { console.error('Error fetching conversations:', error); return []; }
+    };
+
+    // Subscribe to new messages
+    useEffect(() => {
+        if (!user || !companyCode) return;
+        fetchUnreadCount();
+        const channelName = `messages_${user.id}`;
+        const subscription = supabase
+            .channel(channelName)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, () => {
+                fetchUnreadCount();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(subscription); };
+    }, [user, companyCode]);
+
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests,
         login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
+        // Chat
+        messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
