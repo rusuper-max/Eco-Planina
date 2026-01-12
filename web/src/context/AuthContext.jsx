@@ -79,6 +79,23 @@ export const AuthProvider = ({ children }) => {
 
     const clearProcessedNotification = () => setProcessedNotification(null);
 
+    // Fetch client's request history (processed requests)
+    const fetchClientHistory = async () => {
+        if (!user) return [];
+        try {
+            const { data, error } = await supabase
+                .from('processed_requests')
+                .select('*')
+                .eq('client_id', user.id)
+                .order('processed_at', { ascending: false });
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching client history:', error);
+            return [];
+        }
+    };
+
     const fetchPickupRequests = async (code = companyCode) => {
         if (!code) return;
         try {
@@ -203,7 +220,7 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { throw error; }
     };
 
-    const register = async ({ name, phone, password, address, companyCode: inputCode, role, joinExisting }) => {
+    const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role, joinExisting }) => {
         setIsLoading(true);
         try {
             const { data: existingUser } = await supabase.from('users').select('id').eq('phone', phone).single();
@@ -211,13 +228,13 @@ export const AuthProvider = ({ children }) => {
             if (role === 'client') {
                 const { data: company, error: companyError } = await supabase.from('companies').select('*').eq('code', inputCode.toUpperCase()).single();
                 if (companyError || !company) throw new Error('Nevažeći kod firme');
-                await supabase.from('users').insert([{ name, phone, password, address, role: 'client', company_code: inputCode.toUpperCase() }]).select().single();
+                await supabase.from('users').insert([{ name, phone, password, address, latitude, longitude, role: 'client', company_code: inputCode.toUpperCase() }]).select().single();
                 return { success: true };
             } else if (role === 'manager') {
                 if (joinExisting) {
                     const { data: company, error: companyError } = await supabase.from('companies').select('*').eq('code', inputCode.toUpperCase()).single();
                     if (companyError || !company) throw new Error('Nevažeći kod firme');
-                    await supabase.from('users').insert([{ name, phone, password, address, role: 'manager', company_code: inputCode.toUpperCase() }]).select().single();
+                    await supabase.from('users').insert([{ name, phone, password, address, latitude, longitude, role: 'manager', company_code: inputCode.toUpperCase() }]).select().single();
                     return { success: true };
                 } else {
                     const { data: masterCodeData, error: mcError } = await supabase.from('master_codes').select('*').eq('code', inputCode.toUpperCase()).eq('status', 'available').single();
@@ -226,7 +243,7 @@ export const AuthProvider = ({ children }) => {
                     let companyCodeGen; let isUnique = false;
                     while (!isUnique) { companyCodeGen = 'ECO-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join(''); const { data: existing } = await supabase.from('companies').select('id').eq('code', companyCodeGen).single(); if (!existing) isUnique = true; }
                     const { data: companyData } = await supabase.from('companies').insert([{ code: companyCodeGen, name: name + ' Firma', master_code_id: masterCodeData.id }]).select().single();
-                    const { data: userData } = await supabase.from('users').insert([{ name, phone, password, address, role: 'manager', company_code: companyCodeGen }]).select().single();
+                    const { data: userData } = await supabase.from('users').insert([{ name, phone, password, address, latitude, longitude, role: 'manager', company_code: companyCodeGen }]).select().single();
                     await supabase.from('companies').update({ manager_id: userData.id }).eq('id', companyData.id);
                     await supabase.from('master_codes').update({ status: 'used', used_by_company: companyData.id }).eq('id', masterCodeData.id);
                     return { success: true };
@@ -253,6 +270,18 @@ export const AuthProvider = ({ children }) => {
     const fetchCompanyClients = async () => {
         if (!companyCode) return [];
         try { const { data, error } = await supabase.from('users').select('*').eq('role', 'client').eq('company_code', companyCode); if (error) throw error; return data || []; }
+        catch { return []; }
+    };
+
+    // Fetch all company members (managers and clients) excluding current user
+    const fetchCompanyMembers = async () => {
+        if (!companyCode) return [];
+        try {
+            const { data, error } = await supabase.from('users').select('*').eq('company_code', companyCode).in('role', ['manager', 'client']);
+            if (error) throw error;
+            // Exclude current user from the list
+            return (data || []).filter(u => u.id !== user?.id);
+        }
         catch { return []; }
     };
 
@@ -396,6 +425,22 @@ export const AuthProvider = ({ children }) => {
             if (error) throw error;
             // Update local user state
             const updatedUser = { ...user, name: newName };
+            setUser(updatedUser);
+            // Update local storage
+            const session = JSON.parse(localStorage.getItem('eco_session') || '{}');
+            localStorage.setItem('eco_session', JSON.stringify({ ...session, user: updatedUser }));
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
+    // Update current user's location (address + coordinates)
+    const updateLocation = async (address, latitude, longitude) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        try {
+            const { error } = await supabase.from('users').update({ address, latitude, longitude }).eq('id', user.id);
+            if (error) throw error;
+            // Update local user state
+            const updatedUser = { ...user, address, latitude, longitude };
             setUser(updatedUser);
             // Update local storage
             const session = JSON.parse(localStorage.getItem('eco_session') || '{}');
@@ -626,13 +671,13 @@ export const AuthProvider = ({ children }) => {
     };
 
     const value = {
-        user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests,
-        login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchProcessedRequests, fetchCompanyEquipmentTypes,
+        user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests, fetchClientHistory,
+        login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
         // Profile updates
-        updateProfile, updateCompanyName,
+        updateProfile, updateCompanyName, updateLocation,
         // Admin functions
         toggleCompanyStatus,
         // Impersonation

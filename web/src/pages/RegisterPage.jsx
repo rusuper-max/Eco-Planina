@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
+import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown, Search } from 'lucide-react';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -20,10 +20,78 @@ export default function RegisterPage() {
     const [joinExisting, setJoinExisting] = useState(false);
     const [countryCode, setCountryCode] = useState('+381');
     const [showCountryDropdown, setShowCountryDropdown] = useState(false);
-    const [formData, setFormData] = useState({ name: '', phone: '', password: '', address: '', companyCode: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', password: '', address: '', companyCode: '', latitude: null, longitude: null });
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Address autocomplete state
+    const [addressQuery, setAddressQuery] = useState('');
+    const [addressSuggestions, setAddressSuggestions] = useState([]);
+    const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+    const [addressLoading, setAddressLoading] = useState(false);
+    const addressInputRef = useRef(null);
+    const suggestionsRef = useRef(null);
+
+    // Debounced address search
+    useEffect(() => {
+        if (addressQuery.length < 3) {
+            setAddressSuggestions([]);
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            setAddressLoading(true);
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressQuery)}&countrycodes=rs,ba,hr,si,me,mk&limit=5&addressdetails=1`,
+                    {
+                        headers: {
+                            'Accept-Language': 'sr,hr,bs,sl,mk'
+                        }
+                    }
+                );
+                const data = await response.json();
+                setAddressSuggestions(data);
+                setShowAddressSuggestions(data.length > 0);
+            } catch (err) {
+                console.error('Address search error:', err);
+                setAddressSuggestions([]);
+            } finally {
+                setAddressLoading(false);
+            }
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [addressQuery]);
+
+    // Close suggestions when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (
+                suggestionsRef.current &&
+                !suggestionsRef.current.contains(event.target) &&
+                addressInputRef.current &&
+                !addressInputRef.current.contains(event.target)
+            ) {
+                setShowAddressSuggestions(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleAddressSelect = (suggestion) => {
+        setFormData({
+            ...formData,
+            address: suggestion.display_name,
+            latitude: parseFloat(suggestion.lat),
+            longitude: parseFloat(suggestion.lon)
+        });
+        setAddressQuery(suggestion.display_name);
+        setShowAddressSuggestions(false);
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -39,6 +107,8 @@ export default function RegisterPage() {
                 phone: formattedPhone,
                 password: formData.password,
                 address: formData.address,
+                latitude: formData.latitude,
+                longitude: formData.longitude,
                 companyCode: formData.companyCode,
                 role,
                 joinExisting
@@ -252,14 +322,55 @@ export default function RegisterPage() {
                                 <div className="relative">
                                     <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                                     <input
+                                        ref={addressInputRef}
                                         type="text"
-                                        value={formData.address}
-                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                        placeholder="Ulica i broj, Grad"
-                                        className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                        value={addressQuery}
+                                        onChange={(e) => {
+                                            setAddressQuery(e.target.value);
+                                            setFormData({ ...formData, address: e.target.value, latitude: null, longitude: null });
+                                        }}
+                                        onFocus={() => addressSuggestions.length > 0 && setShowAddressSuggestions(true)}
+                                        placeholder="Počnite kucati adresu..."
+                                        className="w-full pl-12 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                                         required
                                     />
+                                    {addressLoading && (
+                                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 animate-spin" />
+                                    )}
+                                    {!addressLoading && formData.latitude && (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                    {showAddressSuggestions && addressSuggestions.length > 0 && (
+                                        <div
+                                            ref={suggestionsRef}
+                                            className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto"
+                                        >
+                                            {addressSuggestions.map((suggestion, index) => (
+                                                <button
+                                                    key={suggestion.place_id || index}
+                                                    type="button"
+                                                    onClick={() => handleAddressSelect(suggestion)}
+                                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0"
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <MapPin className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                                        <span className="text-sm text-slate-700 line-clamp-2">{suggestion.display_name}</span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
+                                {formData.latitude && formData.longitude && (
+                                    <p className="mt-2 text-xs text-emerald-600 flex items-center gap-1">
+                                        <MapPin className="w-3 h-3" />
+                                        Lokacija potvrđena ({formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)})
+                                    </p>
+                                )}
                             </div>
 
                             <div>
