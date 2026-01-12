@@ -422,6 +422,37 @@ export const AuthProvider = ({ children }) => {
         return () => { supabase.removeChannel(subscription); };
     }, [user, companyCode]);
 
+    // Fetch all admin users (for contact admin feature)
+    const fetchAdmins = async () => {
+        try {
+            const { data, error } = await supabase.from('users').select('id, name, role, phone').in('role', ['admin', 'developer']);
+            if (error) throw error;
+            return data || [];
+        } catch (error) { console.error('Error fetching admins:', error); return []; }
+    };
+
+    // Send message to all admins (support message)
+    const sendMessageToAdmins = async (content) => {
+        if (!user || !companyCode) throw new Error('Niste prijavljeni');
+        try {
+            const admins = await fetchAdmins();
+            if (admins.length === 0) throw new Error('Nema dostupnih admina');
+
+            // Send message to each admin
+            const messages = admins.map(admin => ({
+                sender_id: user.id,
+                receiver_id: admin.id,
+                company_code: companyCode,
+                content: content.trim(),
+                is_support: true
+            }));
+
+            const { error } = await supabase.from('messages').insert(messages);
+            if (error) throw error;
+            return { success: true, sentTo: admins.length };
+        } catch (error) { throw error; }
+    };
+
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests,
         login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchProcessedRequests, fetchCompanyEquipmentTypes,
@@ -430,6 +461,8 @@ export const AuthProvider = ({ children }) => {
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
         // Chat
         messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
+        // Admin contact
+        fetchAdmins, sendMessageToAdmins,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

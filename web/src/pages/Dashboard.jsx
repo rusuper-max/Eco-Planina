@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Leaf, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight,
-    Phone, RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2
+    Phone, RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -405,9 +405,534 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
     );
 };
 
+// Print & Export Component
+const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_TYPES }) => {
+    const [dataType, setDataType] = useState('clients'); // clients, requests, history
+    const [selectedFields, setSelectedFields] = useState({
+        clients: { name: true, phone: true, address: true, equipment: false },
+        requests: { client: true, type: true, urgency: true, date: true, fillLevel: false, note: false },
+        history: { client: true, type: true, created: true, processed: true }
+    });
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredData, setFilteredData] = useState([]);
+
+    useEffect(() => {
+        let data = [];
+        const query = searchQuery.toLowerCase();
+
+        if (dataType === 'clients') {
+            data = (clients || []).filter(c =>
+                !query || c.name?.toLowerCase().includes(query) || c.phone?.includes(query) || c.address?.toLowerCase().includes(query)
+            );
+        } else if (dataType === 'requests') {
+            data = (requests || []).filter(r =>
+                !query || r.client_name?.toLowerCase().includes(query) || r.waste_label?.toLowerCase().includes(query)
+            );
+        } else if (dataType === 'history') {
+            data = (processedRequests || []).filter(r =>
+                !query || r.client_name?.toLowerCase().includes(query) || r.waste_label?.toLowerCase().includes(query)
+            );
+        }
+        setFilteredData(data);
+    }, [dataType, clients, requests, processedRequests, searchQuery]);
+
+    const toggleField = (type, field) => {
+        setSelectedFields(prev => ({
+            ...prev,
+            [type]: { ...prev[type], [field]: !prev[type][field] }
+        }));
+    };
+
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        const fields = selectedFields[dataType];
+
+        let html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>EcoPlanina - Štampa</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    h1 { color: #059669; margin-bottom: 5px; }
+                    .subtitle { color: #64748b; margin-bottom: 20px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                    th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+                    th { background: #f1f5f9; font-weight: 600; }
+                    tr:nth-child(even) { background: #f8fafc; }
+                    .footer { margin-top: 20px; color: #94a3b8; font-size: 12px; }
+                    @media print { body { margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <h1>EcoPlanina</h1>
+                <p class="subtitle">${dataType === 'clients' ? 'Lista klijenata' : dataType === 'requests' ? 'Aktivni zahtevi' : 'Istorija zahteva'} - ${new Date().toLocaleDateString('sr-RS')}</p>
+                <table>
+                    <thead><tr>
+        `;
+
+        // Headers
+        if (dataType === 'clients') {
+            if (fields.name) html += '<th>Ime</th>';
+            if (fields.phone) html += '<th>Telefon</th>';
+            if (fields.address) html += '<th>Adresa</th>';
+            if (fields.equipment) html += '<th>Oprema</th>';
+        } else if (dataType === 'requests') {
+            if (fields.client) html += '<th>Klijent</th>';
+            if (fields.type) html += '<th>Tip</th>';
+            if (fields.urgency) html += '<th>Hitnost</th>';
+            if (fields.date) html += '<th>Datum</th>';
+            if (fields.fillLevel) html += '<th>Popunjenost</th>';
+            if (fields.note) html += '<th>Napomena</th>';
+        } else {
+            if (fields.client) html += '<th>Klijent</th>';
+            if (fields.type) html += '<th>Tip</th>';
+            if (fields.created) html += '<th>Podneto</th>';
+            if (fields.processed) html += '<th>Obrađeno</th>';
+        }
+
+        html += '</tr></thead><tbody>';
+
+        // Rows
+        filteredData.forEach(item => {
+            html += '<tr>';
+            if (dataType === 'clients') {
+                if (fields.name) html += `<td>${item.name || '-'}</td>`;
+                if (fields.phone) html += `<td>${item.phone || '-'}</td>`;
+                if (fields.address) html += `<td>${item.address || '-'}</td>`;
+                if (fields.equipment) html += `<td>${item.equipment_types?.length || 0} kom</td>`;
+            } else if (dataType === 'requests') {
+                if (fields.client) html += `<td>${item.client_name || '-'}</td>`;
+                if (fields.type) html += `<td>${item.waste_label || '-'}</td>`;
+                if (fields.urgency) html += `<td>${item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno'}</td>`;
+                if (fields.date) html += `<td>${new Date(item.created_at).toLocaleDateString('sr-RS')}</td>`;
+                if (fields.fillLevel) html += `<td>${item.fill_level}%</td>`;
+                if (fields.note) html += `<td>${item.note || '-'}</td>`;
+            } else {
+                if (fields.client) html += `<td>${item.client_name || '-'}</td>`;
+                if (fields.type) html += `<td>${item.waste_label || '-'}</td>`;
+                if (fields.created) html += `<td>${new Date(item.created_at).toLocaleDateString('sr-RS')}</td>`;
+                if (fields.processed) html += `<td>${new Date(item.processed_at).toLocaleDateString('sr-RS')}</td>`;
+            }
+            html += '</tr>';
+        });
+
+        html += `
+                    </tbody>
+                </table>
+                <p class="footer">Generisano: ${new Date().toLocaleString('sr-RS')} | Ukupno: ${filteredData.length} stavki</p>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.print();
+    };
+
+    const handleExportExcel = () => {
+        const fields = selectedFields[dataType];
+        let csv = '\uFEFF'; // BOM for UTF-8
+
+        // Headers
+        const headers = [];
+        if (dataType === 'clients') {
+            if (fields.name) headers.push('Ime');
+            if (fields.phone) headers.push('Telefon');
+            if (fields.address) headers.push('Adresa');
+            if (fields.equipment) headers.push('Oprema');
+        } else if (dataType === 'requests') {
+            if (fields.client) headers.push('Klijent');
+            if (fields.type) headers.push('Tip');
+            if (fields.urgency) headers.push('Hitnost');
+            if (fields.date) headers.push('Datum');
+            if (fields.fillLevel) headers.push('Popunjenost');
+            if (fields.note) headers.push('Napomena');
+        } else {
+            if (fields.client) headers.push('Klijent');
+            if (fields.type) headers.push('Tip');
+            if (fields.created) headers.push('Podneto');
+            if (fields.processed) headers.push('Obrađeno');
+        }
+        csv += headers.join(';') + '\n';
+
+        // Rows
+        filteredData.forEach(item => {
+            const row = [];
+            if (dataType === 'clients') {
+                if (fields.name) row.push(item.name || '');
+                if (fields.phone) row.push(item.phone || '');
+                if (fields.address) row.push(`"${(item.address || '').replace(/"/g, '""')}"`);
+                if (fields.equipment) row.push(`${item.equipment_types?.length || 0} kom`);
+            } else if (dataType === 'requests') {
+                if (fields.client) row.push(item.client_name || '');
+                if (fields.type) row.push(item.waste_label || '');
+                if (fields.urgency) row.push(item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno');
+                if (fields.date) row.push(new Date(item.created_at).toLocaleDateString('sr-RS'));
+                if (fields.fillLevel) row.push(`${item.fill_level}%`);
+                if (fields.note) row.push(`"${(item.note || '').replace(/"/g, '""')}"`);
+            } else {
+                if (fields.client) row.push(item.client_name || '');
+                if (fields.type) row.push(item.waste_label || '');
+                if (fields.created) row.push(new Date(item.created_at).toLocaleDateString('sr-RS'));
+                if (fields.processed) row.push(new Date(item.processed_at).toLocaleDateString('sr-RS'));
+            }
+            csv += row.join(';') + '\n';
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ecoplanina_${dataType}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const fields = selectedFields[dataType];
+    const fieldLabels = {
+        clients: { name: 'Ime', phone: 'Telefon', address: 'Adresa', equipment: 'Oprema' },
+        requests: { client: 'Klijent', type: 'Tip', urgency: 'Hitnost', date: 'Datum', fillLevel: 'Popunjenost', note: 'Napomena' },
+        history: { client: 'Klijent', type: 'Tip', created: 'Podneto', processed: 'Obrađeno' }
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Data Type Selection */}
+            <div className="bg-white rounded-2xl border p-6">
+                <h3 className="font-bold text-slate-800 mb-4">Izaberi podatke za štampu/export</h3>
+                <div className="flex flex-wrap gap-3">
+                    <button
+                        onClick={() => setDataType('clients')}
+                        className={`px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 ${dataType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                    >
+                        <Users size={18} />
+                        Klijenti ({clients?.length || 0})
+                    </button>
+                    <button
+                        onClick={() => setDataType('requests')}
+                        className={`px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 ${dataType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                    >
+                        <Truck size={18} />
+                        Aktivni zahtevi ({requests?.length || 0})
+                    </button>
+                    <button
+                        onClick={() => setDataType('history')}
+                        className={`px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 ${dataType === 'history' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                    >
+                        <History size={18} />
+                        Istorija ({processedRequests?.length || 0})
+                    </button>
+                </div>
+            </div>
+
+            {/* Search & Field Selection */}
+            <div className="bg-white rounded-2xl border p-6">
+                <div className="flex flex-wrap gap-4 mb-4">
+                    <div className="relative flex-1 min-w-[250px]">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Pretraži..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        />
+                    </div>
+                </div>
+
+                <h4 className="font-medium text-slate-700 mb-3">Izaberi kolone za prikaz:</h4>
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {Object.entries(fields).map(([field, isChecked]) => (
+                        <label
+                            key={field}
+                            className={`px-3 py-2 rounded-lg border cursor-pointer transition-all ${isChecked ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'}`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => toggleField(dataType, field)}
+                                className="sr-only"
+                            />
+                            <span className="text-sm font-medium">{fieldLabels[dataType][field]}</span>
+                        </label>
+                    ))}
+                </div>
+
+                <p className="text-sm text-slate-500">Filtrirano: {filteredData.length} stavki</p>
+            </div>
+
+            {/* Preview */}
+            <div className="bg-white rounded-2xl border overflow-hidden">
+                <div className="px-6 py-4 border-b bg-slate-50 flex justify-between items-center">
+                    <h3 className="font-bold text-slate-800">Pregled ({filteredData.length})</h3>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleExportExcel}
+                            disabled={filteredData.length === 0}
+                            className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-green-700 disabled:opacity-50"
+                        >
+                            <FileSpreadsheet size={18} />
+                            <span className="hidden sm:inline">Excel/CSV</span>
+                        </button>
+                        <button
+                            onClick={handlePrint}
+                            disabled={filteredData.length === 0}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            <Printer size={18} />
+                            <span className="hidden sm:inline">Štampaj</span>
+                        </button>
+                    </div>
+                </div>
+                <div className="overflow-x-auto max-h-96">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500 border-b sticky top-0">
+                            <tr>
+                                {dataType === 'clients' && (
+                                    <>
+                                        {fields.name && <th className="px-4 py-3 text-left">Ime</th>}
+                                        {fields.phone && <th className="px-4 py-3 text-left">Telefon</th>}
+                                        {fields.address && <th className="px-4 py-3 text-left">Adresa</th>}
+                                        {fields.equipment && <th className="px-4 py-3 text-left">Oprema</th>}
+                                    </>
+                                )}
+                                {dataType === 'requests' && (
+                                    <>
+                                        {fields.client && <th className="px-4 py-3 text-left">Klijent</th>}
+                                        {fields.type && <th className="px-4 py-3 text-left">Tip</th>}
+                                        {fields.urgency && <th className="px-4 py-3 text-left">Hitnost</th>}
+                                        {fields.date && <th className="px-4 py-3 text-left">Datum</th>}
+                                        {fields.fillLevel && <th className="px-4 py-3 text-left">%</th>}
+                                        {fields.note && <th className="px-4 py-3 text-left">Napomena</th>}
+                                    </>
+                                )}
+                                {dataType === 'history' && (
+                                    <>
+                                        {fields.client && <th className="px-4 py-3 text-left">Klijent</th>}
+                                        {fields.type && <th className="px-4 py-3 text-left">Tip</th>}
+                                        {fields.created && <th className="px-4 py-3 text-left">Podneto</th>}
+                                        {fields.processed && <th className="px-4 py-3 text-left">Obrađeno</th>}
+                                    </>
+                                )}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {filteredData.slice(0, 50).map((item, idx) => (
+                                <tr key={item.id || idx} className="hover:bg-slate-50">
+                                    {dataType === 'clients' && (
+                                        <>
+                                            {fields.name && <td className="px-4 py-3 font-medium">{item.name}</td>}
+                                            {fields.phone && <td className="px-4 py-3 text-slate-600">{item.phone}</td>}
+                                            {fields.address && <td className="px-4 py-3 text-slate-600">{item.address || '-'}</td>}
+                                            {fields.equipment && <td className="px-4 py-3 text-slate-600">{item.equipment_types?.length || 0} kom</td>}
+                                        </>
+                                    )}
+                                    {dataType === 'requests' && (
+                                        <>
+                                            {fields.client && <td className="px-4 py-3 font-medium">{item.client_name}</td>}
+                                            {fields.type && <td className="px-4 py-3">{item.waste_label}</td>}
+                                            {fields.urgency && <td className="px-4 py-3"><span className={`px-2 py-1 text-xs rounded-full ${item.urgency === '24h' ? 'bg-red-100 text-red-700' : item.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno'}</span></td>}
+                                            {fields.date && <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString('sr-RS')}</td>}
+                                            {fields.fillLevel && <td className="px-4 py-3 text-slate-600">{item.fill_level}%</td>}
+                                            {fields.note && <td className="px-4 py-3 text-slate-600 max-w-32 truncate">{item.note || '-'}</td>}
+                                        </>
+                                    )}
+                                    {dataType === 'history' && (
+                                        <>
+                                            {fields.client && <td className="px-4 py-3 font-medium">{item.client_name}</td>}
+                                            {fields.type && <td className="px-4 py-3">{item.waste_label}</td>}
+                                            {fields.created && <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString('sr-RS')}</td>}
+                                            {fields.processed && <td className="px-4 py-3 text-emerald-600">{new Date(item.processed_at).toLocaleDateString('sr-RS')}</td>}
+                                        </>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {filteredData.length === 0 && (
+                        <div className="p-8 text-center text-slate-500">
+                            <FileText size={32} className="mx-auto mb-2 text-slate-300" />
+                            <p>Nema podataka za prikaz</p>
+                        </div>
+                    )}
+                    {filteredData.length > 50 && (
+                        <div className="p-3 text-center text-sm text-slate-500 bg-slate-50 border-t">
+                            Prikazano prvih 50 od {filteredData.length} stavki. Sve stavke će biti uključene u štampu/export.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// History Table (Processed/Rejected Requests)
+const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterType, setFilterType] = useState('all');
+    const [sortBy, setSortBy] = useState('processed_at');
+    const [sortDir, setSortDir] = useState('desc');
+
+    if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
+
+    // Filter requests
+    let filtered = requests.filter(req => {
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            const matchesName = req.client_name?.toLowerCase().includes(query);
+            const matchesType = req.waste_label?.toLowerCase().includes(query);
+            if (!matchesName && !matchesType) return false;
+        }
+        if (filterType !== 'all' && req.waste_type !== filterType) return false;
+        return true;
+    });
+
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+            case 'processed_at':
+                comparison = new Date(a.processed_at) - new Date(b.processed_at);
+                break;
+            case 'created_at':
+                comparison = new Date(a.created_at) - new Date(b.created_at);
+                break;
+            case 'client':
+                comparison = (a.client_name || '').localeCompare(b.client_name || '');
+                break;
+            default:
+                comparison = 0;
+        }
+        return sortDir === 'asc' ? comparison : -comparison;
+    });
+
+    const handleSort = (column) => {
+        if (sortBy === column) {
+            setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column);
+            setSortDir('desc');
+        }
+    };
+
+    const SortIcon = ({ column }) => {
+        if (sortBy !== column) return <ArrowUpDown size={14} className="text-slate-300" />;
+        return sortDir === 'asc' ? <ArrowUp size={14} className="text-emerald-600" /> : <ArrowDown size={14} className="text-emerald-600" />;
+    };
+
+    const formatDateTime = (date) => {
+        if (!date) return '-';
+        const d = new Date(date);
+        return `${d.toLocaleDateString('sr-RS')} ${d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* Search and Filters */}
+            <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="Pretraži po imenu ili vrsti..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm"
+                    />
+                </div>
+                <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
+                >
+                    <option value="all">Sve vrste</option>
+                    {wasteTypes.map(w => <option key={w.id} value={w.id}>{w.icon} {w.label}</option>)}
+                </select>
+            </div>
+
+            {/* Results count */}
+            <div className="text-sm text-slate-500">
+                Prikazano {filtered.length} od {requests.length} zahteva
+                {(searchQuery || filterType !== 'all') && (
+                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
+                        Obriši filtere
+                    </button>
+                )}
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b">
+                        <tr>
+                            <th className="px-3 md:px-4 py-3 text-left">
+                                <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Klijent <SortIcon column="client" />
+                                </button>
+                            </th>
+                            <th className="px-3 md:px-4 py-3 text-left">Tip</th>
+                            <th className="hidden md:table-cell px-4 py-3 text-left">
+                                <button onClick={() => handleSort('created_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Podneto <SortIcon column="created_at" />
+                                </button>
+                            </th>
+                            <th className="px-3 md:px-4 py-3 text-left">
+                                <button onClick={() => handleSort('processed_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Obrađeno <SortIcon column="processed_at" />
+                                </button>
+                            </th>
+                            <th className="hidden sm:table-cell px-4 py-3 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {filtered.length === 0 ? (
+                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                        ) : filtered.map((req, idx) => (
+                            <tr key={req.id || idx} className="hover:bg-slate-50">
+                                <td className="px-3 md:px-4 py-3">
+                                    <div className="font-medium text-sm">{req.client_name}</div>
+                                    <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
+                                </td>
+                                <td className="px-3 md:px-4 py-3">
+                                    <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
+                                    <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                </td>
+                                <td className="hidden md:table-cell px-4 py-3">
+                                    <div className="flex items-center gap-2 text-slate-600">
+                                        <Calendar size={14} />
+                                        <span>{formatDateTime(req.created_at)}</span>
+                                    </div>
+                                </td>
+                                <td className="px-3 md:px-4 py-3">
+                                    <div className="flex items-center gap-2 text-emerald-600">
+                                        <CheckCircle2 size={14} />
+                                        <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
+                                    </div>
+                                </td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-center">
+                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                                        Obrađen
+                                    </span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 // Clients Table
-const ClientsTable = ({ clients, onView, onDelete, onEditLocation }) => {
+const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, equipment = [] }) => {
     if (!clients?.length) return <EmptyState icon={Users} title="Nema klijenata" desc="Klijenti će se prikazati ovde" />;
+
+    const getClientEquipment = (client) => {
+        if (!client.equipment_types || client.equipment_types.length === 0) return null;
+        return client.equipment_types;
+    };
+
     return (
         <div className="bg-white rounded-2xl border overflow-hidden">
             <table className="w-full text-sm">
@@ -415,41 +940,68 @@ const ClientsTable = ({ clients, onView, onDelete, onEditLocation }) => {
                     <tr>
                         <th className="px-3 md:px-4 py-3 text-left">Klijent</th>
                         <th className="hidden sm:table-cell px-4 py-3 text-left">Telefon</th>
+                        <th className="hidden md:table-cell px-4 py-3 text-left">Oprema</th>
                         <th className="px-3 md:px-4 py-3 text-left">Lokacija</th>
                         <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y">
-                    {clients.map(c => (
-                        <tr key={c.id} className="hover:bg-slate-50">
-                            <td className="px-3 md:px-4 py-3">
-                                <div className="font-medium">{c.name}</div>
-                                <div className="sm:hidden text-xs text-slate-500 mt-0.5">{c.phone}</div>
-                            </td>
-                            <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{c.phone}</td>
-                            <td className="px-3 md:px-4 py-3">
-                                <button
-                                    onClick={() => onEditLocation(c)}
-                                    className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${c.latitude && c.longitude
-                                        ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
-                                        : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
-                                    }`}
-                                >
-                                    <MapPin size={12} />
-                                    <span className="hidden sm:inline">{c.latitude && c.longitude ? 'Podešena' : 'Podesi'}</span>
-                                    <span className="sm:hidden">{c.latitude && c.longitude ? 'OK' : 'Podesi'}</span>
-                                </button>
-                            </td>
-                            <td className="px-2 md:px-4 py-3 text-right whitespace-nowrap">
-                                <button onClick={() => onView(c)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detalji">
-                                    <Eye size={18} />
-                                </button>
-                                <button onClick={() => onDelete(c.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
-                                    <Trash2 size={18} />
-                                </button>
-                            </td>
-                        </tr>
-                    ))}
+                    {clients.map(c => {
+                        const clientEquipment = getClientEquipment(c);
+                        return (
+                            <tr key={c.id} className="hover:bg-slate-50">
+                                <td className="px-3 md:px-4 py-3">
+                                    <div className="font-medium">{c.name}</div>
+                                    <div className="sm:hidden text-xs text-slate-500 mt-0.5">{c.phone}</div>
+                                    {/* Show equipment on mobile */}
+                                    <div className="md:hidden text-xs text-slate-500 mt-0.5">
+                                        {clientEquipment ? (
+                                            <span className="text-emerald-600">{clientEquipment.length} oprema</span>
+                                        ) : (
+                                            <span className="text-slate-400">Bez opreme</span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{c.phone}</td>
+                                <td className="hidden md:table-cell px-4 py-3">
+                                    <button
+                                        onClick={() => onEditEquipment(c)}
+                                        className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${clientEquipment
+                                            ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                                            : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        <Box size={12} />
+                                        <span>{clientEquipment ? `${clientEquipment.length} dodeljeno` : 'Dodeli'}</span>
+                                    </button>
+                                </td>
+                                <td className="px-3 md:px-4 py-3">
+                                    <button
+                                        onClick={() => onEditLocation(c)}
+                                        className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${c.latitude && c.longitude
+                                            ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                                            : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                                        }`}
+                                    >
+                                        <MapPin size={12} />
+                                        <span className="hidden sm:inline">{c.latitude && c.longitude ? 'Podešena' : 'Podesi'}</span>
+                                        <span className="sm:hidden">{c.latitude && c.longitude ? 'OK' : 'Podesi'}</span>
+                                    </button>
+                                </td>
+                                <td className="px-2 md:px-4 py-3 text-right whitespace-nowrap">
+                                    <button onClick={() => onEditEquipment(c)} className="md:hidden p-1.5 text-orange-600 hover:bg-orange-50 rounded-lg" title="Oprema">
+                                        <Box size={18} />
+                                    </button>
+                                    <button onClick={() => onView(c)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detalji">
+                                        <Eye size={18} />
+                                    </button>
+                                    <button onClick={() => onDelete(c.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
+                                        <Trash2 size={18} />
+                                    </button>
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -967,6 +1519,123 @@ const ClientDetailsModal = ({ client, onClose }) => {
     );
 };
 
+// Client Equipment Assignment Modal
+const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
+    const [selectedEquipment, setSelectedEquipment] = useState(client?.equipment_types || []);
+    const [note, setNote] = useState(client?.manager_note || '');
+    const [saving, setSaving] = useState(false);
+
+    if (!client) return null;
+
+    const toggleEquipment = (eqId) => {
+        setSelectedEquipment(prev =>
+            prev.includes(eqId)
+                ? prev.filter(id => id !== eqId)
+                : [...prev, eqId]
+        );
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            await onSave(client.id, selectedEquipment, note);
+            onClose();
+        } catch (err) {
+            alert('Greška pri čuvanju: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Modal open={!!client} onClose={onClose} title="Dodeli opremu klijentu">
+            <div className="space-y-4">
+                {/* Client Info */}
+                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">{client.name?.charAt(0)}</div>
+                    <div>
+                        <h4 className="font-medium">{client.name}</h4>
+                        <p className="text-xs text-slate-500">{client.phone}</p>
+                    </div>
+                </div>
+
+                {/* Equipment Selection */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Izaberi opremu</label>
+                    {equipment.length === 0 ? (
+                        <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl text-center">
+                            Nema definisane opreme. Dodajte opremu u sekciji "Oprema".
+                        </p>
+                    ) : (
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                            {equipment.map(eq => (
+                                <label
+                                    key={eq.id}
+                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                        selectedEquipment.includes(eq.id)
+                                            ? 'border-emerald-500 bg-emerald-50'
+                                            : 'border-slate-200 hover:border-slate-300'
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedEquipment.includes(eq.id)}
+                                        onChange={() => toggleEquipment(eq.id)}
+                                        className="w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
+                                    />
+                                    <div className="flex items-center gap-3 flex-1">
+                                        {eq.customImage ? (
+                                            <img src={eq.customImage} alt={eq.name} className="w-10 h-10 rounded-lg object-cover" />
+                                        ) : (
+                                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                                                <Box size={20} className="text-slate-400" />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <p className="font-medium text-sm">{eq.name}</p>
+                                            {eq.description && <p className="text-xs text-slate-500">{eq.description}</p>}
+                                        </div>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Note for client */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Napomena za klijenta (opciono)</label>
+                    <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Unesite napomenu..."
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none"
+                        rows={3}
+                    />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium"
+                    >
+                        Otkaži
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                        Sačuvaj
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 // Admin Tables
 const AdminCompaniesTable = ({ companies, onView }) => {
     if (!companies?.length) return <EmptyState icon={Building2} title="Nema firmi" desc="Firme će se prikazati ovde" />;
@@ -1050,7 +1719,7 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
 );
 
 // Chat Interface Component
-const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients }) => {
+const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, sendMessageToAdmins, userRole }) => {
     const [conversations, setConversations] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
@@ -1059,6 +1728,9 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
     const [sending, setSending] = useState(false);
     const [contacts, setContacts] = useState([]);
     const [showNewChat, setShowNewChat] = useState(false);
+    const [showAdminContact, setShowAdminContact] = useState(false);
+    const [adminMessage, setAdminMessage] = useState('');
+    const [sendingToAdmin, setSendingToAdmin] = useState(false);
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
@@ -1125,6 +1797,20 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
         setShowNewChat(false);
     };
 
+    const handleSendToAdmin = async () => {
+        if (!adminMessage.trim()) return;
+        setSendingToAdmin(true);
+        try {
+            await sendMessageToAdmins(adminMessage);
+            alert('Poruka je uspešno poslata administratorima!');
+            setAdminMessage('');
+            setShowAdminContact(false);
+        } catch (error) {
+            alert('Greška pri slanju: ' + error.message);
+        }
+        setSendingToAdmin(false);
+    };
+
     const formatTime = (dateStr) => {
         const date = new Date(dateStr);
         const now = new Date();
@@ -1145,9 +1831,16 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                             <h2 className="font-bold text-lg text-slate-800">Poruke</h2>
                             <p className="text-xs text-slate-500">{conversations.length} razgovora</p>
                         </div>
-                        <button onClick={() => setShowNewChat(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-sm">
-                            <Plus size={20} />
-                        </button>
+                        <div className="flex gap-2">
+                            {userRole === 'manager' && (
+                                <button onClick={() => setShowAdminContact(true)} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-sm" title="Kontaktiraj Admina">
+                                    <AlertCircle size={20} />
+                                </button>
+                            )}
+                            <button onClick={() => setShowNewChat(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-sm">
+                                <Plus size={20} />
+                            </button>
+                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto">
                         {loading ? (
@@ -1321,6 +2014,57 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                     </div>
                 </div>
             )}
+
+            {/* Admin Contact Modal */}
+            {showAdminContact && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg">Kontaktiraj Admina</h3>
+                                    <p className="text-xs text-blue-100">Poruka će biti poslata svim administratorima</p>
+                                </div>
+                                <button onClick={() => setShowAdminContact(false)} className="p-2 hover:bg-white/20 rounded-lg"><X size={20} /></button>
+                            </div>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                <div className="flex items-center gap-2 text-blue-700 text-sm">
+                                    <AlertCircle size={16} />
+                                    <span>Koristite ovu opciju za tehničku podršku ili pitanja o sistemu.</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Vaša poruka</label>
+                                <textarea
+                                    value={adminMessage}
+                                    onChange={(e) => setAdminMessage(e.target.value)}
+                                    placeholder="Opišite vaš problem ili pitanje..."
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm resize-none"
+                                    rows={5}
+                                />
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowAdminContact(false)}
+                                    className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium"
+                                >
+                                    Otkaži
+                                </button>
+                                <button
+                                    onClick={handleSendToAdmin}
+                                    disabled={sendingToAdmin || !adminMessage.trim()}
+                                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {sendingToAdmin ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                                    Pošalji
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -1328,7 +2072,7 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
 // Main Dashboard
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('dashboard');
@@ -1350,6 +2094,8 @@ export default function Dashboard() {
     const [prevClientCount, setPrevClientCount] = useState(0);
     const [equipment, setEquipment] = useState([]);
     const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
+    const [processedRequests, setProcessedRequests] = useState([]);
+    const [editingClientEquipment, setEditingClientEquipment] = useState(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [language, setLanguage] = useState('sr');
@@ -1402,6 +2148,9 @@ export default function Dashboard() {
                 if (activeTab === 'codes') setMasterCodes(await fetchAllMasterCodes());
             } else if (userRole === 'manager') {
                 setClients(await fetchCompanyClients() || []);
+                if (activeTab === 'history') {
+                    setProcessedRequests(await fetchProcessedRequests() || []);
+                }
             }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
@@ -1459,13 +2208,30 @@ export default function Dashboard() {
         }
     };
 
+    // Client equipment handler
+    const handleSaveClientEquipment = async (clientId, equipmentTypes, note) => {
+        try {
+            await updateClientDetails(clientId, equipmentTypes, note);
+            // Update local state
+            setClients(prev => prev.map(c =>
+                c.id === clientId
+                    ? { ...c, equipment_types: equipmentTypes, manager_note: note }
+                    : c
+            ));
+        } catch (err) {
+            throw err;
+        }
+    };
+
     const getMenu = () => {
         if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
+            { id: 'history', icon: History, label: 'Istorija' },
             { id: 'clients', icon: Users, label: 'Klijenti' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null },
+            { id: 'print', icon: Printer, label: 'Štampaj/Export' },
             { id: 'equipment', icon: Box, label: 'Oprema' },
             { id: 'wastetypes', icon: Recycle, label: 'Vrste robe' },
             { id: 'map', icon: MapPin, label: 'Mapa' }
@@ -1503,7 +2269,7 @@ export default function Dashboard() {
     const renderContent = () => {
         // Chat is available for both managers and clients
         if (activeTab === 'messages') {
-            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} />;
+            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} />;
         }
         if (userRole === 'client') {
             if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} />;
@@ -1512,7 +2278,9 @@ export default function Dashboard() {
         }
         if (userRole === 'manager') {
             if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
-            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} />;
+            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} />;
+            if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} />;
             if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} /></div>;
@@ -1567,7 +2335,7 @@ export default function Dashboard() {
                                 >
                                     <MessageCircle size={20} />
                                     {unreadCount > 0 && (
-                                        <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-emerald-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                                        <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium animate-pulse">
                                             {unreadCount > 9 ? '9+' : unreadCount}
                                         </span>
                                     )}
@@ -1726,7 +2494,7 @@ export default function Dashboard() {
                 </header>
                 <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative z-10">
                     <div className="max-w-7xl mx-auto">
-                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : 'Master kodovi'}</h1></div>
+                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : 'Master kodovi'}</h1></div>
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>
@@ -1742,6 +2510,14 @@ export default function Dashboard() {
                         clientName={editingClientLocation.name}
                     />
                 </Modal>
+            )}
+            {editingClientEquipment && (
+                <ClientEquipmentModal
+                    client={editingClientEquipment}
+                    equipment={equipment}
+                    onSave={handleSaveClientEquipment}
+                    onClose={() => setEditingClientEquipment(null)}
+                />
             )}
             {processedNotification && <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 z-50"><CheckCircle2 size={24} /><div><p className="font-semibold">{language === 'sr' ? 'Zahtev obrađen!' : 'Request processed!'}</p><p className="text-sm opacity-90">"{processedNotification.wasteLabel}" {language === 'sr' ? 'preuzet' : 'picked up'}</p></div><button onClick={clearProcessedNotification} className="p-1 hover:bg-white/20 rounded-lg"><X size={20} /></button></div>}
             {/* Settings Modal */}
