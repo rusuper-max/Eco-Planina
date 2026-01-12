@@ -1136,13 +1136,16 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
     };
 
     return (
-        <div className="bg-white rounded-2xl border overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}>
             <div className="flex h-full">
                 {/* Conversations List */}
-                <div className={`w-full md:w-80 border-r flex flex-col ${selectedChat ? 'hidden md:flex' : 'flex'}`}>
-                    <div className="p-4 border-b flex justify-between items-center">
-                        <h2 className="font-bold text-lg">Poruke</h2>
-                        <button onClick={() => setShowNewChat(true)} className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200">
+                <div className={`w-full md:w-96 border-r flex flex-col bg-slate-50 ${selectedChat ? 'hidden md:flex' : 'flex'}`}>
+                    <div className="p-4 bg-white border-b flex justify-between items-center">
+                        <div>
+                            <h2 className="font-bold text-lg text-slate-800">Poruke</h2>
+                            <p className="text-xs text-slate-500">{conversations.length} razgovora</p>
+                        </div>
+                        <button onClick={() => setShowNewChat(true)} className="p-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 shadow-sm">
                             <Plus size={20} />
                         </button>
                     </div>
@@ -1150,65 +1153,90 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                         {loading ? (
                             <div className="flex items-center justify-center h-32"><Loader2 className="animate-spin text-emerald-600" size={24} /></div>
                         ) : conversations.length === 0 ? (
-                            <div className="p-6 text-center text-slate-500">
-                                <MessageCircle size={40} className="mx-auto mb-3 text-slate-300" />
-                                <p className="text-sm">Nema poruka</p>
-                                <button onClick={() => setShowNewChat(true)} className="mt-3 text-emerald-600 text-sm font-medium">Započni razgovor</button>
+                            <div className="p-8 text-center">
+                                <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <MessageCircle size={32} className="text-slate-400" />
+                                </div>
+                                <h3 className="font-semibold text-slate-700 mb-1">Nema razgovora</h3>
+                                <p className="text-sm text-slate-500 mb-4">Započnite novi razgovor sa vašim kontaktima</p>
+                                <button onClick={() => setShowNewChat(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700">
+                                    <Plus size={16} className="inline mr-1" /> Nova poruka
+                                </button>
                             </div>
                         ) : (
-                            conversations.map(conv => (
-                                <button
-                                    key={conv.partnerId}
-                                    onClick={() => setSelectedChat(conv)}
-                                    className={`w-full p-4 flex items-center gap-3 hover:bg-slate-50 border-b text-left ${selectedChat?.partnerId === conv.partnerId ? 'bg-emerald-50' : ''}`}
-                                >
-                                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold flex-shrink-0">
-                                        {conv.partner.name?.charAt(0) || '?'}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-medium truncate">{conv.partner.name}</span>
-                                            <span className="text-xs text-slate-400">{formatTime(conv.lastMessageAt)}</span>
+                            <div className="divide-y divide-slate-200">
+                                {conversations.map(conv => (
+                                    <button
+                                        key={conv.partnerId}
+                                        onClick={() => setSelectedChat(conv)}
+                                        className={`w-full p-4 flex items-center gap-3 hover:bg-white text-left transition-colors ${selectedChat?.partnerId === conv.partnerId ? 'bg-white border-l-4 border-l-emerald-500' : ''}`}
+                                    >
+                                        <div className="relative flex-shrink-0">
+                                            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                                                {conv.partner.name?.charAt(0) || '?'}
+                                            </div>
+                                            {conv.unread > 0 && (
+                                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{conv.unread}</span>
+                                            )}
                                         </div>
-                                        <p className="text-sm text-slate-500 truncate">{conv.lastMessage}</p>
-                                    </div>
-                                    {conv.unread > 0 && (
-                                        <span className="w-5 h-5 bg-emerald-600 text-white text-xs rounded-full flex items-center justify-center flex-shrink-0">{conv.unread}</span>
-                                    )}
-                                </button>
-                            ))
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center mb-0.5">
+                                                <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
+                                                <span className="text-xs text-slate-400 ml-2 flex-shrink-0">{formatTime(conv.lastMessageAt)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                    {conv.partner.role === 'client' ? 'Klijent' : 'Menadžer'}
+                                                </span>
+                                            </div>
+                                            <p className={`text-sm truncate mt-1 ${conv.unread > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{conv.lastMessage}</p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
                 </div>
 
                 {/* Chat Area */}
-                <div className={`flex-1 flex flex-col ${selectedChat ? 'flex' : 'hidden md:flex'}`}>
+                <div className={`flex-1 flex flex-col bg-white ${selectedChat ? 'flex' : 'hidden md:flex'}`}>
                     {selectedChat ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 border-b flex items-center gap-3">
+                            <div className="p-4 border-b bg-white flex items-center gap-3 shadow-sm">
                                 <button onClick={() => setSelectedChat(null)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg">
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">
+                                <div className="w-11 h-11 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
                                     {selectedChat.partner.name?.charAt(0) || '?'}
                                 </div>
-                                <div>
-                                    <h3 className="font-semibold">{selectedChat.partner.name}</h3>
-                                    <p className="text-xs text-slate-500">{selectedChat.partner.role === 'client' ? 'Klijent' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}</p>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-slate-800">{selectedChat.partner.name}</h3>
+                                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
+                                        {selectedChat.partner.role === 'client' ? 'Klijent' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
+                                    </p>
                                 </div>
+                                <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400">
+                                    <Phone size={18} />
+                                </button>
                             </div>
 
                             {/* Messages */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ background: 'linear-gradient(to bottom, #f8fafc, #f1f5f9)' }}>
+                                {chatMessages.length === 0 && (
+                                    <div className="text-center py-8">
+                                        <p className="text-sm text-slate-400">Nema poruka. Pošaljite prvu poruku!</p>
+                                    </div>
+                                )}
                                 {chatMessages.map(msg => (
                                     <div key={msg.id} className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender_id === user.id
+                                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl shadow-sm ${msg.sender_id === user.id
                                             ? 'bg-emerald-600 text-white rounded-br-md'
-                                            : 'bg-white border rounded-bl-md'
+                                            : 'bg-white text-slate-700 rounded-bl-md border'
                                         }`}>
-                                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                                            <p className={`text-xs mt-1 ${msg.sender_id === user.id ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                            <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                                            <p className={`text-xs mt-1.5 ${msg.sender_id === user.id ? 'text-emerald-200' : 'text-slate-400'}`}>
                                                 {formatTime(msg.created_at)}
                                             </p>
                                         </div>
@@ -1219,19 +1247,19 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
 
                             {/* Message Input */}
                             <div className="p-4 border-t bg-white">
-                                <div className="flex gap-2">
+                                <div className="flex gap-3">
                                     <input
                                         type="text"
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                                         placeholder="Napišite poruku..."
-                                        className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white outline-none transition-all"
                                     />
                                     <button
                                         onClick={handleSend}
                                         disabled={sending || !newMessage.trim()}
-                                        className="px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                                     >
                                         {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                                     </button>
@@ -1239,10 +1267,13 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-slate-500">
-                            <div className="text-center">
-                                <MessageCircle size={48} className="mx-auto mb-4 text-slate-300" />
-                                <p>Izaberite razgovor ili započnite novi</p>
+                        <div className="flex-1 flex items-center justify-center bg-slate-50">
+                            <div className="text-center p-8">
+                                <div className="w-20 h-20 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <MessageCircle size={40} className="text-slate-400" />
+                                </div>
+                                <h3 className="font-semibold text-slate-700 mb-2">Izaberite razgovor</h3>
+                                <p className="text-sm text-slate-500">Izaberite razgovor sa leve strane ili započnite novi</p>
                             </div>
                         </div>
                     )}
@@ -1252,30 +1283,39 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
             {/* New Chat Modal */}
             {showNewChat && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
-                        <div className="p-4 border-b flex justify-between items-center">
-                            <h3 className="font-bold">Nova poruka</h3>
-                            <button onClick={() => setShowNewChat(false)} className="p-2 hover:bg-slate-100 rounded-lg"><X size={20} /></button>
+                    <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-bold text-slate-800">Nova poruka</h3>
+                                <p className="text-xs text-slate-500">{contacts.length} kontakata</p>
+                            </div>
+                            <button onClick={() => setShowNewChat(false)} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20} /></button>
                         </div>
                         <div className="overflow-y-auto max-h-96">
                             {contacts.length === 0 ? (
-                                <div className="p-6 text-center text-slate-500">Nema kontakata</div>
+                                <div className="p-8 text-center text-slate-500">
+                                    <Users size={40} className="mx-auto mb-3 text-slate-300" />
+                                    <p>Nema dostupnih kontakata</p>
+                                </div>
                             ) : (
-                                contacts.map(contact => (
-                                    <button
-                                        key={contact.id}
-                                        onClick={() => startNewChat(contact)}
-                                        className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 border-b text-left"
-                                    >
-                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">
-                                            {contact.name?.charAt(0) || '?'}
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">{contact.name}</p>
-                                            <p className="text-sm text-slate-500">{contact.phone}</p>
-                                        </div>
-                                    </button>
-                                ))
+                                <div className="divide-y">
+                                    {contacts.map(contact => (
+                                        <button
+                                            key={contact.id}
+                                            onClick={() => startNewChat(contact)}
+                                            className="w-full p-4 flex items-center gap-3 hover:bg-emerald-50 text-left transition-colors"
+                                        >
+                                            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                                                {contact.name?.charAt(0) || '?'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-semibold text-slate-800">{contact.name}</p>
+                                                <p className="text-sm text-slate-500">{contact.phone}</p>
+                                            </div>
+                                            <ChevronRight size={20} className="text-slate-300" />
+                                        </button>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1304,6 +1344,7 @@ export default function Dashboard() {
     const [selectedClient, setSelectedClient] = useState(null);
     const [editingClientLocation, setEditingClientLocation] = useState(null);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [showChatDropdown, setShowChatDropdown] = useState(false);
     const [notifications, setNotifications] = useState([]);
     const [prevRequestCount, setPrevRequestCount] = useState(0);
     const [prevClientCount, setPrevClientCount] = useState(0);
@@ -1516,10 +1557,69 @@ export default function Dashboard() {
                             </button>
                         )}
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                        {/* Chat */}
+                        {userRole !== 'admin' && (
+                            <div className="relative">
+                                <button
+                                    onClick={() => { setShowChatDropdown(!showChatDropdown); setShowNotifications(false); setShowProfileMenu(false); }}
+                                    className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full"
+                                >
+                                    <MessageCircle size={20} />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-emerald-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+                                            {unreadCount > 9 ? '9+' : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {showChatDropdown && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowChatDropdown(false)} />
+                                        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                                            <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+                                                <h3 className="font-bold text-slate-800">Poruke</h3>
+                                                <button
+                                                    onClick={() => { setShowChatDropdown(false); setActiveTab('messages'); }}
+                                                    className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                                                >
+                                                    Otvori sve
+                                                </button>
+                                            </div>
+                                            <div className="max-h-80 overflow-y-auto">
+                                                {unreadCount > 0 ? (
+                                                    <button
+                                                        onClick={() => { setShowChatDropdown(false); setActiveTab('messages'); }}
+                                                        className="w-full px-4 py-4 text-left hover:bg-slate-50 flex items-center gap-3"
+                                                    >
+                                                        <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
+                                                            <MessageCircle size={20} className="text-emerald-600" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-slate-700">Imate {unreadCount} nepročitanih poruka</p>
+                                                            <p className="text-xs text-slate-500">Kliknite da vidite</p>
+                                                        </div>
+                                                    </button>
+                                                ) : (
+                                                    <div className="px-4 py-8 text-center text-slate-400">
+                                                        <MessageCircle size={24} className="mx-auto mb-2 opacity-50" />
+                                                        <p className="text-sm">Nema novih poruka</p>
+                                                        <button
+                                                            onClick={() => { setShowChatDropdown(false); setActiveTab('messages'); }}
+                                                            className="mt-2 text-emerald-600 text-sm font-medium"
+                                                        >
+                                                            Otvori poruke
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
                         {/* Notifications */}
                         <div className="relative">
-                            <button onClick={() => { setShowNotifications(!showNotifications); setShowProfileMenu(false); }} className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full">
+                            <button onClick={() => { setShowNotifications(!showNotifications); setShowChatDropdown(false); setShowProfileMenu(false); }} className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full">
                                 <Bell size={20} />
                                 {(notifications.length > 0 || pending.some(r => r.urgency === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
                             </button>
