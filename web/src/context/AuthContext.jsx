@@ -315,9 +315,13 @@ export const AuthProvider = ({ children }) => {
 
     // Chat functions
     const fetchMessages = async (otherUserId = null) => {
-        if (!user || !companyCode) return [];
+        if (!user) return [];
         try {
-            let query = supabase.from('messages').select('*').eq('company_code', companyCode);
+            // Admins can see all messages sent to them (no company filter)
+            let query = supabase.from('messages').select('*');
+            if (!isAdmin() && companyCode) {
+                query = query.eq('company_code', companyCode);
+            }
             if (otherUserId) {
                 query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`);
             } else {
@@ -330,13 +334,15 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { console.error('Error fetching messages:', error); return []; }
     };
 
-    const sendMessage = async (receiverId, content) => {
-        if (!user || !companyCode) throw new Error('Niste prijavljeni');
+    const sendMessage = async (receiverId, content, receiverCompanyCode = null) => {
+        if (!user) throw new Error('Niste prijavljeni');
         try {
+            // Use receiver's company code if provided, or sender's company code, or 'ADMIN' for admin users
+            const msgCompanyCode = receiverCompanyCode || companyCode || 'ADMIN';
             const { data, error } = await supabase.from('messages').insert([{
                 sender_id: user.id,
                 receiver_id: receiverId,
-                company_code: companyCode,
+                company_code: msgCompanyCode,
                 content: content.trim()
             }]).select().single();
             if (error) throw error;
@@ -370,11 +376,14 @@ export const AuthProvider = ({ children }) => {
     };
 
     const getConversations = async () => {
-        if (!user || !companyCode) return [];
+        if (!user) return [];
         try {
-            const { data: allMessages, error } = await supabase.from('messages')
-                .select('*')
-                .eq('company_code', companyCode)
+            // Admins see all conversations, others see only their company's
+            let query = supabase.from('messages').select('*');
+            if (!isAdmin() && companyCode) {
+                query = query.eq('company_code', companyCode);
+            }
+            const { data: allMessages, error } = await query
                 .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
                 .order('created_at', { ascending: false });
             if (error) throw error;
@@ -433,16 +442,19 @@ export const AuthProvider = ({ children }) => {
 
     // Send message to all admins (support message)
     const sendMessageToAdmins = async (content) => {
-        if (!user || !companyCode) throw new Error('Niste prijavljeni');
+        if (!user) throw new Error('Niste prijavljeni');
         try {
             const admins = await fetchAdmins();
             if (admins.length === 0) throw new Error('Nema dostupnih admina');
+
+            // Use company code if available, otherwise use 'SUPPORT' for support messages
+            const msgCompanyCode = companyCode || 'SUPPORT';
 
             // Send message to each admin
             const messages = admins.map(admin => ({
                 sender_id: user.id,
                 receiver_id: admin.id,
-                company_code: companyCode,
+                company_code: msgCompanyCode,
                 content: content.trim()
             }));
 
