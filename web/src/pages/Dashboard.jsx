@@ -1891,6 +1891,7 @@ const ClientDetailsModal = ({ client, onClose }) => {
 const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
     const [selectedEquipment, setSelectedEquipment] = useState(client?.equipment_types || []);
     const [note, setNote] = useState(client?.manager_note || '');
+    const [pib, setPib] = useState(client?.pib || '');
     const [saving, setSaving] = useState(false);
 
     if (!client) return null;
@@ -1906,7 +1907,7 @@ const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            await onSave(client.id, selectedEquipment, note);
+            await onSave(client.id, selectedEquipment, note, pib);
             onClose();
         } catch (err) {
             alert('Greška pri čuvanju: ' + err.message);
@@ -1916,7 +1917,7 @@ const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
     };
 
     return (
-        <Modal open={!!client} onClose={onClose} title="Dodeli opremu klijentu">
+        <Modal open={!!client} onClose={onClose} title="Podešavanja klijenta">
             <div className="space-y-4">
                 {/* Client Info */}
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
@@ -1968,6 +1969,20 @@ const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
                             ))}
                         </div>
                     )}
+                </div>
+
+                {/* PIB */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">PIB broj (opciono)</label>
+                    <input
+                        type="text"
+                        value={pib}
+                        onChange={(e) => setPib(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                        placeholder="123456789"
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm"
+                        maxLength={9}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Poreski identifikacioni broj klijenta</p>
                 </div>
 
                 {/* Note for client */}
@@ -2616,13 +2631,13 @@ export default function Dashboard() {
     };
 
     // Client equipment handler
-    const handleSaveClientEquipment = async (clientId, equipmentTypes, note) => {
+    const handleSaveClientEquipment = async (clientId, equipmentTypes, note, pib) => {
         try {
-            await updateClientDetails(clientId, equipmentTypes, note);
+            await updateClientDetails(clientId, equipmentTypes, note, pib);
             // Update local state
             setClients(prev => prev.map(c =>
                 c.id === clientId
-                    ? { ...c, equipment_types: equipmentTypes, manager_note: note }
+                    ? { ...c, equipment_types: equipmentTypes, manager_note: note, pib: pib }
                     : c
             ));
         } catch (err) {

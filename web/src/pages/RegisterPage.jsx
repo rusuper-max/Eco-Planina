@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mountain, User, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
+import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -107,20 +107,20 @@ export default function RegisterPage() {
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800 mb-2">Izaberite tip naloga</h2>
-                                <p className="text-slate-500 text-sm">Kako planirate da koristite EcoPlanina sistem?</p>
+                                <p className="text-slate-500 text-sm">Kako planirate da koristite EcoMountainT sistem?</p>
                             </div>
                             <div className="grid gap-4">
                                 <RoleCard
                                     icon={Users}
                                     title="Klijent"
-                                    desc="Prijavljujem preuzimanje otpada od moje firme"
+                                    desc="Prijavljujem preuzimanje robe od moje firme"
                                     selected={role === 'client'}
                                     onClick={() => { setRole('client'); setStep(3); }}
                                 />
                                 <RoleCard
                                     icon={UserCog}
                                     title="Menadžer"
-                                    desc="Upravljam preuzimanjem otpada za klijente"
+                                    desc="Upravljam preuzimanjem robe za klijente"
                                     selected={role === 'manager'}
                                     onClick={() => { setRole('manager'); setStep(2); }}
                                 />
@@ -165,14 +165,14 @@ export default function RegisterPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Ime i prezime</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Ime firme</label>
                                 <div className="relative">
-                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                                     <input
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        placeholder="Petar Petrović"
+                                        placeholder="Naziv vaše firme"
                                         className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                                         required
                                     />
@@ -279,10 +279,10 @@ export default function RegisterPage() {
                                 </div>
                                 <p className="mt-2 text-xs text-slate-500">
                                     {role === 'client'
-                                        ? 'Dobićete ECO kod od vašeg menadžera otpada'
+                                        ? 'Dobićete ECO kod od vašeg menadžera'
                                         : joinExisting
                                             ? 'Unesite ECO kod firme kojoj se pridružujete'
-                                            : 'Master Code dobijate od EcoPlanina administratora'}
+                                            : 'Master Code dobijate od EcoMountainT administratora'}
                                 </p>
                             </div>
 

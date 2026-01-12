@@ -184,8 +184,8 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
-    const updateClientDetails = async (clientId, equipmentTypes, note) => {
-        try { const { error } = await supabase.from('users').update({ equipment_types: equipmentTypes, manager_note: note }).eq('id', clientId); if (error) throw error; return { success: true }; }
+    const updateClientDetails = async (clientId, equipmentTypes, note, pib) => {
+        try { const { error } = await supabase.from('users').update({ equipment_types: equipmentTypes, manager_note: note, pib: pib || null }).eq('id', clientId); if (error) throw error; return { success: true }; }
         catch (error) { throw error; }
     };
 

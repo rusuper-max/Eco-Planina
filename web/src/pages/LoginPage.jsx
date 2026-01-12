@@ -56,7 +56,7 @@ export default function LoginPage() {
                         <Mountain className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-800">EcoMountain<span className="text-emerald-600">T</span></h1>
-                    <p className="text-slate-500 mt-1">Sistem za upravljanje otpadom</p>
+                    <p className="text-slate-500 mt-1">Sistem za upravljanje robom</p>
                 </div>
 
                 {/* Form Card */}
