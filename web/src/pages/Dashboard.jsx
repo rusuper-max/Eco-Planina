@@ -142,8 +142,13 @@ export default function Dashboard() {
                 const companyWasteTypes = await fetchCompanyWasteTypes();
                 if (companyWasteTypes && companyWasteTypes.length > 0) {
                     setWasteTypes(companyWasteTypes);
-                } else {
+                } else if (userRole === 'manager') {
+                    // Only managers fallback to defaults if nothing found, to allow them to create initial setup
+                    // Clients should see empty or what's in DB. Providing defaults to client might confuse them if manager deleted everything.
+                    // Actually, let's keep defaults for managers only on FIRST load if DB is empty.
                     setWasteTypes(WASTE_TYPES);
+                } else {
+                    setWasteTypes([]); // Client sees empty if nothing is set
                 }
 
                 if (userRole === 'manager') {
@@ -604,7 +609,7 @@ export default function Dashboard() {
                                             {notifications.length > 0 && <button onClick={clearAllNotifications} className="text-xs text-emerald-600 hover:text-emerald-700">{language === 'sr' ? 'Obriši sve' : 'Clear all'}</button>}
                                         </div>
                                         <div className="max-h-80 overflow-y-auto">
-                                            {pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length > 0 && (
+                                            {userRole === 'manager' && pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length > 0 && (
                                                 <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-start gap-3">
                                                     <AlertCircle size={18} className="text-red-500 mt-0.5" />
                                                     <div>
