@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Leaf, User, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
+import { Mountain, User, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -76,9 +76,9 @@ export default function RegisterPage() {
                 {/* Logo */}
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-200 mb-4">
-                        <Leaf className="w-8 h-8 text-white" />
+                        <Mountain className="w-8 h-8 text-white" />
                     </div>
-                    <h1 className="text-2xl font-bold text-slate-800">EcoPlanina</h1>
+                    <h1 className="text-2xl font-bold text-slate-800">EcoMountain<span className="text-emerald-600">T</span></h1>
                     <p className="text-slate-500 mt-1">Registracija novog naloga</p>
                 </div>
 

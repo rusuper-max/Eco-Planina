@@ -6,9 +6,9 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 're
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
-    LayoutDashboard, Truck, Users, Settings, LogOut, Leaf, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
-    FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight,
-    Phone, RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet
+    LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
+    FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
+    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -26,6 +26,78 @@ const createIcon = (color) => new L.Icon({
 });
 
 const urgencyIcons = { '24h': createIcon('red'), '48h': createIcon('orange'), '72h': createIcon('green') };
+
+// Custom marker icons like mobile app
+const URGENCY_COLORS = { '24h': '#EF4444', '48h': '#F59E0B', '72h': '#10B981' };
+const WASTE_ICONS_MAP = { cardboard: '📦', glass: '🍾', plastic: '♻️', trash: '🗑️' };
+
+const createCustomIcon = (urgency, wasteType, isClient = false) => {
+    const color = isClient ? '#3B82F6' : (URGENCY_COLORS[urgency] || '#10B981');
+    const icon = WASTE_ICONS_MAP[wasteType] || (isClient ? '🏢' : '📦');
+    const badge = isClient ? '' : urgency;
+
+    return L.divIcon({
+        className: 'custom-marker',
+        html: `
+            <div class="marker-container">
+                ${!isClient ? `<div class="pulse-ring" style="border-color: ${color};"></div>` : ''}
+                <div class="marker-pin" style="background-color: ${color};">
+                    <span class="marker-icon">${icon}</span>
+                </div>
+                ${badge ? `<div class="urgency-badge" style="background-color: ${color};">${badge}</div>` : ''}
+            </div>
+        `,
+        iconSize: [50, 60],
+        iconAnchor: [25, 50],
+        popupAnchor: [0, -50]
+    });
+};
+
+// Add CSS for custom markers
+const markerStyles = document.createElement('style');
+markerStyles.textContent = `
+    .custom-marker { background: transparent !important; border: none !important; }
+    .marker-container { position: relative; width: 50px; height: 60px; }
+    .pulse-ring {
+        position: absolute;
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        border: 3px solid;
+        top: 5px; left: 5px;
+        animation: pulse 1.5s ease-out infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.8; }
+        100% { transform: scale(2); opacity: 0; }
+    }
+    .marker-pin {
+        position: absolute;
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 3px solid white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        top: 5px; left: 5px;
+    }
+    .marker-icon { font-size: 20px; }
+    .urgency-badge {
+        position: absolute;
+        bottom: 0; left: 50%;
+        transform: translateX(-50%);
+        padding: 2px 8px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: bold;
+        color: white;
+        white-space: nowrap;
+    }
+`;
+if (!document.getElementById('marker-styles')) {
+    markerStyles.id = 'marker-styles';
+    document.head.appendChild(markerStyles);
+}
 
 // Helper
 const getRemainingTime = (createdAt, urgency) => {
@@ -214,7 +286,7 @@ const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) => {
 };
 
 // Manager Table with sorting, filtering and search
-const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteTypes = WASTE_TYPES, initialUrgencyFilter = 'all', onUrgencyFilterChange }) => {
+const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, onClientClick, wasteTypes = WASTE_TYPES, initialUrgencyFilter = 'all', onUrgencyFilterChange }) => {
     const [sortBy, setSortBy] = useState('remaining'); // remaining, client, type, fill, date
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
@@ -376,7 +448,12 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
                                     <td className="px-3 md:px-4 py-3">
-                                        <span className="font-medium text-sm">{req.client_name}</span>
+                                        <button
+                                            onClick={() => onClientClick?.(req.user_id)}
+                                            className="font-medium text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                                        >
+                                            {req.client_name}
+                                        </button>
                                     </td>
                                     <td className="px-3 md:px-4 py-3">
                                         <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
@@ -406,7 +483,7 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
 };
 
 // Print & Export Component
-const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_TYPES }) => {
+const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_TYPES, onClientClick }) => {
     const [dataType, setDataType] = useState('clients'); // clients, requests, history
     const [selectedFields, setSelectedFields] = useState({
         clients: { name: true, phone: true, address: true, equipment: false },
@@ -415,6 +492,14 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
     });
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredData, setFilteredData] = useState([]);
+    const [sortBy, setSortBy] = useState('name'); // name, remaining, date, processed
+    const [sortDir, setSortDir] = useState('asc');
+
+    // Reset sort when changing data type
+    useEffect(() => {
+        setSortBy('name');
+        setSortDir('asc');
+    }, [dataType]);
 
     useEffect(() => {
         let data = [];
@@ -433,8 +518,35 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                 !query || r.client_name?.toLowerCase().includes(query) || r.waste_label?.toLowerCase().includes(query)
             );
         }
+
+        // Sort data
+        data = [...data].sort((a, b) => {
+            let comparison = 0;
+            if (dataType === 'clients') {
+                if (sortBy === 'name') comparison = (a.name || '').localeCompare(b.name || '');
+            } else if (dataType === 'requests') {
+                if (sortBy === 'name') comparison = (a.client_name || '').localeCompare(b.client_name || '');
+                else if (sortBy === 'remaining') comparison = getRemainingTime(a.created_at, a.urgency).ms - getRemainingTime(b.created_at, b.urgency).ms;
+                else if (sortBy === 'date') comparison = new Date(a.created_at) - new Date(b.created_at);
+            } else if (dataType === 'history') {
+                if (sortBy === 'name') comparison = (a.client_name || '').localeCompare(b.client_name || '');
+                else if (sortBy === 'date') comparison = new Date(a.created_at) - new Date(b.created_at);
+                else if (sortBy === 'processed') comparison = new Date(a.processed_at) - new Date(b.processed_at);
+            }
+            return sortDir === 'asc' ? comparison : -comparison;
+        });
+
         setFilteredData(data);
-    }, [dataType, clients, requests, processedRequests, searchQuery]);
+    }, [dataType, clients, requests, processedRequests, searchQuery, sortBy, sortDir]);
+
+    const handleSort = (column) => {
+        if (sortBy === column) {
+            setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column);
+            setSortDir('asc');
+        }
+    };
 
     const toggleField = (type, field) => {
         setSelectedFields(prev => ({
@@ -451,7 +563,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
             <!DOCTYPE html>
             <html>
             <head>
-                <title>EcoPlanina - Štampa</title>
+                <title>EcoMountainT - Štampa</title>
                 <style>
                     body { font-family: Arial, sans-serif; margin: 20px; }
                     h1 { color: #059669; margin-bottom: 5px; }
@@ -465,7 +577,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                 </style>
             </head>
             <body>
-                <h1>EcoPlanina</h1>
+                <h1>EcoMountainT</h1>
                 <p class="subtitle">${dataType === 'clients' ? 'Lista klijenata' : dataType === 'requests' ? 'Aktivni zahtevi' : 'Istorija zahteva'} - ${new Date().toLocaleDateString('sr-RS')}</p>
                 <table>
                     <thead><tr>
@@ -480,7 +592,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
         } else if (dataType === 'requests') {
             if (fields.client) html += '<th>Klijent</th>';
             if (fields.type) html += '<th>Tip</th>';
-            if (fields.urgency) html += '<th>Hitnost</th>';
+            if (fields.urgency) html += '<th>Preostalo</th>';
             if (fields.date) html += '<th>Datum</th>';
             if (fields.fillLevel) html += '<th>Popunjenost</th>';
             if (fields.note) html += '<th>Napomena</th>';
@@ -504,7 +616,10 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
             } else if (dataType === 'requests') {
                 if (fields.client) html += `<td>${item.client_name || '-'}</td>`;
                 if (fields.type) html += `<td>${item.waste_label || '-'}</td>`;
-                if (fields.urgency) html += `<td>${item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno'}</td>`;
+                if (fields.urgency) {
+                    const remaining = getRemainingTime(item.created_at, item.urgency);
+                    html += `<td>${remaining.text}</td>`;
+                }
                 if (fields.date) html += `<td>${new Date(item.created_at).toLocaleDateString('sr-RS')}</td>`;
                 if (fields.fillLevel) html += `<td>${item.fill_level}%</td>`;
                 if (fields.note) html += `<td>${item.note || '-'}</td>`;
@@ -544,7 +659,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
         } else if (dataType === 'requests') {
             if (fields.client) headers.push('Klijent');
             if (fields.type) headers.push('Tip');
-            if (fields.urgency) headers.push('Hitnost');
+            if (fields.urgency) headers.push('Preostalo');
             if (fields.date) headers.push('Datum');
             if (fields.fillLevel) headers.push('Popunjenost');
             if (fields.note) headers.push('Napomena');
@@ -561,13 +676,16 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
             const row = [];
             if (dataType === 'clients') {
                 if (fields.name) row.push(item.name || '');
-                if (fields.phone) row.push(item.phone || '');
+                if (fields.phone) row.push(`="${item.phone || ''}"`); // Force text format to prevent scientific notation
                 if (fields.address) row.push(`"${(item.address || '').replace(/"/g, '""')}"`);
                 if (fields.equipment) row.push(`${item.equipment_types?.length || 0} kom`);
             } else if (dataType === 'requests') {
                 if (fields.client) row.push(item.client_name || '');
                 if (fields.type) row.push(item.waste_label || '');
-                if (fields.urgency) row.push(item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno');
+                if (fields.urgency) {
+                    const remaining = getRemainingTime(item.created_at, item.urgency);
+                    row.push(remaining.text);
+                }
                 if (fields.date) row.push(new Date(item.created_at).toLocaleDateString('sr-RS'));
                 if (fields.fillLevel) row.push(`${item.fill_level}%`);
                 if (fields.note) row.push(`"${(item.note || '').replace(/"/g, '""')}"`);
@@ -592,7 +710,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
     const fields = selectedFields[dataType];
     const fieldLabels = {
         clients: { name: 'Ime', phone: 'Telefon', address: 'Adresa', equipment: 'Oprema' },
-        requests: { client: 'Klijent', type: 'Tip', urgency: 'Hitnost', date: 'Datum', fillLevel: 'Popunjenost', note: 'Napomena' },
+        requests: { client: 'Klijent', type: 'Tip', urgency: 'Preostalo', date: 'Datum', fillLevel: 'Popunjenost', note: 'Napomena' },
         history: { client: 'Klijent', type: 'Tip', created: 'Podneto', processed: 'Obrađeno' }
     };
 
@@ -659,7 +777,29 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                     ))}
                 </div>
 
-                <p className="text-sm text-slate-500">Filtrirano: {filteredData.length} stavki</p>
+                <div className="flex items-center gap-4 mt-4">
+                    <span className="text-sm text-slate-500">Filtrirano: {filteredData.length} stavki</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-500">Sortiraj:</span>
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                        >
+                            <option value="name">Po imenu</option>
+                            {dataType === 'requests' && <option value="remaining">Po preostalom vremenu</option>}
+                            {(dataType === 'requests' || dataType === 'history') && <option value="date">Po datumu kreiranja</option>}
+                            {dataType === 'history' && <option value="processed">Po datumu obrade</option>}
+                        </select>
+                        <button
+                            onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
+                            className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-50"
+                            title={sortDir === 'asc' ? 'Rastuće' : 'Opadajuće'}
+                        >
+                            {sortDir === 'asc' ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Preview */}
@@ -701,7 +841,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                                     <>
                                         {fields.client && <th className="px-4 py-3 text-left">Klijent</th>}
                                         {fields.type && <th className="px-4 py-3 text-left">Tip</th>}
-                                        {fields.urgency && <th className="px-4 py-3 text-left">Hitnost</th>}
+                                        {fields.urgency && <th className="px-4 py-3 text-left">Preostalo</th>}
                                         {fields.date && <th className="px-4 py-3 text-left">Datum</th>}
                                         {fields.fillLevel && <th className="px-4 py-3 text-left">%</th>}
                                         {fields.note && <th className="px-4 py-3 text-left">Napomena</th>}
@@ -722,7 +862,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                                 <tr key={item.id || idx} className="hover:bg-slate-50">
                                     {dataType === 'clients' && (
                                         <>
-                                            {fields.name && <td className="px-4 py-3 font-medium">{item.name}</td>}
+                                            {fields.name && <td className="px-4 py-3"><button onClick={() => onClientClick?.(item.id)} className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left">{item.name}</button></td>}
                                             {fields.phone && <td className="px-4 py-3 text-slate-600">{item.phone}</td>}
                                             {fields.address && <td className="px-4 py-3 text-slate-600">{item.address || '-'}</td>}
                                             {fields.equipment && <td className="px-4 py-3 text-slate-600">{item.equipment_types?.length || 0} kom</td>}
@@ -730,9 +870,12 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                                     )}
                                     {dataType === 'requests' && (
                                         <>
-                                            {fields.client && <td className="px-4 py-3 font-medium">{item.client_name}</td>}
+                                            {fields.client && <td className="px-4 py-3"><button onClick={() => onClientClick?.(item.user_id)} className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left">{item.client_name}</button></td>}
                                             {fields.type && <td className="px-4 py-3">{item.waste_label}</td>}
-                                            {fields.urgency && <td className="px-4 py-3"><span className={`px-2 py-1 text-xs rounded-full ${item.urgency === '24h' ? 'bg-red-100 text-red-700' : item.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>{item.urgency === '24h' ? 'Hitno' : item.urgency === '48h' ? 'Srednje' : 'Normalno'}</span></td>}
+                                            {fields.urgency && (() => {
+                                                const remaining = getRemainingTime(item.created_at, item.urgency);
+                                                return <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg} ${remaining.color}`}>{remaining.text}</span></td>;
+                                            })()}
                                             {fields.date && <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString('sr-RS')}</td>}
                                             {fields.fillLevel && <td className="px-4 py-3 text-slate-600">{item.fill_level}%</td>}
                                             {fields.note && <td className="px-4 py-3 text-slate-600 max-w-32 truncate">{item.note || '-'}</td>}
@@ -951,7 +1094,7 @@ const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipme
                         return (
                             <tr key={c.id} className="hover:bg-slate-50">
                                 <td className="px-3 md:px-4 py-3">
-                                    <div className="font-medium">{c.name}</div>
+                                    <button onClick={() => onView(c)} className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left">{c.name}</button>
                                     <div className="sm:hidden text-xs text-slate-500 mt-0.5">{c.phone}</div>
                                     {/* Show equipment on mobile */}
                                     <div className="md:hidden text-xs text-slate-500 mt-0.5">
@@ -1009,9 +1152,10 @@ const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipme
 };
 
 // Equipment Management
-const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, clients }) => {
+const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, onEdit, clients }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [newEquipment, setNewEquipment] = useState({ name: '', description: '', customImage: null });
+    const [editingEquipment, setEditingEquipment] = useState(null);
     const [assigningEquipment, setAssigningEquipment] = useState(null);
 
     const handleAdd = () => {
@@ -1022,11 +1166,23 @@ const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, clients }) 
         }
     };
 
+    const handleEdit = () => {
+        if (editingEquipment && editingEquipment.name) {
+            onEdit(editingEquipment);
+            setEditingEquipment(null);
+        }
+    };
+
+    const startEdit = (eq) => {
+        setEditingEquipment({ ...eq });
+        setShowAddForm(false);
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h2 className="text-lg font-bold">Oprema</h2>
-                <button onClick={() => setShowAddForm(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
+                <button onClick={() => { setShowAddForm(true); setEditingEquipment(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
                     <Plus size={18} /> Dodaj opremu
                 </button>
             </div>
@@ -1069,6 +1225,47 @@ const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, clients }) 
                     <div className="flex gap-3">
                         <button onClick={handleAdd} disabled={!newEquipment.name} className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-medium">Sačuvaj</button>
                         <button onClick={() => { setShowAddForm(false); setNewEquipment({ name: '', description: '', customImage: null }); }} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-medium">Otkaži</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Form */}
+            {editingEquipment && (
+                <div className="bg-white rounded-2xl border p-6 space-y-4 border-blue-200">
+                    <h3 className="font-semibold text-blue-700">Izmeni opremu</h3>
+                    <div className="grid md:grid-cols-3 gap-4">
+                        <div className="md:col-span-2 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Naziv opreme</label>
+                                <input
+                                    type="text"
+                                    value={editingEquipment.name}
+                                    onChange={(e) => setEditingEquipment({ ...editingEquipment, name: e.target.value })}
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Opis (opciono)</label>
+                                <textarea
+                                    value={editingEquipment.description || ''}
+                                    onChange={(e) => setEditingEquipment({ ...editingEquipment, description: e.target.value })}
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                    rows={2}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <ImageUploader
+                                currentImage={editingEquipment.customImage}
+                                onUpload={(url) => setEditingEquipment({ ...editingEquipment, customImage: url })}
+                                onRemove={() => setEditingEquipment({ ...editingEquipment, customImage: null })}
+                                label="Slika opreme (opciono)"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={handleEdit} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium">Sačuvaj izmene</button>
+                        <button onClick={() => setEditingEquipment(null)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-medium">Otkaži</button>
                     </div>
                 </div>
             )}
@@ -1130,7 +1327,10 @@ const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, clients }) 
                                 <button onClick={() => setAssigningEquipment(eq)} className="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">
                                     {eq.assigned_to ? 'Promeni' : 'Dodeli'}
                                 </button>
-                                <button onClick={() => onDelete(eq.id)} className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg">
+                                <button onClick={() => startEdit(eq)} className="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Izmeni">
+                                    <Edit3 size={18} />
+                                </button>
+                                <button onClick={() => onDelete(eq.id)} className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
                                     <Trash2 size={18} />
                                 </button>
                             </div>
@@ -1143,8 +1343,9 @@ const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, clients }) 
 };
 
 // Waste Types Management
-const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
+const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) => {
     const [showAddForm, setShowAddForm] = useState(false);
+    const [editingType, setEditingType] = useState(null);
     const [newType, setNewType] = useState({ label: '', icon: '📦', customImage: null });
 
     const iconOptions = ['📦', '♻️', '🍾', '🗑️', '🛢️', '📄', '🔋', '💡', '🧴', '🥫', '🪵', '🧱'];
@@ -1157,6 +1358,18 @@ const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
         }
     };
 
+    const handleEdit = () => {
+        if (editingType && editingType.label) {
+            onEdit(editingType);
+            setEditingType(null);
+        }
+    };
+
+    const startEdit = (wt) => {
+        setEditingType({ ...wt });
+        setShowAddForm(false);
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1164,11 +1377,12 @@ const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
                     <h2 className="text-lg font-bold">Vrste robe (otpada)</h2>
                     <p className="text-sm text-slate-500">Upravljajte vrstama otpada koje vaši klijenti mogu da prijavljuju</p>
                 </div>
-                <button onClick={() => setShowAddForm(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
+                <button onClick={() => { setShowAddForm(true); setEditingType(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
                     <Plus size={18} /> Dodaj vrstu
                 </button>
             </div>
 
+            {/* Add Form */}
             {showAddForm && (
                 <div className="bg-white rounded-2xl border p-6 space-y-4">
                     <h3 className="font-semibold">Nova vrsta robe</h3>
@@ -1215,6 +1429,52 @@ const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
                 </div>
             )}
 
+            {/* Edit Form */}
+            {editingType && (
+                <div className="bg-white rounded-2xl border p-6 space-y-4 border-blue-200">
+                    <h3 className="font-semibold text-blue-700">Izmeni vrstu robe</h3>
+                    <div className="grid md:grid-cols-3 gap-4">
+                        <div className="md:col-span-2 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Naziv</label>
+                                <input
+                                    type="text"
+                                    value={editingType.label}
+                                    onChange={(e) => setEditingType({ ...editingType, label: e.target.value })}
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">Ikonica</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {iconOptions.map(icon => (
+                                        <button
+                                            key={icon}
+                                            onClick={() => setEditingType({ ...editingType, icon, customImage: null })}
+                                            className={`w-12 h-12 text-2xl rounded-xl border-2 transition-all ${!editingType.customImage && editingType.icon === icon ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                        >
+                                            {icon}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <ImageUploader
+                                currentImage={editingType.customImage}
+                                onUpload={(url) => setEditingType({ ...editingType, customImage: url })}
+                                onRemove={() => setEditingType({ ...editingType, customImage: null })}
+                                label="Koristi svoju sliku"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={handleEdit} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium">Sačuvaj izmene</button>
+                        <button onClick={() => setEditingType(null)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-medium">Otkaži</button>
+                    </div>
+                </div>
+            )}
+
             {!wasteTypes?.length ? (
                 <EmptyState icon={Recycle} title="Nema vrsta robe" desc="Dodajte prvu vrstu robe klikom na dugme iznad" />
             ) : (
@@ -1229,7 +1489,7 @@ const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
                         </thead>
                         <tbody className="divide-y">
                             {wasteTypes.map(wt => (
-                                <tr key={wt.id} className="hover:bg-slate-50">
+                                <tr key={wt.id} className={`hover:bg-slate-50 ${editingType?.id === wt.id ? 'bg-blue-50' : ''}`}>
                                     <td className="px-6 py-4">
                                         {wt.customImage ? (
                                             <img src={wt.customImage} alt={wt.label} className="w-12 h-12 object-cover rounded-xl" />
@@ -1239,7 +1499,10 @@ const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete }) => {
                                     </td>
                                     <td className="px-6 py-4 font-medium">{wt.label}</td>
                                     <td className="px-6 py-4 text-right">
-                                        <button onClick={() => onDelete(wt.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
+                                        <button onClick={() => startEdit(wt)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Izmeni">
+                                            <Edit3 size={18} />
+                                        </button>
+                                        <button onClick={() => onDelete(wt.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
                                             <Trash2 size={18} />
                                         </button>
                                     </td>
@@ -1404,12 +1667,18 @@ const FitBounds = ({ positions }) => {
 };
 
 const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
+    const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 24h, 48h, 72h
     const items = type === 'requests' ? requests : clients;
+
+    // Filter items by urgency
+    const filteredItems = useMemo(() => {
+        if (type !== 'requests' || urgencyFilter === 'all') return items || [];
+        return (items || []).filter(item => item.urgency === urgencyFilter);
+    }, [items, type, urgencyFilter]);
 
     // Calculate positions for all items
     const markers = useMemo(() => {
-        return (items || []).map((item, index) => {
-            // Parse coordinates as numbers, use stable position as fallback
+        return filteredItems.map((item, index) => {
             const lat = item.latitude ? parseFloat(item.latitude) : null;
             const lng = item.longitude ? parseFloat(item.longitude) : null;
 
@@ -1419,21 +1688,63 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
 
             return { item, position, index };
         });
-    }, [items]);
+    }, [filteredItems]);
 
     // Extract all positions for bounds fitting
     const allPositions = useMemo(() => markers.map(m => m.position), [markers]);
 
+    // Count by urgency
+    const urgencyCounts = useMemo(() => {
+        if (type !== 'requests') return {};
+        return (items || []).reduce((acc, item) => {
+            acc[item.urgency] = (acc[item.urgency] || 0) + 1;
+            return acc;
+        }, {});
+    }, [items, type]);
+
     return (
         <div className="bg-white rounded-2xl border overflow-hidden" style={{ height: '500px' }}>
-            <MapContainer center={[44.8, 20.45]} zoom={11} style={{ height: '100%', width: '100%' }}>
+            {/* Urgency Filter - Only show for requests */}
+            {type === 'requests' && (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 border-b">
+                    <span className="text-sm text-slate-500 mr-2">Filter:</span>
+                    <button
+                        onClick={() => setUrgencyFilter('all')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${urgencyFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                    >
+                        Svi ({items?.length || 0})
+                    </button>
+                    <button
+                        onClick={() => setUrgencyFilter('24h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '24h' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-200'}`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        Hitno ({urgencyCounts['24h'] || 0})
+                    </button>
+                    <button
+                        onClick={() => setUrgencyFilter('48h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '48h' ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50 hover:border-amber-200'}`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        Srednje ({urgencyCounts['48h'] || 0})
+                    </button>
+                    <button
+                        onClick={() => setUrgencyFilter('72h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '72h' ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200'}`}
+                    >
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        Nije hitno ({urgencyCounts['72h'] || 0})
+                    </button>
+                </div>
+            )}
+            <MapContainer center={[44.8, 20.45]} zoom={11} style={{ height: type === 'requests' ? 'calc(100% - 52px)' : '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FitBounds positions={allPositions} />
                 {markers.map(({ item, position, index }) => (
                     <Marker
                         key={item.id || `marker-${index}`}
                         position={position}
-                        icon={type === 'requests' ? (urgencyIcons[item.urgency] || urgencyIcons['72h']) : createIcon('blue')}
+                        icon={createCustomIcon(item.urgency, item.waste_type, type === 'clients')}
                     >
                         <Popup>
                             <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
@@ -1777,14 +2088,20 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
 
     const handleSend = async () => {
         if (!newMessage.trim() || !selectedChat) return;
+        const messageContent = newMessage.trim();
         setSending(true);
+        setNewMessage('');
         try {
-            await sendMessage(selectedChat.partnerId, newMessage);
-            setNewMessage('');
-            await loadMessages(selectedChat.partnerId);
+            // Send message and get the returned data
+            const sentMsg = await sendMessage(selectedChat.partnerId, messageContent);
+            // Add the real message to chat (not optimistic)
+            if (sentMsg) {
+                setChatMessages(prev => [...prev, sentMsg]);
+            }
             await loadConversations();
         } catch (error) {
             console.error('Error sending message:', error);
+            alert('Greška pri slanju poruke');
         }
         setSending(false);
     };
@@ -1910,9 +2227,6 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                                         {selectedChat.partner.role === 'client' ? 'Klijent' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
                                     </p>
                                 </div>
-                                <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-400">
-                                    <Phone size={18} />
-                                </button>
                             </div>
 
                             {/* Messages */}
@@ -2075,7 +2389,10 @@ export default function Dashboard() {
     const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const [activeTab, setActiveTab] = useState(() => {
+        const saved = localStorage.getItem('ecomountaint_activeTab');
+        return saved || 'dashboard';
+    });
     const [mapType, setMapType] = useState('requests');
     const [stats, setStats] = useState(null);
     const [clients, setClients] = useState([]);
@@ -2092,8 +2409,14 @@ export default function Dashboard() {
     const [notifications, setNotifications] = useState([]);
     const [prevRequestCount, setPrevRequestCount] = useState(0);
     const [prevClientCount, setPrevClientCount] = useState(0);
-    const [equipment, setEquipment] = useState([]);
-    const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
+    const [equipment, setEquipment] = useState(() => {
+        const saved = localStorage.getItem('ecomountaint_equipment');
+        return saved ? JSON.parse(saved) : [];
+    });
+    const [wasteTypes, setWasteTypes] = useState(() => {
+        const saved = localStorage.getItem('ecomountaint_wastetypes');
+        return saved ? JSON.parse(saved) : WASTE_TYPES;
+    });
     const [processedRequests, setProcessedRequests] = useState([]);
     const [editingClientEquipment, setEditingClientEquipment] = useState(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -2103,6 +2426,21 @@ export default function Dashboard() {
     const [urgencyFilter, setUrgencyFilter] = useState('all');
 
     const userRole = user?.role === 'developer' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
+
+    // Save activeTab to localStorage
+    useEffect(() => {
+        localStorage.setItem('ecomountaint_activeTab', activeTab);
+    }, [activeTab]);
+
+    // Save equipment to localStorage
+    useEffect(() => {
+        localStorage.setItem('ecomountaint_equipment', JSON.stringify(equipment));
+    }, [equipment]);
+
+    // Save wasteTypes to localStorage
+    useEffect(() => {
+        localStorage.setItem('ecomountaint_wastetypes', JSON.stringify(wasteTypes));
+    }, [wasteTypes]);
 
     useEffect(() => { loadData(); }, [userRole, activeTab]);
 
@@ -2176,12 +2514,24 @@ export default function Dashboard() {
         setEquipment(prev => prev.map(eq => eq.id === eqId ? { ...eq, assigned_to: clientId, assigned_to_name: client?.name } : eq));
     };
     const handleDeleteEquipment = (id) => { if (window.confirm('Obrisati opremu?')) setEquipment(prev => prev.filter(eq => eq.id !== id)); };
+    const handleEditEquipment = (updated) => {
+        setEquipment(prev => prev.map(eq => eq.id === updated.id ? updated : eq));
+    };
+
+    // Handle click on client name in requests table
+    const handleClientClick = (clientId) => {
+        const client = clients.find(c => c.id === clientId);
+        if (client) setSelectedClient(client);
+    };
 
     // Waste types handlers (local state for now, later connect to Supabase)
     const handleAddWasteType = (newType) => {
         setWasteTypes(prev => [...prev, newType]);
     };
     const handleDeleteWasteType = (id) => { if (window.confirm('Obrisati vrstu robe?')) setWasteTypes(prev => prev.filter(wt => wt.id !== id)); };
+    const handleEditWasteType = (updated) => {
+        setWasteTypes(prev => prev.map(wt => wt.id === updated.id ? updated : wt));
+    };
 
     // Client location handler
     const handleSaveClientLocation = async (position) => {
@@ -2277,14 +2627,14 @@ export default function Dashboard() {
             return <div className="space-y-8"><div className="grid md:grid-cols-2 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-8 text-center"><Recycle size={40} className="mx-auto text-emerald-600 mb-4" /><h3 className="text-xl font-bold mb-2">{clientRequests?.length ? `Imate ${clientRequests.length} zahteva` : 'Sve je pod kontrolom'}</h3><button onClick={() => setActiveTab('new')} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-medium mt-4"><Plus size={20} className="inline mr-2" />Novi zahtev</button></div></div>;
         }
         if (userRole === 'manager') {
-            if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
+            if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
             if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} />;
-            if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} />;
-            if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} clients={clients} />;
-            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} />;
+            if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
+            if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
+            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
             if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} /></div>;
-            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Nedavni zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={pending.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} wasteTypes={wasteTypes} /></div>}</div>;
+            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Nedavni zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={pending.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} /></div>}</div>;
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onView={(c) => alert(`${c.name}\n${c.code}`)} />;
@@ -2300,7 +2650,7 @@ export default function Dashboard() {
             <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-800 transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                 <div className="h-full flex flex-col">
                     <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700">
-                        <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white"><Leaf size={20} /></div><span className="font-bold text-xl text-white">EcoPlanina</span></div>
+                        <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white"><Mountain size={20} /></div><span className="font-bold text-xl text-white">EcoMountain<span className="text-emerald-400">T</span></span></div>
                         <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24} /></button>
                     </div>
                     <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} onClick={() => { setActiveTab(m.id); setSidebarOpen(false); }} />)}</nav>
