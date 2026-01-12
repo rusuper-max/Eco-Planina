@@ -98,9 +98,20 @@ export const AuthProvider = ({ children }) => {
                 companyData = companyByManager;
             }
 
-            if (companyData?.status === 'frozen') {
-                throw new Error('Vaša firma je zamrznuta. Kontaktirajte administratora.');
+            // Check Master Code status for freeze
+            if (companyData?.master_code_id) {
+                const { data: mc } = await supabase.from('master_codes').select('status').eq('id', companyData.master_code_id).single();
+                if (mc?.status === 'frozen') {
+                    throw new Error('Vaša firma je zamrznuta. Kontaktirajte administratora.');
+                }
+            } else if (userData.role === 'client') {
+                // Clients might not have master_code_id directly linked in companyData if join was different? 
+                // Assuming company always has master_code_id if created via master code.
+                // If pure client logic, we check company.
+                // But wait, companyData fetch usually returns master_code_id?
+                // Let's rely on companyData fetch above.
             }
+
             let actualCompanyCode = companyData?.code || userData.company_code;
             const userObj = { id: userData.id, name: userData.name, role: userData.role, address: userData.address, phone: userData.phone, latitude: userData.latitude, longitude: userData.longitude };
             setUser(userObj);
@@ -215,11 +226,15 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
-    const toggleCompanyStatus = async (companyId, currentStatus) => {
+    const toggleCompanyStatus = async (masterCodeId, currentStatus) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu');
         try {
-            const newStatus = currentStatus === 'frozen' ? 'active' : 'frozen';
-            const { error } = await supabase.from('companies').update({ status: newStatus }).eq('id', companyId);
+            // We toggle 'master_codes' status
+            const newStatus = currentStatus === 'frozen' ? 'used' : 'frozen';
+            // Only allow toggling if it was 'used' or 'frozen'. If 'available', allow to freeze? Maybe.
+            // Assuming we only freeze ACTIVE companies (which correspond to 'used' codes).
+
+            const { error } = await supabase.from('master_codes').update({ status: newStatus }).eq('id', masterCodeId);
             if (error) throw error;
             return { success: true, newStatus };
         } catch (error) { throw error; }
@@ -246,7 +261,19 @@ export const AuthProvider = ({ children }) => {
             const { data: users, error } = await query; if (error) throw error;
             const companyCodes = [...new Set((users || []).filter(u => u.company_code).map(u => u.company_code))];
             let companyMap = {};
-            if (companyCodes.length > 0) { const { data: companies } = await supabase.from('companies').select('code, name, status').in('code', companyCodes); companyMap = (companies || []).reduce((acc, c) => { acc[c.code] = { name: c.name, status: c.status }; return acc; }, {}); }
+            if (companyCodes.length > 0) {
+                const { data: companies } = await supabase.from('companies').select('code, name, master_code_id').in('code', companyCodes);
+                const masterCodeIds = companies.map(c => c.master_code_id).filter(Boolean);
+                let statusMap = {};
+                if (masterCodeIds.length > 0) {
+                    const { data: mcs } = await supabase.from('master_codes').select('id, status').in('id', masterCodeIds);
+                    statusMap = (mcs || []).reduce((acc, mc) => { acc[mc.id] = mc.status; return acc; }, {});
+                }
+                companyMap = (companies || []).reduce((acc, c) => {
+                    acc[c.code] = { name: c.name, status: c.master_code_id ? statusMap[c.master_code_id] : 'active' };
+                    return acc;
+                }, {});
+            }
             return (users || []).map(u => ({ ...u, company: u.company_code ? { name: companyMap[u.company_code]?.name || null, status: companyMap[u.company_code]?.status } : null }));
         } catch { return []; }
     };

@@ -2433,13 +2433,12 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
     const [deleteModal, setDeleteModal] = useState(null);
     const [freezing, setFreezing] = useState(null);
 
-    const handleFreeze = async (companyId, currentStatus) => {
-        setFreezing(companyId);
+    const handleFreeze = async (masterCodeId, currentStatus) => {
+        setFreezing(masterCodeId);
         try {
-            await toggleCompanyStatus(companyId, currentStatus);
+            await toggleCompanyStatus(masterCodeId, currentStatus);
             // We assume parent refreshes data or context updates propagates.
-            // If not, we might need a callback to force refresh.
-            window.location.reload(); // Hard refresh to ensure consistency for now, or use a callback from parent if available
+            window.location.reload();
         } catch (e) { alert(e.message); }
         setFreezing(null);
     };
@@ -2471,28 +2470,28 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
                             {codes.map(c => (
                                 <tr key={c.id} className="hover:bg-slate-50">
                                     <td className="px-6 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono">{c.code}</code></td>
-                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : 'Dostupan'}</span></td>
+                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : c.status === 'frozen' ? 'bg-red-100 text-red-700 font-bold' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : c.status === 'frozen' ? 'ZAMRZNUTO' : 'Dostupan'}</span></td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <span className="text-slate-600">{c.company?.name || '-'}</span>
-                                            {c.company?.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
+                                            {c.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-xs text-slate-500">{new Date(c.created_at).toLocaleDateString('sr-RS')}</td>
                                     <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                                         <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
 
-                                        {c.status === 'used' && c.company && (
+                                        {(c.status === 'used' || c.status === 'frozen') && c.company && (
                                             <button
-                                                onClick={() => handleFreeze(c.company.id, c.company.status)}
-                                                className={`p-2 rounded-lg ${c.company.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
-                                                title={c.company.status === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
+                                                onClick={() => handleFreeze(c.id, c.status)}
+                                                className={`p-2 rounded-lg ${c.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
+                                                title={c.status === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
                                             >
-                                                {freezing === c.company.id ? <Loader2 size={16} className="animate-spin" /> : c.company.status === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
+                                                {freezing === c.id ? <Loader2 size={16} className="animate-spin" /> : c.status === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
                                             </button>
                                         )}
 
-                                        {isDeveloper && c.status !== 'used' && (
+                                        {isDeveloper && (
                                             <button onClick={() => setDeleteModal({ id: c.id, code: c.code })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
                                                 <Trash2 size={16} />
                                             </button>
