@@ -272,6 +272,31 @@ export const AuthProvider = ({ children }) => {
     const deleteUser = async (userId) => { if (!isDeveloper()) throw new Error('Samo Developer može da briše korisnike'); try { await supabase.from('users').delete().eq('id', userId); return { success: true }; } catch (error) { throw error; } };
     const updateUser = async (userId, updates) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('users').update(updates).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
 
+    // Update current user's profile (name)
+    const updateProfile = async (newName) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        try {
+            const { error } = await supabase.from('users').update({ name: newName }).eq('id', user.id);
+            if (error) throw error;
+            // Update local user state
+            setUser(prev => ({ ...prev, name: newName }));
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
+    // Update company name (for managers)
+    const updateCompanyName = async (newCompanyName) => {
+        if (!user || !companyCode) throw new Error('Niste prijavljeni');
+        if (user.role !== 'manager') throw new Error('Samo menadžer može da menja ime firme');
+        try {
+            const { error } = await supabase.from('companies').update({ name: newCompanyName }).eq('code', companyCode);
+            if (error) throw error;
+            // Update local state
+            setCompanyName(newCompanyName);
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
     const deleteCompany = async (companyCodeToDelete) => {
         if (!isDeveloper()) throw new Error('Samo Developer može da briše firme');
         try {
@@ -470,6 +495,8 @@ export const AuthProvider = ({ children }) => {
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
+        // Profile updates
+        updateProfile, updateCompanyName,
         // Chat
         messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
         // Admin contact

@@ -2630,7 +2630,7 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
 // Main Dashboard
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -2666,7 +2666,7 @@ export default function Dashboard() {
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [language, setLanguage] = useState('sr');
-    const [editingProfile, setEditingProfile] = useState({ name: '', phone: '' });
+    const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '' });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
 
     const userRole = user?.role === 'developer' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
@@ -3058,7 +3058,7 @@ export default function Dashboard() {
                                             </button>
                                         )}
                                         <button
-                                            onClick={() => { setShowSettings(true); setShowProfileMenu(false); setEditingProfile({ name: user?.name || '', phone: user?.phone || '' }); }}
+                                            onClick={() => { setShowSettings(true); setShowProfileMenu(false); setEditingProfile({ name: user?.name || '', phone: user?.phone || '', companyName: companyName || '' }); }}
                                             className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 text-left"
                                         >
                                             <Settings size={18} className="text-slate-400" />
@@ -3157,6 +3157,19 @@ export default function Dashboard() {
                         />
                         <p className="text-xs text-slate-400 mt-1">{language === 'sr' ? 'Broj telefona se ne može menjati jer se koristi za prijavu' : 'Phone number cannot be changed as it is used for login'}</p>
                     </div>
+                    {/* Company Name (for managers only) */}
+                    {userRole === 'manager' && companyCode && (
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Ime firme' : 'Company name'}</label>
+                            <input
+                                type="text"
+                                value={editingProfile.companyName}
+                                onChange={(e) => setEditingProfile({ ...editingProfile, companyName: e.target.value })}
+                                placeholder={language === 'sr' ? 'Unesite ime firme...' : 'Enter company name...'}
+                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                            />
+                        </div>
+                    )}
                     {/* ECO Code Display */}
                     {userRole !== 'admin' && companyCode && (
                         <div>
@@ -3174,10 +3187,21 @@ export default function Dashboard() {
                     )}
                     {/* Save Button */}
                     <button
-                        onClick={() => {
-                            // Here you would save to Supabase
-                            alert(language === 'sr' ? 'Podešavanja sačuvana!' : 'Settings saved!');
-                            setShowSettings(false);
+                        onClick={async () => {
+                            try {
+                                // Save name if changed
+                                if (editingProfile.name && editingProfile.name !== user?.name) {
+                                    await updateProfile(editingProfile.name);
+                                }
+                                // Save company name if changed (managers only)
+                                if (userRole === 'manager' && editingProfile.companyName && editingProfile.companyName !== companyName) {
+                                    await updateCompanyName(editingProfile.companyName);
+                                }
+                                alert(language === 'sr' ? 'Podešavanja su sačuvana!' : 'Settings saved!');
+                                setShowSettings(false);
+                            } catch (error) {
+                                alert(language === 'sr' ? 'Greška pri čuvanju: ' + error.message : 'Error saving: ' + error.message);
+                            }
                         }}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl transition-colors"
                     >
