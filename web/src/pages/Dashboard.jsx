@@ -2481,7 +2481,7 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) 
                                     <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                                         <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
 
-                                        {(c.status === 'used' || c.status === 'frozen') && c.company && (
+                                        {(c.status === 'used' || c.status === 'frozen') && (
                                             <button
                                                 onClick={() => handleFreeze(c.id, c.status)}
                                                 className={`p-2 rounded-lg ${c.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
