@@ -135,12 +135,8 @@ export default function Dashboard() {
     const clearNotification = (id) => setNotifications(prev => prev.filter(n => n.id !== id));
     const clearAllNotifications = () => setNotifications([]);
 
-    // Real-time countdown refresh
-    const [, setTick] = useState(0);
-    useEffect(() => {
-        const interval = setInterval(() => setTick(t => t + 1), 1000);
-        return () => clearInterval(interval);
-    }, []);
+    // NOTE: Real-time countdown moved to CountdownTimer component in ManagerRequestsTable
+    // to avoid re-rendering entire Dashboard every second
 
     // Load initial data once (waste types, clients, stats) - blocks UI
     const loadInitialData = async () => {

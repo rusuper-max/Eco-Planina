@@ -128,6 +128,17 @@ export const getCurrentUrgency = (createdAt, originalUrgency) => {
     return '72h';                             // More than 48h = not urgent (green)
 };
 
+// Self-updating countdown timer component (prevents full page re-renders)
+export const CountdownTimer = ({ createdAt, urgency }) => {
+    const [, setTick] = useState(0);
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 1000);
+        return () => clearInterval(interval);
+    }, []);
+    const rem = getRemainingTime(createdAt, urgency);
+    return <span className={`text-sm font-mono font-bold ${rem.color}`}>⏱ {rem.text}</span>;
+};
+
 export const WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
     { id: 'plastic', label: 'Plastika', icon: '♻️' },
@@ -230,10 +241,10 @@ export const SidebarItem = ({ icon: Icon, label, active, onClick, badge }) => (
 export const Modal = ({ open, onClose, title, children }) => {
     if (!open) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto">
-                <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto z-[101]">
+                <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-[102]">
                     <h2 className="text-lg font-bold">{title}</h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X size={20} /></button>
                 </div>
@@ -374,9 +385,7 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
                 </div>
             </div>
             <div className="divide-y">
-                {sorted.map(r => {
-                    const remaining = getRemainingTime(r.created_at, r.urgency);
-                    return (
+                {sorted.map(r => (
                         <div key={r.id} className="p-5 hover:bg-slate-50 transition-colors">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex items-center gap-4">
@@ -402,17 +411,14 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
                                     <span className={`px-4 py-2 text-sm font-semibold rounded-xl ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                         {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
                                     </span>
-                                    <span className={`text-sm font-mono font-bold ${remaining.color}`}>
-                                        ⏱ {remaining.text}
-                                    </span>
+                                    <CountdownTimer createdAt={r.created_at} urgency={r.urgency} />
                                     <span className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
                                         Na čekanju
                                     </span>
                                 </div>
                             </div>
                         </div>
-                    );
-                })}
+                ))}
             </div>
         </div>
     );
@@ -1591,7 +1597,7 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = WASTE_TYPES, o
         }
         setUploading(true);
         try {
-            const url = await uploadImage(file, 'proof_of_service');
+            const url = await uploadImage(file, 'proof_of_service', 'assets');
             setProofFile(url);
             setProofType(isPDF ? 'pdf' : 'image');
         } catch (err) {
@@ -2701,7 +2707,7 @@ export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
         }
         setUploading(true);
         try {
-            const url = await uploadImage(file, 'proof_of_service');
+            const url = await uploadImage(file, 'proof_of_service', 'assets');
             setProofFile(url);
             setProofType(isPDF ? 'pdf' : 'image');
         } catch (err) {

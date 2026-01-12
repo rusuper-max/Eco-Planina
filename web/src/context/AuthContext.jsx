@@ -264,6 +264,7 @@ export const AuthProvider = ({ children }) => {
 
     const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
         try {
+            // Base record without optional weight columns
             const processedRecord = {
                 company_code: request.company_code,
                 client_id: request.user_id,
@@ -277,14 +278,39 @@ export const AuthProvider = ({ children }) => {
                 processing_note: processingNote,
                 created_at: request.created_at,
                 processed_at: new Date().toISOString(),
-                proof_image_url: proofImageUrl,
-                weight: weightData?.weight || null,
-                weight_unit: weightData?.weight_unit || null
+                proof_image_url: proofImageUrl
             };
-            await supabase.from('processed_requests').insert([processedRecord]);
+
+            // Try with weight columns first
+            if (weightData?.weight) {
+                processedRecord.weight = weightData.weight;
+                processedRecord.weight_unit = weightData.weight_unit || 'kg';
+            }
+
+            console.log('Inserting processed record:', processedRecord);
+            let { data, error: insertError } = await supabase.from('processed_requests').insert([processedRecord]).select();
+
+            // If error mentions columns, retry without weight fields
+            if (insertError && insertError.message?.includes('column')) {
+                console.warn('Retrying without weight columns...');
+                delete processedRecord.weight;
+                delete processedRecord.weight_unit;
+                const retry = await supabase.from('processed_requests').insert([processedRecord]).select();
+                data = retry.data;
+                insertError = retry.error;
+            }
+
+            if (insertError) {
+                console.error('INSERT ERROR into processed_requests:', insertError);
+                throw insertError;
+            }
+            console.log('Successfully inserted processed request:', data);
             await removePickupRequest(request.id);
             return { success: true };
-        } catch (error) { throw error; }
+        } catch (error) {
+            console.error('markRequestAsProcessed failed:', error);
+            throw error;
+        }
     };
 
     // Update processed request (add proof/weight later)
