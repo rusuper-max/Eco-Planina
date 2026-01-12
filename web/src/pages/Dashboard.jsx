@@ -384,7 +384,7 @@ export default function Dashboard() {
     const renderContent = () => {
         // Chat is available for both managers and clients
         if (activeTab === 'messages') {
-            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} />;
+            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} deleteConversation={deleteConversation} />;
         }
         if (userRole === 'client') {
             if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} wasteTypes={wasteTypes} />;

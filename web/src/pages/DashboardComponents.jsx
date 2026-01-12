@@ -3493,7 +3493,7 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
 };
 
 // Chat Interface Component
-export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, fetchCompanyMembers, sendMessageToAdmins, userRole, subscribeToMessages }) => {
+export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, fetchCompanyMembers, sendMessageToAdmins, userRole, subscribeToMessages, deleteConversation }) => {
     const [conversations, setConversations] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
@@ -3704,7 +3704,10 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                                                         await deleteConversation(conv.partnerId);
                                                         if (selectedChat?.partnerId === conv.partnerId) setSelectedChat(null);
                                                         loadConversations();
-                                                    } catch (err) { alert('Greška pri brisanju'); }
+                                                    } catch (err) {
+                                                        const isServerError = err?.message?.includes('503') || err?.message?.includes('timeout') || err?.message?.includes('connection');
+                                                        alert(isServerError ? 'Server je trenutno nedostupan. Molimo pokušajte ponovo za nekoliko trenutaka.' : 'Greška pri brisanju: ' + (err?.message || 'Nepoznata greška'));
+                                                    }
                                                 }
                                             }}
                                             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
