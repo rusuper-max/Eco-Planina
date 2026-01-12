@@ -2227,14 +2227,13 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
     const getRoleConfig = (role) => {
         switch (role) {
             case 'developer':
-            case 'god':
-                return { label: 'Developer', className: 'bg-purple-100 text-purple-700' };
+                return { label: 'Developer', className: 'bg-purple-100 text-purple-700', priority: 1 };
             case 'admin':
-                return { label: 'Admin', className: 'bg-blue-100 text-blue-700' };
+                return { label: 'Admin', className: 'bg-blue-100 text-blue-700', priority: 2 };
             case 'manager':
-                return { label: 'Menadžer', className: 'bg-emerald-100 text-emerald-700' };
+                return { label: 'Menadžer', className: 'bg-emerald-100 text-emerald-700', priority: 3 };
             default:
-                return { label: 'Klijent', className: 'bg-slate-100 text-slate-700' };
+                return { label: 'Klijent', className: 'bg-slate-100 text-slate-700', priority: 4 };
         }
     };
 
@@ -2256,7 +2255,10 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
                 let bVal = b[sortConfig.key] || '';
 
                 if (sortConfig.key === 'company') { aVal = a.company?.name || ''; bVal = b.company?.name || ''; }
-                if (sortConfig.key === 'role') { aVal = getRoleConfig(a.role).label; bVal = getRoleConfig(b.role).label; }
+                if (sortConfig.key === 'role') {
+                    aVal = getRoleConfig(a.role).priority;
+                    bVal = getRoleConfig(b.role).priority;
+                }
 
                 if (typeof aVal === 'string') aVal = aVal.toLowerCase();
                 if (typeof bVal === 'string') bVal = bVal.toLowerCase();
@@ -2282,7 +2284,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
 
     const toggleSelectAll = () => {
         // Filter out protected roles from selection
-        const selectableUsers = filteredUsers.filter(u => u.role !== 'god' && u.role !== 'developer');
+        const selectableUsers = filteredUsers.filter(u => u.role !== 'developer');
         if (selectedUsers.size === selectableUsers.length) setSelectedUsers(new Set());
         else setSelectedUsers(new Set(selectableUsers.map(u => u.id)));
     };
@@ -2307,7 +2309,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
         }
     };
 
-    const isProtected = (role) => role === 'god' || role === 'developer';
+    const isProtected = (role) => role === 'developer';
 
     if (!users?.length && !searchQuery) return <EmptyState icon={Users} title="Nema korisnika" desc="Korisnici će se prikazati ovde" />;
 
@@ -2669,7 +2671,7 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center mb-0.5">
-                                                {['admin', 'developer', 'god'].includes(conv.partner.role) ? (
+                                                {['admin', 'developer'].includes(conv.partner.role) ? (
                                                     <span className="font-semibold text-blue-600">Admin Chat</span>
                                                 ) : (
                                                     <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
@@ -2699,16 +2701,16 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                                 <button onClick={() => setSelectedChat(null)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg">
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className={`w-11 h-11 ${['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
-                                    {['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'A' : selectedChat.partner.name?.charAt(0) || '?'}
+                                <div className={`w-11 h-11 ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
+                                    {['admin', 'developer'].includes(selectedChat.partner.role) ? 'A' : selectedChat.partner.name?.charAt(0) || '?'}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className={`font-bold ${['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'text-blue-600' : 'text-slate-800'}`}>
-                                        {['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'Admin Chat' : selectedChat.partner.name}
+                                    <h3 className={`font-bold ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'text-blue-600' : 'text-slate-800'}`}>
+                                        {['admin', 'developer'].includes(selectedChat.partner.role) ? 'Admin Chat' : selectedChat.partner.name}
                                     </h3>
                                     <p className="text-xs text-slate-500 flex items-center gap-1">
-                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
-                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
+                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
+                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
                                     </p>
                                 </div>
                             </div>
@@ -2982,7 +2984,7 @@ export default function Dashboard() {
     const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '' });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
 
-    const userRole = ['developer', 'admin', 'god'].includes(user?.role) ? 'admin' : user?.role || 'client';
+    const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
     // Save activeTab to localStorage
     useEffect(() => {
