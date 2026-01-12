@@ -261,7 +261,7 @@ export const AuthProvider = ({ children }) => {
     const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
         try {
             const processedRecord = {
-                company_code: companyCode,
+                company_code: request.company_code,
                 client_id: request.user_id,
                 client_name: request.client_name,
                 client_address: request.client_address,
@@ -327,8 +327,18 @@ export const AuthProvider = ({ children }) => {
 
     const fetchProcessedRequests = async (filters = {}) => {
         if (!companyCode) return [];
-        try { let query = supabase.from('processed_requests').select('*').eq('company_code', companyCode).order('processed_at', { ascending: false }); if (filters.startDate) query = query.gte('processed_at', filters.startDate); if (filters.endDate) query = query.lte('processed_at', filters.endDate); if (filters.clientId) query = query.eq('client_id', filters.clientId); const { data, error } = await query; if (error) throw error; return data || []; }
-        catch { return []; }
+        try {
+            console.log('Fetching history for:', companyCode, filters);
+            let query = supabase.from('processed_requests').select('*').eq('company_code', companyCode).order('processed_at', { ascending: false });
+            if (filters.startDate) query = query.gte('processed_at', filters.startDate);
+            if (filters.endDate) query = query.lte('processed_at', filters.endDate);
+            if (filters.clientId) query = query.eq('client_id', filters.clientId);
+            const { data, error } = await query;
+            console.log('History fetch result:', data?.length, error);
+            if (error) throw error;
+            return data || [];
+        }
+        catch (e) { console.error('History fetch error:', e); return []; }
     };
 
     const fetchCompanyEquipmentTypes = async () => {
