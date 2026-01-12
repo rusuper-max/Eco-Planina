@@ -200,8 +200,8 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { throw error; }
     };
 
-    const isAdmin = () => user?.role === 'developer' || user?.role === 'admin';
-    const isDeveloper = () => user?.role === 'developer';
+    const isAdmin = () => user?.role === 'developer' || user?.role === 'admin' || user?.role === 'god';
+    const isDeveloper = () => user?.role === 'developer' || user?.role === 'god';
 
     const generateMasterCode = async (note = '') => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
@@ -263,7 +263,7 @@ export const AuthProvider = ({ children }) => {
                 supabase.from('master_codes').select('*', { count: 'exact', head: true }).eq('status', 'used'),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'manager'),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'client'),
-                supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'developer'])
+                supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'developer', 'god'])
             ]);
             return { totalUsers: totalUsers || 0, totalCompanies: totalCompanies || 0, totalCodes: totalCodes || 0, usedCodes: usedCodes || 0, availableCodes: (totalCodes || 0) - (usedCodes || 0), totalManagers: totalManagers || 0, totalClients: totalClients || 0, totalAdmins: totalAdmins || 0 };
         } catch { return null; }
@@ -466,7 +466,7 @@ export const AuthProvider = ({ children }) => {
     // Fetch all admin users (for contact admin feature)
     const fetchAdmins = async () => {
         try {
-            const { data, error } = await supabase.from('users').select('id, name, role, phone').in('role', ['admin', 'developer']);
+            const { data, error } = await supabase.from('users').select('id, name, role, phone').in('role', ['admin', 'developer', 'god']);
             if (error) throw error;
             return data || [];
         } catch (error) { console.error('Error fetching admins:', error); return []; }

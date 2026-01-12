@@ -2216,7 +2216,21 @@ const AdminCompaniesTable = ({ companies, onView }) => {
 
 const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
     if (!users?.length) return <EmptyState icon={Users} title="Nema korisnika" desc="Korisnici će se prikazati ovde" />;
-    const roles = { developer: 'Developer', admin: 'Admin', manager: 'Menadžer', client: 'Klijent' };
+
+    const getRoleConfig = (role) => {
+        switch (role) {
+            case 'developer':
+            case 'god':
+                return { label: 'Developer', className: 'bg-purple-100 text-purple-700' };
+            case 'admin':
+                return { label: 'Admin', className: 'bg-blue-100 text-blue-700' };
+            case 'manager':
+                return { label: 'Menadžer', className: 'bg-emerald-100 text-emerald-700' };
+            default:
+                return { label: 'Klijent', className: 'bg-slate-100 text-slate-700' };
+        }
+    };
+
     return (
         <div className="bg-white rounded-2xl border overflow-hidden">
             <table className="w-full text-sm">
@@ -2228,7 +2242,11 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
                         <tr key={u.id} className="hover:bg-slate-50">
                             <td className="px-6 py-4 font-medium">{u.name}</td>
                             <td className="px-6 py-4 text-slate-600">{u.phone}</td>
-                            <td className="px-6 py-4"><span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-100">{roles[u.role] || u.role}</span></td>
+                            <td className="px-6 py-4">
+                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleConfig(u.role).className}`}>
+                                    {getRoleConfig(u.role).label}
+                                </span>
+                            </td>
                             <td className="px-6 py-4 text-slate-600">{u.company?.name || '-'}</td>
                             {isDeveloper && <td className="px-6 py-4 text-right"><button onClick={() => onDelete(u.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button></td>}
                         </tr>
@@ -2433,7 +2451,7 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center mb-0.5">
-                                                {conv.partner.role === 'admin' || conv.partner.role === 'developer' ? (
+                                                {['admin', 'developer', 'god'].includes(conv.partner.role) ? (
                                                     <span className="font-semibold text-blue-600">Admin Chat</span>
                                                 ) : (
                                                     <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
@@ -2463,16 +2481,16 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                                 <button onClick={() => setSelectedChat(null)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg">
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className={`w-11 h-11 ${selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
-                                    {selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'A' : selectedChat.partner.name?.charAt(0) || '?'}
+                                <div className={`w-11 h-11 ${['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
+                                    {['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'A' : selectedChat.partner.name?.charAt(0) || '?'}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className={`font-bold ${selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'text-blue-600' : 'text-slate-800'}`}>
-                                        {selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'Admin Chat' : selectedChat.partner.name}
+                                    <h3 className={`font-bold ${['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'text-blue-600' : 'text-slate-800'}`}>
+                                        {['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'Admin Chat' : selectedChat.partner.name}
                                     </h3>
                                     <p className="text-xs text-slate-500 flex items-center gap-1">
-                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
-                                        {selectedChat.partner.role === 'client' ? 'Klijent' : selectedChat.partner.role === 'admin' || selectedChat.partner.role === 'developer' ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
+                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
+                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer', 'god'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
                                     </p>
                                 </div>
                             </div>
@@ -2673,7 +2691,7 @@ export default function Dashboard() {
     const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '' });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
 
-    const userRole = user?.role === 'developer' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
+    const userRole = ['developer', 'admin', 'god'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
     // Save activeTab to localStorage
     useEffect(() => {
