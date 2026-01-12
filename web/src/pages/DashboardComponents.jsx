@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
@@ -214,8 +214,8 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
     );
 };
 
-// Components
-export const StatCard = ({ label, value, icon, onClick }) => (
+// Components - memoized for performance
+export const StatCard = memo(({ label, value, icon, onClick }) => (
     <div
         onClick={onClick}
         className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 ${onClick ? 'cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all' : ''}`}
@@ -228,15 +228,15 @@ export const StatCard = ({ label, value, icon, onClick }) => (
             <div className="p-3 bg-slate-50 rounded-xl">{icon}</div>
         </div>
     </div>
-);
+));
 
-export const SidebarItem = ({ icon: Icon, label, active, onClick, badge }) => (
+export const SidebarItem = memo(({ icon: Icon, label, active, onClick, badge }) => (
     <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${active ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
         <Icon size={20} />
         <span className="flex-1 text-left">{label}</span>
         {badge > 0 && <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${active ? 'bg-white text-emerald-600' : 'bg-red-500 text-white'}`}>{badge}</span>}
     </button>
-);
+));
 
 export const Modal = ({ open, onClose, title, children }) => {
     if (!open) return null;
@@ -254,13 +254,13 @@ export const Modal = ({ open, onClose, title, children }) => {
     );
 };
 
-export const EmptyState = ({ icon: Icon, title, desc }) => (
+export const EmptyState = memo(({ icon: Icon, title, desc }) => (
     <div className="text-center py-16">
         <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-400"><Icon size={40} /></div>
         <h3 className="text-lg font-bold text-slate-800 mb-2">{title}</h3>
         <p className="text-slate-500">{desc}</p>
     </div>
-);
+));
 
 // Client Form
 export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) => {

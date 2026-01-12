@@ -189,7 +189,17 @@ export default function Dashboard() {
         await markRequestAsProcessed(req, proofImageUrl, note, weightData);
     };
     const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { alert(err.message); } };
-    const handleDeleteClient = async (id) => { if (window.confirm('Obrisati klijenta?')) try { await deleteClient?.(id); setClients(await fetchCompanyClients()); } catch (err) { alert(err.message); } };
+    const handleDeleteClient = async (id) => {
+        if (!window.confirm('Obrisati klijenta?')) return;
+        const previousClients = clients;
+        setClients(prev => prev.filter(c => c.id !== id)); // Optimistic update
+        try {
+            await deleteClient?.(id);
+        } catch (err) {
+            setClients(previousClients); // Rollback on error
+            alert(err.message);
+        }
+    };
     const handleGenerateCode = async () => { try { await generateMasterCode(); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
     const handleCopyCode = (code) => { navigator.clipboard.writeText(code); alert('Kopirano!'); };
     const handleDeleteCode = async (id) => { if (window.confirm('Obrisati?')) try { await deleteMasterCode(id); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
@@ -330,7 +340,7 @@ export default function Dashboard() {
 
     const menu = getMenu();
     const statCards = getStats();
-    const pending = pickupRequests?.filter(r => r.status === 'pending') || [];
+    const pending = useMemo(() => pickupRequests?.filter(r => r.status === 'pending') || [], [pickupRequests]);
 
     // Export functions - using semicolon as separator for Excel compatibility in Serbian locale
     const exportToCSV = (data, filename, headers) => {
@@ -484,7 +494,12 @@ export default function Dashboard() {
         }
         if (userRole === 'manager') {
             if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
-            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onDelete={async (id) => { await deleteProcessedRequest(id); const updated = await fetchProcessedRequests(); setProcessedRequests(updated); }} />;
+            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onDelete={async (id) => {
+                const previous = processedRequests;
+                setProcessedRequests(prev => prev.filter(r => r.id !== id)); // Optimistic
+                try { await deleteProcessedRequest(id); }
+                catch { setProcessedRequests(previous); } // Rollback
+            }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;

@@ -492,13 +492,27 @@ export const AuthProvider = ({ children }) => {
     const fetchAllCompanies = async () => {
         if (!isAdmin()) return [];
         try {
-            const { data, error } = await supabase.from('companies').select('*').order('name'); if (error) throw error;
-            const companiesWithCounts = await Promise.all((data || []).map(async (company) => {
-                const { count: managerCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('company_code', company.code).eq('role', 'manager');
-                const { count: clientCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('company_code', company.code).eq('role', 'client');
-                return { ...company, managerCount: managerCount || 0, clientCount: clientCount || 0 };
+            // Fetch companies and all users in just 2 queries instead of 1 + 2*N
+            const [{ data: companies, error: compError }, { data: users, error: userError }] = await Promise.all([
+                supabase.from('companies').select('*').order('name'),
+                supabase.from('users').select('company_code, role').in('role', ['manager', 'client'])
+            ]);
+            if (compError) throw compError;
+            if (userError) throw userError;
+
+            // Count managers and clients per company in memory
+            const counts = (users || []).reduce((acc, u) => {
+                if (!acc[u.company_code]) acc[u.company_code] = { managers: 0, clients: 0 };
+                if (u.role === 'manager') acc[u.company_code].managers++;
+                else if (u.role === 'client') acc[u.company_code].clients++;
+                return acc;
+            }, {});
+
+            return (companies || []).map(company => ({
+                ...company,
+                managerCount: counts[company.code]?.managers || 0,
+                clientCount: counts[company.code]?.clients || 0
             }));
-            return companiesWithCounts;
         } catch { return []; }
     };
 
