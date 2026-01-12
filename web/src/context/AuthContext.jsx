@@ -302,12 +302,21 @@ export const AuthProvider = ({ children }) => {
         } catch { return null; }
     };
 
+    const deleteClient = async (clientId) => {
+        if (user?.role !== 'manager') throw new Error('Samo menadžer može brisati klijente');
+        try {
+            await supabase.from('pickup_requests').delete().eq('client_id', clientId);
+            await supabase.from('users').delete().eq('id', clientId);
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests,
         login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
-        deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode,
+        deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
