@@ -406,8 +406,8 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${r.urgency === '2h' ? 'bg-red-100 text-red-700' : r.urgency === '6h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                    {r.urgency === '2h' ? 'Hitno (2h)' : r.urgency === '6h' ? 'Srednje (6h)' : 'Normalno (24h)'}
+                                                <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                    {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
                                                 </span>
                                                 <span className="px-3 py-1.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
                                                     <Clock size={12} /> Na čekanju

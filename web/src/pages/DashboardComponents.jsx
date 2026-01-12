@@ -26,10 +26,10 @@ export const createIcon = (color) => new L.Icon({
     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
 });
 
-export const urgencyIcons = { '2h': createIcon('red'), '6h': createIcon('orange'), '24h': createIcon('green') };
+export const urgencyIcons = { '24h': createIcon('red'), '48h': createIcon('orange'), '72h': createIcon('green') };
 
 // Custom marker icons like mobile app
-export const URGENCY_COLORS = { '2h': '#EF4444', '6h': '#F59E0B', '24h': '#10B981' };
+export const URGENCY_COLORS = { '24h': '#EF4444', '48h': '#F59E0B', '72h': '#10B981' };
 export const WASTE_ICONS_MAP = { cardboard: '📦', glass: '🍾', plastic: '♻️', trash: '🗑️' };
 
 export const createCustomIcon = (urgency, wasteType, isClient = false) => {
@@ -102,7 +102,7 @@ if (!document.getElementById('marker-styles')) {
 
 // Helper
 export const getRemainingTime = (createdAt, urgency) => {
-    const hours = urgency === '2h' ? 2 : urgency === '6h' ? 6 : 24;
+    const hours = urgency === '24h' ? 24 : urgency === '48h' ? 48 : 72;
     const deadline = new Date(new Date(createdAt).getTime() + hours * 60 * 60 * 1000);
     const diff = deadline - new Date();
     if (diff <= 0) return { text: '00:00:00', color: 'text-red-600', bg: 'bg-red-100', ms: diff };
@@ -110,22 +110,22 @@ export const getRemainingTime = (createdAt, urgency) => {
     const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     const s = Math.floor((diff % (1000 * 60)) / 1000);
     const text = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    if (h < 1) return { text, color: 'text-red-600', bg: 'bg-red-100', ms: diff };
-    if (h < 4) return { text, color: 'text-amber-600', bg: 'bg-amber-100', ms: diff };
+    if (h < 6) return { text, color: 'text-red-600', bg: 'bg-red-100', ms: diff };
+    if (h < 24) return { text, color: 'text-amber-600', bg: 'bg-amber-100', ms: diff };
     return { text, color: 'text-emerald-600', bg: 'bg-emerald-100', ms: diff };
 };
 
 // Get current urgency based on remaining time (not original urgency)
 export const getCurrentUrgency = (createdAt, originalUrgency) => {
-    const hours = originalUrgency === '2h' ? 2 : originalUrgency === '6h' ? 6 : 24;
+    const hours = originalUrgency === '24h' ? 24 : originalUrgency === '48h' ? 48 : 72;
     const deadline = new Date(new Date(createdAt).getTime() + hours * 60 * 60 * 1000);
     const diff = deadline - new Date();
     const remainingHours = diff / (1000 * 60 * 60);
 
-    if (remainingHours <= 0) return '2h';  // Expired = most urgent
-    if (remainingHours <= 2) return '2h';  // Less than 2h = urgent (red)
-    if (remainingHours <= 6) return '6h';  // Less than 6h = medium (orange)
-    return '24h';                           // More than 6h = not urgent (green)
+    if (remainingHours <= 0) return '24h';   // Expired = most urgent
+    if (remainingHours <= 24) return '24h';  // Less than 24h = urgent (red)
+    if (remainingHours <= 48) return '48h';  // Less than 48h = medium (orange)
+    return '72h';                             // More than 48h = not urgent (green)
 };
 
 export const WASTE_TYPES = [
@@ -284,7 +284,7 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
             <div>
                 <h3 className="font-semibold mb-4">Hitnost</h3>
                 <div className="grid grid-cols-3 gap-3">
-                    {[{ v: '2h', l: 'Hitno', h: '2h', c: 'red' }, { v: '6h', l: 'Srednje', h: '6h', c: 'amber' }, { v: '24h', l: 'Normalno', h: '24h', c: 'emerald' }].map(u => (
+                    {[{ v: '24h', l: 'Hitno', h: '24h', c: 'red' }, { v: '48h', l: 'Srednje', h: '48h', c: 'amber' }, { v: '72h', l: 'Normalno', h: '72h', c: 'emerald' }].map(u => (
                         <button key={u.v} onClick={() => setUrgency(u.v)} className={`p-4 rounded-xl border-2 text-center ${urgency === u.v ? `border-${u.c}-500 bg-${u.c}-50` : 'border-slate-200'}`}>
                             <span className="text-sm font-bold">{u.l} ({u.h})</span>
                         </button>
@@ -318,7 +318,7 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
         let cmp = 0;
         if (sortBy === 'date') cmp = new Date(b.created_at) - new Date(a.created_at);
         else if (sortBy === 'urgency') {
-            const urgencyOrder = { '2h': 0, '6h': 1, '24h': 2 };
+            const urgencyOrder = { '24h': 0, '48h': 1, '72h': 2 };
             cmp = (urgencyOrder[a.urgency] || 2) - (urgencyOrder[b.urgency] || 2);
         } else if (sortBy === 'type') cmp = (a.waste_label || '').localeCompare(b.waste_label || '');
         return sortDir === 'desc' ? -cmp : cmp;
@@ -372,8 +372,8 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
                                     </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <span className={`px-4 py-2 text-sm font-semibold rounded-xl ${r.urgency === '2h' ? 'bg-red-100 text-red-700' : r.urgency === '6h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        {r.urgency === '2h' ? 'Hitno (2h)' : r.urgency === '6h' ? 'Srednje (6h)' : 'Normalno (24h)'}
+                                    <span className={`px-4 py-2 text-sm font-semibold rounded-xl ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                        {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
                                     </span>
                                     <span className={`text-sm font-mono font-bold ${remaining.color}`}>
                                         ⏱ {remaining.text}
@@ -479,8 +479,8 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                                         <CheckCircle2 size={16} /> Obrađeno
                                     </span>
                                     {r.urgency && (
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${r.urgency === '2h' ? 'bg-red-50 text-red-600' : r.urgency === '6h' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                                            {r.urgency === '2h' ? 'Bilo hitno' : r.urgency === '6h' ? 'Bilo srednje' : 'Bilo normalno'}
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${r.urgency === '24h' ? 'bg-red-50 text-red-600' : r.urgency === '48h' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
+                                            {r.urgency === '24h' ? 'Bilo hitno' : r.urgency === '48h' ? 'Bilo srednje' : 'Bilo normalno'}
                                         </span>
                                     )}
                                 </div>
@@ -530,7 +530,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all'); // all, or waste type id
-    const [filterUrgency, setFilterUrgency] = useState(initialUrgencyFilter); // all, 2h, 6h, 24h
+    const [filterUrgency, setFilterUrgency] = useState(initialUrgencyFilter); // all, 24h, 48h, 72h
 
     // Sync with external filter
     useEffect(() => {
@@ -628,9 +628,9 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                     className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
                 >
                     <option value="all">Sva hitnost</option>
-                    <option value="2h">🔴 Hitno (2h)</option>
-                    <option value="6h">🟠 Srednje (6h)</option>
-                    <option value="24h">🟢 Normalno (24h)</option>
+                    <option value="24h">🔴 Hitno (24h)</option>
+                    <option value="48h">🟠 Srednje (48h)</option>
+                    <option value="72h">🟢 Normalno (72h)</option>
                 </select>
             </div>
 
@@ -2046,7 +2046,7 @@ export const FitBounds = ({ positions }) => {
 };
 
 export const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
-    const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 2h, 6h, 24h
+    const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 24h, 48h, 72h
     const items = type === 'requests' ? requests : clients;
 
     // Add current urgency to each request based on remaining time
@@ -2128,25 +2128,25 @@ export const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
                         Svi ({itemsWithCurrentUrgency?.length || 0})
                     </button>
                     <button
-                        onClick={() => setUrgencyFilter('2h')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '2h' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-200'}`}
+                        onClick={() => setUrgencyFilter('24h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '24h' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-red-50 hover:border-red-200'}`}
                     >
                         <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                        Hitno ({urgencyCounts['2h'] || 0})
+                        Hitno ({urgencyCounts['24h'] || 0})
                     </button>
                     <button
-                        onClick={() => setUrgencyFilter('6h')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '6h' ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50 hover:border-amber-200'}`}
+                        onClick={() => setUrgencyFilter('48h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '48h' ? 'bg-amber-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-amber-50 hover:border-amber-200'}`}
                     >
                         <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                        Srednje ({urgencyCounts['6h'] || 0})
+                        Srednje ({urgencyCounts['48h'] || 0})
                     </button>
                     <button
-                        onClick={() => setUrgencyFilter('24h')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '24h' ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200'}`}
+                        onClick={() => setUrgencyFilter('72h')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${urgencyFilter === '72h' ? 'bg-emerald-500 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200'}`}
                     >
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        Normalno ({urgencyCounts['24h'] || 0})
+                        Normalno ({urgencyCounts['72h'] || 0})
                     </button>
                 </div>
             )}
