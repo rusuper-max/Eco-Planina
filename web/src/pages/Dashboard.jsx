@@ -277,7 +277,7 @@ export default function Dashboard() {
             return [
                 { label: 'Zahtevi', value: p.length, icon: <Truck className="w-6 h-6 text-emerald-600" />, onClick: () => { setUrgencyFilter('all'); setActiveTab('requests'); } },
                 { label: 'Klijenti', value: clients.length, icon: <Users className="w-6 h-6 text-blue-600" />, onClick: () => setActiveTab('clients') },
-                { label: 'Hitni', value: p.filter(r => r.urgency === '24h').length, icon: <AlertCircle className="w-6 h-6 text-red-600" />, onClick: () => { setUrgencyFilter('24h'); setActiveTab('requests'); } }
+                { label: 'Hitni', value: p.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length, icon: <AlertCircle className="w-6 h-6 text-red-600" />, onClick: () => { setUrgencyFilter('24h'); setActiveTab('requests'); } }
             ];
         }
         return [{ label: 'Aktivni zahtevi', value: clientRequests?.length || 0, icon: <Truck className="w-6 h-6 text-emerald-600" />, onClick: () => setActiveTab('requests') }];
@@ -566,7 +566,7 @@ export default function Dashboard() {
                         <div className="relative">
                             <button onClick={() => { setShowNotifications(!showNotifications); setShowChatDropdown(false); setShowProfileMenu(false); }} className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full">
                                 <Bell size={20} />
-                                {(notifications.length > 0 || pending.some(r => r.urgency === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
+                                {(notifications.length > 0 || pending.some(r => getCurrentUrgency(r.created_at, r.urgency) === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
                             </button>
                             {showNotifications && (
                                 <>
@@ -577,11 +577,11 @@ export default function Dashboard() {
                                             {notifications.length > 0 && <button onClick={clearAllNotifications} className="text-xs text-emerald-600 hover:text-emerald-700">{language === 'sr' ? 'Obriši sve' : 'Clear all'}</button>}
                                         </div>
                                         <div className="max-h-80 overflow-y-auto">
-                                            {pending.filter(r => r.urgency === '24h').length > 0 && (
+                                            {pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length > 0 && (
                                                 <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-start gap-3">
                                                     <AlertCircle size={18} className="text-red-500 mt-0.5" />
                                                     <div>
-                                                        <p className="text-sm font-medium text-red-700">{pending.filter(r => r.urgency === '24h').length} {language === 'sr' ? 'hitnih zahteva' : 'urgent requests'}</p>
+                                                        <p className="text-sm font-medium text-red-700">{pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length} {language === 'sr' ? 'hitnih zahteva' : 'urgent requests'}</p>
                                                         <p className="text-xs text-red-500">{language === 'sr' ? 'Potrebna hitna akcija' : 'Urgent action needed'}</p>
                                                     </div>
                                                 </div>

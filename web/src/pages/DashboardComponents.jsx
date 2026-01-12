@@ -556,8 +556,11 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
         }
         // Type filter
         if (filterType !== 'all' && req.waste_type !== filterType) return false;
-        // Urgency filter
-        if (filterUrgency !== 'all' && req.urgency !== filterUrgency) return false;
+        // Urgency filter - use current urgency based on remaining time, not original
+        if (filterUrgency !== 'all') {
+            const currentUrgency = getCurrentUrgency(req.created_at, req.urgency);
+            if (currentUrgency !== filterUrgency) return false;
+        }
         return true;
     });
 
@@ -684,6 +687,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                             <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map(req => {
                             const rem = getRemainingTime(req.created_at, req.urgency);
+                            const currentUrg = getCurrentUrgency(req.created_at, req.urgency);
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
                                     <td className="px-3 md:px-4 py-3">
@@ -700,7 +704,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                     </td>
                                     <td className="hidden md:table-cell px-4 py-3">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-12 h-2 bg-slate-200 rounded-full"><div className={`h-full rounded-full ${req.fill_level > 80 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${req.fill_level}%` }} /></div>
+                                            <div className="w-12 h-2 bg-slate-200 rounded-full"><div className={`h-full rounded-full ${currentUrg === '24h' ? 'bg-red-500' : currentUrg === '48h' ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${req.fill_level}%` }} /></div>
                                             <span className="text-xs">{req.fill_level}%</span>
                                         </div>
                                     </td>
