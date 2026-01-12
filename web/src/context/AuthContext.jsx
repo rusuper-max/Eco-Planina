@@ -343,6 +343,18 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
+    const fetchCompanyWasteTypes = async () => {
+        if (!companyCode) return null;
+        try { const { data, error } = await supabase.from('companies').select('waste_types').eq('code', companyCode).single(); if (error) throw error; return data?.waste_types || null; }
+        catch { return null; }
+    };
+
+    const updateCompanyWasteTypes = async (wasteTypes) => {
+        if (!companyCode) throw new Error('Niste povezani sa firmom');
+        try { const { error } = await supabase.from('companies').update({ waste_types: wasteTypes }).eq('code', companyCode); if (error) throw error; return { success: true }; }
+        catch (error) { throw error; }
+    };
+
     const updateClientDetails = async (clientId, equipmentTypes, note, pib) => {
         try { const { error } = await supabase.from('users').update({ equipment_types: equipmentTypes, manager_note: note, pib: pib || null }).eq('id', clientId); if (error) throw error; return { success: true }; }
         catch (error) { throw error; }
@@ -727,7 +739,7 @@ export const AuthProvider = ({ children }) => {
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests, fetchClientHistory,
         login, logout, register, removePickupRequest, markRequestAsProcessed, updateProcessedRequest, deleteProcessedRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
-        updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
+        updateCompanyEquipmentTypes, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
         // Profile updates

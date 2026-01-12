@@ -27,7 +27,7 @@ import {
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -55,10 +55,7 @@ export default function Dashboard() {
         const saved = localStorage.getItem('ecomountaint_equipment');
         return saved ? JSON.parse(saved) : [];
     });
-    const [wasteTypes, setWasteTypes] = useState(() => {
-        const saved = localStorage.getItem('ecomountaint_wastetypes');
-        return saved ? JSON.parse(saved) : WASTE_TYPES;
-    });
+    const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
     const [processedRequests, setProcessedRequests] = useState([]);
     const [editingClientEquipment, setEditingClientEquipment] = useState(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -83,10 +80,7 @@ export default function Dashboard() {
         localStorage.setItem('ecomountaint_equipment', JSON.stringify(equipment));
     }, [equipment]);
 
-    // Save wasteTypes to localStorage
-    useEffect(() => {
-        localStorage.setItem('ecomountaint_wastetypes', JSON.stringify(wasteTypes));
-    }, [wasteTypes]);
+
 
     useEffect(() => { loadData(); }, [userRole, activeTab]);
 
@@ -143,10 +137,20 @@ export default function Dashboard() {
                 if (activeTab === 'companies') setCompanies(await fetchAllCompanies());
                 if (activeTab === 'users') setUsers(await fetchAllUsers());
                 if (activeTab === 'codes') setMasterCodes(await fetchAllMasterCodes());
-            } else if (userRole === 'manager') {
-                setClients(await fetchCompanyClients() || []);
-                if (activeTab === 'history') {
-                    setProcessedRequests(await fetchProcessedRequests() || []);
+            } else if (userRole === 'manager' || userRole === 'client') {
+                // Fetch company specific settings
+                const companyWasteTypes = await fetchCompanyWasteTypes();
+                if (companyWasteTypes && companyWasteTypes.length > 0) {
+                    setWasteTypes(companyWasteTypes);
+                } else {
+                    setWasteTypes(WASTE_TYPES);
+                }
+
+                if (userRole === 'manager') {
+                    setClients(await fetchCompanyClients() || []);
+                    if (activeTab === 'history') {
+                        setProcessedRequests(await fetchProcessedRequests() || []);
+                    }
                 }
             }
         } catch (err) { console.error(err); }
@@ -199,13 +203,23 @@ export default function Dashboard() {
         if (client) setSelectedClient(client);
     };
 
-    // Waste types handlers (local state for now, later connect to Supabase)
-    const handleAddWasteType = (newType) => {
-        setWasteTypes(prev => [...prev, newType]);
+    // Waste types handlers (connected to Supabase)
+    const handleAddWasteType = async (newType) => {
+        const updated = [...wasteTypes, newType];
+        setWasteTypes(updated);
+        try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri čuvanju: ' + e.message); }
     };
-    const handleDeleteWasteType = (id) => { if (window.confirm('Obrisati vrstu robe?')) setWasteTypes(prev => prev.filter(wt => wt.id !== id)); };
-    const handleEditWasteType = (updated) => {
-        setWasteTypes(prev => prev.map(wt => wt.id === updated.id ? updated : wt));
+    const handleDeleteWasteType = async (id) => {
+        if (window.confirm('Obrisati vrstu robe?')) {
+            const updated = wasteTypes.filter(wt => wt.id !== id);
+            setWasteTypes(updated);
+            try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri brisanju: ' + e.message); }
+        }
+    };
+    const handleEditWasteType = async (updatedType) => {
+        const updated = wasteTypes.map(wt => wt.id === updatedType.id ? updatedType : wt);
+        setWasteTypes(updated);
+        try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri izmeni: ' + e.message); }
     };
 
     // Client location handler
