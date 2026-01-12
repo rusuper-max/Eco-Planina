@@ -329,7 +329,9 @@ export const AuthProvider = ({ children }) => {
         if (!companyCode) return [];
         try {
             console.log('Fetching history for:', companyCode, filters);
-            let query = supabase.from('processed_requests').select('*').eq('company_code', companyCode).order('processed_at', { ascending: false });
+            // Handle massive frustration with whitespace: search for both raw and trimmed code
+            const codesToSearch = [companyCode, companyCode.trim()].filter((v, i, a) => a.indexOf(v) === i); // unique
+            let query = supabase.from('processed_requests').select('*').in('company_code', codesToSearch).order('processed_at', { ascending: false });
             if (filters.startDate) query = query.gte('processed_at', filters.startDate);
             if (filters.endDate) query = query.lte('processed_at', filters.endDate);
             if (filters.clientId) query = query.eq('client_id', filters.clientId);
