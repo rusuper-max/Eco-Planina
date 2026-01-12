@@ -262,7 +262,12 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
         <div className="space-y-6 bg-white rounded-2xl p-6 border">
             <div>
                 <h3 className="font-semibold mb-4">Vrsta Robe</h3>
-                <div className="grid gap-3 grid-cols-3 md:grid-cols-5">
+                <div className={`grid gap-3 ${wasteTypes.length === 1 ? 'grid-cols-1 md:grid-cols-1' :
+                        wasteTypes.length === 2 ? 'grid-cols-2 md:grid-cols-2' :
+                            wasteTypes.length === 3 ? 'grid-cols-3 md:grid-cols-3' :
+                                wasteTypes.length === 4 ? 'grid-cols-2 md:grid-cols-4' :
+                                    'grid-cols-3 md:grid-cols-5'
+                    }`}>
                     {wasteTypes.map(w => (
                         <button
                             key={w.id}
