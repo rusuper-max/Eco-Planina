@@ -2215,7 +2215,7 @@ const AdminCompaniesTable = ({ companies, onView }) => {
     );
 };
 
-const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh }) => {
+const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser }) => {
     // State
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
@@ -2224,6 +2224,8 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
     const [detailsModal, setDetailsModal] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [changingRole, setChangingRole] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -2271,6 +2273,16 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
         }
         return result;
     }, [users, searchQuery, sortConfig]);
+
+    // Pagination
+    const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
+    const paginatedUsers = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredUsers.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredUsers, currentPage]);
+
+    // Reset page when search changes
+    useEffect(() => { setCurrentPage(1); }, [searchQuery]);
 
     const handleSort = (key) => {
         setSortConfig(curr => ({ key, direction: curr.key === key && curr.direction === 'asc' ? 'desc' : 'asc' }));
@@ -2371,7 +2383,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                         {filteredUsers.length === 0 ? (
                             <tr><td colSpan="6" className="px-6 py-12 text-center text-slate-400">Nema rezultata za "{searchQuery}"</td></tr>
                         ) : (
-                            filteredUsers.map(u => (
+                            paginatedUsers.map(u => (
                                 <tr key={u.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setDetailsModal(u)}>
                                     <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                                         {!isProtected(u.role) && (
@@ -2398,6 +2410,16 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                                     </td>
                                     <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                         <div className="flex items-center justify-end gap-1">
+                                            {/* Edit button */}
+                                            {!isProtected(u.role) && (
+                                                <button
+                                                    onClick={() => onEditUser(u)}
+                                                    className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                                    title="Izmeni korisnika"
+                                                >
+                                                    <Edit3 size={18} />
+                                                </button>
+                                            )}
                                             {/* Impersonate button - for non-admin/dev users */}
                                             {!isProtected(u.role) && u.role !== 'admin' && (
                                                 <button
@@ -2445,6 +2467,42 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChange
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200">
+                    <p className="text-sm text-slate-500">
+                        Prikazano {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredUsers.length)} od {filteredUsers.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Prethodna
+                        </button>
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`w-8 h-8 text-sm font-medium rounded-lg ${currentPage === page ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Sledeća
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Modals */}
             {detailsModal && <UserDetailsModal user={detailsModal} onClose={() => setDetailsModal(null)} />}
@@ -2688,36 +2746,53 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
                         ) : (
                             <div className="divide-y divide-slate-200">
                                 {conversations.map(conv => (
-                                    <button
+                                    <div
                                         key={conv.partnerId}
-                                        onClick={() => setSelectedChat(conv)}
                                         className={`w-full p-4 flex items-center gap-3 hover:bg-white text-left transition-colors ${selectedChat?.partnerId === conv.partnerId ? 'bg-white border-l-4 border-l-emerald-500' : ''}`}
                                     >
-                                        <div className="relative flex-shrink-0">
-                                            <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                                                {conv.partner.name?.charAt(0) || '?'}
-                                            </div>
-                                            {conv.unread > 0 && (
-                                                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{conv.unread}</span>
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-center mb-0.5">
-                                                {['admin', 'developer'].includes(conv.partner.role) ? (
-                                                    <span className="font-semibold text-blue-600">Admin Chat</span>
-                                                ) : (
-                                                    <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
+                                        <button onClick={() => setSelectedChat(conv)} className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className="relative flex-shrink-0">
+                                                <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                                                    {conv.partner.name?.charAt(0) || '?'}
+                                                </div>
+                                                {conv.unread > 0 && (
+                                                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{conv.unread}</span>
                                                 )}
-                                                <span className="text-xs text-slate-400 ml-2 flex-shrink-0">{formatTime(conv.lastMessageAt)}</span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                    {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Admin' : 'Menadžer'}
-                                                </span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex justify-between items-center mb-0.5">
+                                                    {['admin', 'developer'].includes(conv.partner.role) ? (
+                                                        <span className="font-semibold text-blue-600">Admin Chat</span>
+                                                    ) : (
+                                                        <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
+                                                    )}
+                                                    <span className="text-xs text-slate-400 ml-2 flex-shrink-0">{formatTime(conv.lastMessageAt)}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                        {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Admin' : 'Menadžer'}
+                                                    </span>
+                                                </div>
+                                                <p className={`text-sm truncate mt-1 ${conv.unread > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{conv.lastMessage}</p>
                                             </div>
-                                            <p className={`text-sm truncate mt-1 ${conv.unread > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{conv.lastMessage}</p>
-                                        </div>
-                                    </button>
+                                        </button>
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm('Obrisati celu konverzaciju?')) {
+                                                    try {
+                                                        await deleteConversation(conv.partnerId);
+                                                        if (selectedChat?.partnerId === conv.partnerId) setSelectedChat(null);
+                                                        loadConversations();
+                                                    } catch (err) { alert('Greška pri brisanju'); }
+                                                }
+                                            }}
+                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                                            title="Obriši konverzaciju"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -2936,6 +3011,106 @@ const UserDetailsModal = ({ user, onClose }) => {
     );
 };
 
+const UserEditModal = ({ user, onClose, onSave }) => {
+    const [formData, setFormData] = useState({
+        name: user?.name || '',
+        phone: user?.phone || '',
+        address: user?.address || ''
+    });
+    const [saving, setSaving] = useState(false);
+
+    if (!user) return null;
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        try {
+            await onSave(user.id, formData);
+            onClose();
+        } catch (err) {
+            alert(err.message || 'Greška pri čuvanju');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Izmeni korisnika</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20} /></button>
+                </div>
+                <form onSubmit={handleSubmit}>
+                    <div className="p-6 space-y-4">
+                        <div className="flex items-center gap-4 mb-4">
+                            <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold text-xl">
+                                {formData.name.charAt(0) || '?'}
+                            </div>
+                            <div>
+                                <span className={`text-sm px-2 py-1 rounded-lg ${user.role === 'developer' ? 'bg-purple-100 text-purple-700' : user.role === 'admin' ? 'bg-blue-100 text-blue-700' : user.role === 'manager' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
+                                    {user.role === 'developer' ? 'Developer' : user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Menadžer' : 'Klijent'}
+                                </span>
+                                <p className="text-xs text-slate-400 mt-1">ID: {user.id?.slice(0, 8)}...</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Ime</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Telefon</label>
+                            <input
+                                type="tel"
+                                value={formData.phone}
+                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                required
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Adresa</label>
+                            <input
+                                type="text"
+                                value={formData.address}
+                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                                placeholder="Ulica i broj, Grad"
+                            />
+                        </div>
+
+                        {user.company?.name && (
+                            <div className="p-3 bg-slate-50 rounded-xl">
+                                <p className="text-xs text-slate-500 mb-1">Firma</p>
+                                <p className="font-medium text-slate-700">{user.company.name}</p>
+                                <p className="text-xs text-slate-400">Kod: {user.company_code}</p>
+                            </div>
+                        )}
+                    </div>
+                    <div className="p-4 bg-slate-50 border-t flex justify-end gap-3">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl font-medium text-slate-700">
+                            Otkaži
+                        </button>
+                        <button type="submit" disabled={saving} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50">
+                            {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                            Sačuvaj
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose, onConfirm, loading }) => {
     const [input, setInput] = useState('');
     return (
@@ -2977,7 +3152,7 @@ const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose, onCon
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, originalUser, impersonateUser, exitImpersonation, changeUserRole } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -3015,6 +3190,7 @@ export default function Dashboard() {
     const [language, setLanguage] = useState('sr');
     const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '' });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
+    const [editingUser, setEditingUser] = useState(null);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
@@ -3241,7 +3417,7 @@ export default function Dashboard() {
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onView={(c) => alert(`${c.name}\n${c.code}`)} />;
-            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} />;
+            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
             if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} />;
             return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div></div>;
         }
@@ -3584,6 +3760,17 @@ export default function Dashboard() {
                     </button>
                 </div>
             </Modal>
+            {editingUser && (
+                <UserEditModal
+                    user={editingUser}
+                    onClose={() => setEditingUser(null)}
+                    onSave={async (userId, data) => {
+                        await updateUser(userId, data);
+                        refreshUsers();
+                        setEditingUser(null);
+                    }}
+                />
+            )}
         </div>
     );
 }

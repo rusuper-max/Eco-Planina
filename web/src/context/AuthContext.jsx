@@ -510,6 +510,19 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { console.error('Error marking messages as read:', error); }
     };
 
+    // Delete conversation with a specific user
+    const deleteConversation = async (partnerId) => {
+        if (!user) return;
+        try {
+            // Delete all messages between current user and partner
+            await supabase.from('messages')
+                .delete()
+                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`);
+            fetchUnreadCount();
+            return { success: true };
+        } catch (error) { console.error('Error deleting conversation:', error); throw error; }
+    };
+
     const fetchUnreadCount = async () => {
         if (!user) return 0;
         try {
@@ -625,7 +638,7 @@ export const AuthProvider = ({ children }) => {
         // Impersonation
         originalUser, impersonateUser, exitImpersonation, changeUserRole,
         // Chat
-        messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
+        messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations, deleteConversation,
         // Admin contact
         fetchAdmins, sendMessageToAdmins,
     };
