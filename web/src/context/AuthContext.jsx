@@ -198,8 +198,8 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { throw error; }
     };
 
-    const isAdmin = () => user?.role === 'god' || user?.role === 'admin';
-    const isGod = () => user?.role === 'god';
+    const isAdmin = () => user?.role === 'developer' || user?.role === 'admin';
+    const isDeveloper = () => user?.role === 'developer';
 
     const generateMasterCode = async (note = '') => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
@@ -248,8 +248,8 @@ export const AuthProvider = ({ children }) => {
         } catch { return []; }
     };
 
-    const promoteToAdmin = async (userId) => { if (!isGod()) throw new Error('Samo GOD moze da promoviše admina'); try { await supabase.from('users').update({ role: 'admin' }).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
-    const demoteFromAdmin = async (userId) => { if (!isGod()) throw new Error('Samo GOD moze da ukloni admin status'); try { await supabase.from('users').update({ role: 'manager' }).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
+    const promoteToAdmin = async (userId) => { if (!isDeveloper()) throw new Error('Samo Developer može da promoviše admina'); try { await supabase.from('users').update({ role: 'admin' }).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
+    const demoteFromAdmin = async (userId) => { if (!isDeveloper()) throw new Error('Samo Developer može da ukloni admin status'); try { await supabase.from('users').update({ role: 'manager' }).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
 
     const getAdminStats = async () => {
         if (!isAdmin()) return null;
@@ -261,17 +261,17 @@ export const AuthProvider = ({ children }) => {
                 supabase.from('master_codes').select('*', { count: 'exact', head: true }).eq('status', 'used'),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'manager'),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'client'),
-                supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'god'])
+                supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'developer'])
             ]);
             return { totalUsers: totalUsers || 0, totalCompanies: totalCompanies || 0, totalCodes: totalCodes || 0, usedCodes: usedCodes || 0, availableCodes: (totalCodes || 0) - (usedCodes || 0), totalManagers: totalManagers || 0, totalClients: totalClients || 0, totalAdmins: totalAdmins || 0 };
         } catch { return null; }
     };
 
-    const deleteUser = async (userId) => { if (!isGod()) throw new Error('Samo GOD može da briše korisnike'); try { await supabase.from('users').delete().eq('id', userId); return { success: true }; } catch (error) { throw error; } };
+    const deleteUser = async (userId) => { if (!isDeveloper()) throw new Error('Samo Developer može da briše korisnike'); try { await supabase.from('users').delete().eq('id', userId); return { success: true }; } catch (error) { throw error; } };
     const updateUser = async (userId, updates) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('users').update(updates).eq('id', userId); return { success: true }; } catch (error) { throw error; } };
 
     const deleteCompany = async (companyCodeToDelete) => {
-        if (!isGod()) throw new Error('Samo GOD može da briše firme');
+        if (!isDeveloper()) throw new Error('Samo Developer može da briše firme');
         try {
             const { data: companyData } = await supabase.from('companies').select('id').eq('code', companyCodeToDelete).single();
             if (companyData) { await supabase.from('master_codes').update({ used_by_company: null, status: 'available', pib: null }).eq('used_by_company', companyData.id); }
@@ -284,7 +284,7 @@ export const AuthProvider = ({ children }) => {
     const updateCompany = async (companyCodeToUpdate, updates) => { if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju'); try { await supabase.from('companies').update(updates).eq('code', companyCodeToUpdate); return { success: true }; } catch (error) { throw error; } };
 
     const deleteMasterCode = async (codeId) => {
-        if (!isGod()) throw new Error('Samo GOD može da briše master kodove');
+        if (!isDeveloper()) throw new Error('Samo Developer može da briše master kodove');
         try {
             const { data: codeData } = await supabase.from('master_codes').select('status').eq('id', codeId).single();
             if (codeData.status === 'used') throw new Error('Ne možete obrisati iskorišćen kod.');
@@ -306,7 +306,7 @@ export const AuthProvider = ({ children }) => {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests,
         login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
-        isAdmin, isGod, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
+        isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode,
     };
 

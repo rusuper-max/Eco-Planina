@@ -16,7 +16,7 @@ const PublicRoute = ({ children }) => {
   const { user, isLoading } = useAuth();
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full"></div></div>;
   if (user) {
-    if (user.role === 'god' || user.role === 'admin') return <Navigate to="/admin" replace />;
+    if (user.role === 'developer' || user.role === 'admin') return <Navigate to="/admin" replace />;
     else if (user.role === 'manager') return <Navigate to="/manager" replace />;
     else return <Navigate to="/client" replace />;
   }

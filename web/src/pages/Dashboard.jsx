@@ -333,12 +333,12 @@ const AdminCompaniesTable = ({ companies, onView }) => {
     );
 };
 
-const AdminUsersTable = ({ users, onEdit, onDelete, isGod }) => {
+const AdminUsersTable = ({ users, onEdit, onDelete, isDeveloper }) => {
     if (!users?.length) {
         return <EmptyState icon={Users} title="Nema korisnika" desc="Registrovani korisnici će se prikazati ovde" />;
     }
-    const roleLabels = { god: 'GOD', admin: 'Admin', manager: 'Menadžer', client: 'Klijent' };
-    const roleColors = { god: 'purple', admin: 'red', manager: 'blue', client: 'emerald' };
+    const roleLabels = { developer: 'Developer', admin: 'Admin', manager: 'Menadžer', client: 'Klijent' };
+    const roleColors = { developer: 'purple', admin: 'red', manager: 'blue', client: 'emerald' };
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
@@ -349,7 +349,7 @@ const AdminUsersTable = ({ users, onEdit, onDelete, isGod }) => {
                             <th className="px-6 py-4">Telefon</th>
                             <th className="px-6 py-4">Uloga</th>
                             <th className="px-6 py-4">Firma</th>
-                            {isGod && <th className="px-6 py-4 text-right">Akcije</th>}
+                            {isDeveloper && <th className="px-6 py-4 text-right">Akcije</th>}
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -370,7 +370,7 @@ const AdminUsersTable = ({ users, onEdit, onDelete, isGod }) => {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-slate-600">{u.company?.name || '-'}</td>
-                                {isGod && (
+                                {isDeveloper && (
                                     <td className="px-6 py-4 text-right">
                                         <button onClick={() => onDelete(u.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
                                     </td>
@@ -384,7 +384,7 @@ const AdminUsersTable = ({ users, onEdit, onDelete, isGod }) => {
     );
 };
 
-const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isGod }) => (
+const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) => (
     <div className="space-y-4">
         <div className="flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800">Master Kodovi</h2>
@@ -423,7 +423,7 @@ const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isGod }) => (
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-1">
                                             <button onClick={() => onCopy(c.code)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"><Copy size={16} /></button>
-                                            {isGod && c.status !== 'used' && (
+                                            {isDeveloper && c.status !== 'used' && (
                                                 <button onClick={() => onDelete(c.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                             )}
                                         </div>
@@ -445,7 +445,7 @@ export default function Dashboard() {
     const {
         user, logout, companyName, companyCode, pickupRequests, clientRequests, processedNotification, clearProcessedNotification,
         addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, getAdminStats,
-        fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isGod
+        fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper
     } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -459,7 +459,7 @@ export default function Dashboard() {
     const [modalOpen, setModalOpen] = useState(false);
     const [submitLoading, setSubmitLoading] = useState(false);
 
-    const userRole = user?.role === 'god' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
+    const userRole = user?.role === 'developer' || user?.role === 'admin' ? 'admin' : user?.role || 'client';
 
     useEffect(() => { loadData(); }, [userRole, activeTab]);
 
@@ -642,8 +642,8 @@ export default function Dashboard() {
         // Admin tabs
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onView={(c) => alert(`Firma: ${c.name}\nKod: ${c.code}`)} />;
-            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isGod={isGod()} />;
-            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isGod={isGod()} />;
+            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} />;
+            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} />;
             return (
                 <div className="space-y-8">
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -711,7 +711,12 @@ export default function Dashboard() {
             </aside>
 
             {/* Main */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 relative">
+                {/* Background Image */}
+                <div
+                    className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-5 pointer-events-none"
+                    style={{ backgroundImage: 'url(https://vmsfsstxxndpxbsdylog.supabase.co/storage/v1/object/public/assets/background.jpg)' }}
+                />
                 {/* Header */}
                 <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-6">
                     <div className="flex items-center gap-4">

@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Leaf, User, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users } from 'lucide-react';
+import { Leaf, User, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown } from 'lucide-react';
+
+const COUNTRY_CODES = [
+    { code: '+381', country: 'Srbija', flag: '🇷🇸' },
+    { code: '+387', country: 'BiH', flag: '🇧🇦' },
+    { code: '+385', country: 'Hrvatska', flag: '🇭🇷' },
+    { code: '+386', country: 'Slovenija', flag: '🇸🇮' },
+    { code: '+382', country: 'Crna Gora', flag: '🇲🇪' },
+    { code: '+389', country: 'S. Makedonija', flag: '🇲🇰' },
+];
 
 export default function RegisterPage() {
     const navigate = useNavigate();
@@ -9,6 +18,8 @@ export default function RegisterPage() {
     const [step, setStep] = useState(1);
     const [role, setRole] = useState(null);
     const [joinExisting, setJoinExisting] = useState(false);
+    const [countryCode, setCountryCode] = useState('+381');
+    const [showCountryDropdown, setShowCountryDropdown] = useState(false);
     const [formData, setFormData] = useState({ name: '', phone: '', password: '', address: '', companyCode: '' });
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -19,9 +30,9 @@ export default function RegisterPage() {
         setError('');
         setLoading(true);
         try {
-            let formattedPhone = formData.phone.trim();
-            if (formattedPhone.startsWith('0')) formattedPhone = '+381' + formattedPhone.slice(1);
-            else if (!formattedPhone.startsWith('+')) formattedPhone = '+381' + formattedPhone;
+            let phoneNumber = formData.phone.trim().replace(/\s/g, '');
+            if (phoneNumber.startsWith('0')) phoneNumber = phoneNumber.slice(1);
+            const formattedPhone = countryCode + phoneNumber;
 
             await register({
                 name: formData.name,
@@ -39,6 +50,8 @@ export default function RegisterPage() {
             setLoading(false);
         }
     };
+
+    const selectedCountry = COUNTRY_CODES.find(c => c.code === countryCode);
 
     const RoleCard = ({ icon: Icon, title, desc, selected, onClick }) => (
         <button
@@ -168,16 +181,47 @@ export default function RegisterPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">Broj telefona</label>
-                                <div className="relative">
-                                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                    <input
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        placeholder="060 123 4567"
-                                        className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                                        required
-                                    />
+                                <div className="flex gap-2">
+                                    {/* Country Code Dropdown */}
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                                            className="flex items-center gap-2 px-3 py-3 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors min-w-[100px]"
+                                        >
+                                            <span className="text-lg">{selectedCountry?.flag}</span>
+                                            <span className="text-sm font-medium text-slate-700">{countryCode}</span>
+                                            <ChevronDown size={16} className="text-slate-400" />
+                                        </button>
+                                        {showCountryDropdown && (
+                                            <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-[180px] py-1">
+                                                {COUNTRY_CODES.map((c) => (
+                                                    <button
+                                                        key={c.code}
+                                                        type="button"
+                                                        onClick={() => { setCountryCode(c.code); setShowCountryDropdown(false); }}
+                                                        className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors ${countryCode === c.code ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700'}`}
+                                                    >
+                                                        <span className="text-lg">{c.flag}</span>
+                                                        <span className="text-sm font-medium">{c.code}</span>
+                                                        <span className="text-xs text-slate-500">{c.country}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Phone Input */}
+                                    <div className="relative flex-1">
+                                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                        <input
+                                            type="tel"
+                                            value={formData.phone}
+                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            placeholder="60 123 4567"
+                                            className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                            required
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
