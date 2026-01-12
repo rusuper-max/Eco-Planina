@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '../config/supabase';
 
 const AuthContext = createContext(null);
@@ -749,6 +749,10 @@ export const AuthProvider = ({ children }) => {
     };
 
     // Subscribe to new messages (both sent and received)
+    // Use ref to avoid infinite loop with messageSubscribers in dependency array
+    const messageSubscribersRef = useRef(messageSubscribers);
+    messageSubscribersRef.current = messageSubscribers;
+
     useEffect(() => {
         if (!user) return;
         fetchUnreadCount();
@@ -758,15 +762,15 @@ export const AuthProvider = ({ children }) => {
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, (payload) => {
                 fetchUnreadCount();
                 // Notify all subscribers about new message
-                messageSubscribers.forEach(cb => cb(payload.new, 'received'));
+                messageSubscribersRef.current.forEach(cb => cb(payload.new, 'received'));
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` }, (payload) => {
                 // Notify subscribers when we send a message (for multi-device sync)
-                messageSubscribers.forEach(cb => cb(payload.new, 'sent'));
+                messageSubscribersRef.current.forEach(cb => cb(payload.new, 'sent'));
             })
             .subscribe();
         return () => { supabase.removeChannel(subscription); };
-    }, [user, messageSubscribers]);
+    }, [user]);
 
     // Fetch all admin users (for contact admin feature)
     const fetchAdmins = async () => {
