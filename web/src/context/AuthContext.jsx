@@ -29,7 +29,8 @@ export const AuthProvider = ({ children }) => {
         if (savedSession) {
             const session = JSON.parse(savedSession);
             setUser(session.user);
-            setCompanyCode(session.companyCode);
+            // Always trim company code to prevent whitespace issues
+            setCompanyCode(session.companyCode?.trim() || null);
             setCompanyName(session.companyName);
         }
         if (savedOriginalUser) {
@@ -136,7 +137,8 @@ export const AuthProvider = ({ children }) => {
 
             // Admin/developer roles don't belong to a company
             const isAdminRole = userData.role === 'developer' || userData.role === 'admin';
-            let actualCompanyCode = isAdminRole ? null : (companyData?.code || userData.company_code);
+            // IMPORTANT: Always trim company code to prevent whitespace issues
+            let actualCompanyCode = isAdminRole ? null : (companyData?.code || userData.company_code)?.trim() || null;
             let actualCompanyName = isAdminRole ? null : (companyData?.name || 'Nepoznato');
             const userObj = { id: userData.id, name: userData.name, role: userData.role, address: userData.address, phone: userData.phone, latitude: userData.latitude, longitude: userData.longitude };
             setUser(userObj);
@@ -179,7 +181,8 @@ export const AuthProvider = ({ children }) => {
 
             // Set new session as target user
             const isAdminRole = targetUser.role === 'developer' || targetUser.role === 'admin';
-            const newCompanyCode = isAdminRole ? null : (companyData?.code || targetUser.company_code);
+            // Always trim company code to prevent whitespace issues
+            const newCompanyCode = isAdminRole ? null : (companyData?.code || targetUser.company_code)?.trim() || null;
             const newCompanyName = isAdminRole ? null : (companyData?.name || 'Nepoznato');
             const userObj = { id: targetUser.id, name: targetUser.name, role: targetUser.role, address: targetUser.address, phone: targetUser.phone, latitude: targetUser.latitude, longitude: targetUser.longitude };
 
@@ -196,7 +199,8 @@ export const AuthProvider = ({ children }) => {
     const exitImpersonation = () => {
         if (!originalUser) return;
         setUser(originalUser.user);
-        setCompanyCode(originalUser.companyCode);
+        // Always trim company code to prevent whitespace issues
+        setCompanyCode(originalUser.companyCode?.trim() || null);
         setCompanyName(originalUser.companyName);
         localStorage.setItem('eco_session', JSON.stringify(originalUser));
         setOriginalUser(null);
