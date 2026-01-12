@@ -3535,11 +3535,11 @@ export default function Dashboard() {
     const statCards = getStats();
     const pending = pickupRequests?.filter(r => r.status === 'pending') || [];
 
-    // Export functions
+    // Export functions - using semicolon as separator for Excel compatibility in Serbian locale
     const exportToCSV = (data, filename, headers) => {
         const csvContent = [
-            headers.map(h => h.label).join(','),
-            ...data.map(row => headers.map(h => `"${(row[h.key] || '').toString().replace(/"/g, '""')}"`).join(','))
+            headers.map(h => h.label).join(';'),
+            ...data.map(row => headers.map(h => `"${(row[h.key] || '').toString().replace(/"/g, '""')}"`).join(';'))
         ].join('\n');
         const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
