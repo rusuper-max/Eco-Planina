@@ -2840,7 +2840,7 @@ export default function Dashboard() {
     };
 
     const getMenu = () => {
-        if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }];
+        if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }, { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
@@ -2943,7 +2943,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                         {/* Chat */}
-                        {userRole !== 'admin' && (
+                        {true && (
                             <div className="relative">
                                 <button
                                     onClick={() => { setShowChatDropdown(!showChatDropdown); setShowNotifications(false); setShowProfileMenu(false); }}
