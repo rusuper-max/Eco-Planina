@@ -82,7 +82,20 @@ export default function Dashboard() {
 
 
 
-    useEffect(() => { loadData(); }, [userRole, activeTab, companyCode]);
+    // Initial data load - only when role or companyCode changes (not on tab change!)
+    const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+    useEffect(() => {
+        if (companyCode || userRole === 'admin') {
+            loadInitialData();
+        }
+    }, [userRole, companyCode]);
+
+    // Tab-specific data load (without blocking UI)
+    useEffect(() => {
+        if (initialDataLoaded) {
+            loadTabData();
+        }
+    }, [activeTab, initialDataLoaded]);
 
     // Load client history when client logs in or history tab is opened
     useEffect(() => {
@@ -129,38 +142,48 @@ export default function Dashboard() {
         return () => clearInterval(interval);
     }, []);
 
-    const loadData = async () => {
+    // Load initial data once (waste types, clients, stats) - blocks UI
+    const loadInitialData = async () => {
         setLoading(true);
         try {
             if (userRole === 'admin') {
                 setStats(await getAdminStats());
-                if (activeTab === 'companies') setCompanies(await fetchAllCompanies());
-                if (activeTab === 'users') setUsers(await fetchAllUsers());
-                if (activeTab === 'codes') setMasterCodes(await fetchAllMasterCodes());
             } else if (userRole === 'manager' || userRole === 'client') {
-                // Fetch company specific settings
+                // Fetch company specific settings - only once
                 const companyWasteTypes = await fetchCompanyWasteTypes();
-                console.log('Client loaded waste types:', companyWasteTypes);
                 if (companyWasteTypes && companyWasteTypes.length > 0) {
                     setWasteTypes(companyWasteTypes);
                 } else if (userRole === 'manager') {
-                    // Only managers fallback to defaults if nothing found, to allow them to create initial setup
-                    // Clients should see empty or what's in DB. Providing defaults to client might confuse them if manager deleted everything.
-                    // Actually, let's keep defaults for managers only on FIRST load if DB is empty.
                     setWasteTypes(WASTE_TYPES);
                 } else {
-                    setWasteTypes([]); // Client sees empty if nothing is set
+                    setWasteTypes([]);
                 }
 
                 if (userRole === 'manager') {
                     setClients(await fetchCompanyClients() || []);
-                    if (activeTab === 'history') {
-                        setProcessedRequests(await fetchProcessedRequests() || []);
-                    }
+                }
+            }
+            setInitialDataLoaded(true);
+        } catch (err) { console.error(err); }
+        finally { setLoading(false); }
+    };
+
+    // Load tab-specific data (doesn't block UI with spinner)
+    const loadTabData = async () => {
+        try {
+            if (userRole === 'admin') {
+                if (activeTab === 'companies' && companies.length === 0) setCompanies(await fetchAllCompanies());
+                if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
+                if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
+            } else if (userRole === 'manager') {
+                if (activeTab === 'history' && processedRequests.length === 0) {
+                    setProcessedRequests(await fetchProcessedRequests() || []);
+                }
+                if (activeTab === 'analytics' && processedRequests.length === 0) {
+                    setProcessedRequests(await fetchProcessedRequests() || []);
                 }
             }
         } catch (err) { console.error(err); }
-        finally { setLoading(false); }
     };
 
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
