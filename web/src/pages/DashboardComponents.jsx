@@ -264,8 +264,12 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
                 <h3 className="font-semibold mb-4">Tip otpada</h3>
                 <div className={`grid gap-3 ${wasteTypes.length <= 3 ? 'grid-cols-3' : wasteTypes.length <= 4 ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:grid-cols-3'}`}>
                     {wasteTypes.map(w => (
-                        <button key={w.id} onClick={() => setWasteType(w.id)} className={`p-4 rounded-xl border-2 text-center ${wasteType === w.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}>
-                            <span className="text-3xl block mb-2">{w.icon}</span>
+                        <button key={w.id} onClick={() => setWasteType(w.id)} className={`p-4 rounded-xl border-2 text-center flex flex-col items-center justify-center ${wasteType === w.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}>
+                            {w.customImage ? (
+                                <img src={w.customImage} alt={w.label} className="w-10 h-10 object-contain mb-2" />
+                            ) : (
+                                <span className="text-3xl block mb-2">{w.icon}</span>
+                            )}
                             <span className="text-sm font-medium">{w.label}</span>
                         </button>
                     ))}
