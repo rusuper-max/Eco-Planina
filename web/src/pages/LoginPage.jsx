@@ -1,150 +1,117 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import toast from 'react-hot-toast';
-import { Mountain, Phone, Lock, LogIn, ChevronDown } from 'lucide-react';
+import { Leaf, Phone, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 
-const COUNTRY_CODES = [
-  { code: '+381', flag: '🇷🇸', name: 'Srbija' },
-  { code: '+387', flag: '🇧🇦', name: 'BiH' },
-  { code: '+382', flag: '🇲🇪', name: 'Crna Gora' },
-  { code: '+385', flag: '🇭🇷', name: 'Hrvatska' },
-  { code: '+386', flag: '🇸🇮', name: 'Slovenija' },
-  { code: '+389', flag: '🇲🇰', name: 'S. Makedonija' },
-  { code: '+43', flag: '🇦🇹', name: 'Austrija' },
-  { code: '+49', flag: '🇩🇪', name: 'Nemačka' },
-  { code: '+41', flag: '🇨🇭', name: 'Švajcarska' },
-];
+export default function LoginPage() {
+    const navigate = useNavigate();
+    const { login } = useAuth();
+    const [phone, setPhone] = useState('');
+    const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
-const LoginPage = () => {
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [countryCode, setCountryCode] = useState('+381');
-  const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            let formattedPhone = phone.trim();
+            if (formattedPhone.startsWith('0')) formattedPhone = '+381' + formattedPhone.slice(1);
+            else if (!formattedPhone.startsWith('+')) formattedPhone = '+381' + formattedPhone;
+            const result = await login(formattedPhone, password);
+            if (result.success) {
+                if (result.role === 'god' || result.role === 'admin') navigate('/admin');
+                else if (result.role === 'manager') navigate('/manager');
+                else navigate('/client');
+            }
+        } catch (err) {
+            setError(err.message || 'Greška pri prijavi');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-  const selectedCountry = COUNTRY_CODES.find(c => c.code === countryCode) || COUNTRY_CODES[0];
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-slate-50 flex items-center justify-center p-4">
+            <div className="w-full max-w-md">
+                {/* Logo */}
+                <div className="text-center mb-8">
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-200 mb-4">
+                        <Leaf className="w-8 h-8 text-white" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-slate-800">EcoPlanina</h1>
+                    <p className="text-slate-500 mt-1">Sistem za upravljanje otpadom</p>
+                </div>
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+                {/* Form Card */}
+                <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
+                    <h2 className="text-xl font-bold text-slate-800 mb-6">Prijavite se</h2>
 
-    try {
-      const fullPhone = countryCode + phone.trim().replace(/^0+/, '');
-      const result = await login(fullPhone, password);
-      if (result.success) {
-        navigate(result.role === 'manager' ? '/manager' : result.role === 'admin' || result.role === 'god' ? '/admin' : '/client');
-      }
-    } catch (err) {
-      setError(err.message || 'Greška pri prijavi');
-      toast.error(err.message || 'Greška pri prijavi');
-    } finally {
-      setLoading(false);
-    }
-  };
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">
+                            {error}
+                        </div>
+                    )}
 
-  return (
-    <div className="login-page">
-      <div className="login-container">
-        <div className="login-header">
-          <Mountain size={48} className="logo-icon" />
-          <h1>EcoPlanina</h1>
-          <p>Pametno upravljanje otpadom</p>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Broj telefona</label>
+                            <div className="relative">
+                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="060 123 4567"
+                                    className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Lozinka</label>
+                            <div className="relative">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="••••••••"
+                                    className="w-full pl-12 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Prijavi se'}
+                        </button>
+                    </form>
+
+                    <div className="mt-6 text-center">
+                        <p className="text-slate-500 text-sm">
+                            Nemate nalog?{' '}
+                            <button onClick={() => navigate('/register')} className="text-emerald-600 hover:text-emerald-700 font-medium">
+                                Registrujte se
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="login-form">
-          <h2>Prijava</h2>
-          <p className="form-subtitle">Ulogujte se na postojeći nalog</p>
-
-          {error && <div className="error-message">{error}</div>}
-
-          <div className="input-group">
-            <label>Broj telefona</label>
-            <p className="input-hint">Unesite broj bez vodeće nule (npr. 641234567)</p>
-            <div className="phone-input-row">
-              <div className="country-code-wrapper">
-                <button
-                  type="button"
-                  className="country-code-btn"
-                  onClick={() => setShowCountryPicker(!showCountryPicker)}
-                >
-                  <span className="country-flag">{selectedCountry.flag}</span>
-                  <span className="country-code">{countryCode}</span>
-                  <ChevronDown size={16} />
-                </button>
-                {showCountryPicker && (
-                  <div className="country-picker-dropdown">
-                    {COUNTRY_CODES.map((country) => (
-                      <button
-                        key={country.code}
-                        type="button"
-                        className={`country-option ${countryCode === country.code ? 'selected' : ''}`}
-                        onClick={() => {
-                          setCountryCode(country.code);
-                          setShowCountryPicker(false);
-                        }}
-                      >
-                        <span className="country-flag">{country.flag}</span>
-                        <span className="country-name">{country.name}</span>
-                        <span className="country-code">{country.code}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="input-wrapper phone-input">
-                <Phone size={20} />
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  autoComplete="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="641234567"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="input-group">
-            <label>Lozinka</label>
-            <div className="input-wrapper">
-              <Lock size={20} />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Unesite lozinku"
-                required
-              />
-            </div>
-          </div>
-
-          <button type="submit" className="login-btn" disabled={loading || !phone.trim()}>
-            {loading ? (
-              <span className="loading-spinner"></span>
-            ) : (
-              <>
-                <LogIn size={20} />
-                Prijavi se
-              </>
-            )}
-          </button>
-        </form>
-
-        <p className="app-hint">
-          Nemate nalog? <Link to="/register" className="link">Registrujte se</Link>
-        </p>
-      </div>
-    </div>
-  );
-};
-
-export default LoginPage;
+    );
+}
