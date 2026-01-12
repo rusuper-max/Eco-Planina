@@ -264,13 +264,30 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
                 <h3 className="font-semibold mb-4">Vrsta Robe</h3>
                 <div className="grid gap-3 grid-cols-3 md:grid-cols-5">
                     {wasteTypes.map(w => (
-                        <button key={w.id} onClick={() => setWasteType(w.id)} className={`p-4 rounded-xl border-2 text-center flex flex-col items-center justify-center ${wasteType === w.id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}>
+                        <button
+                            key={w.id}
+                            onClick={() => setWasteType(w.id)}
+                            className={`relative group overflow-hidden rounded-xl border-2 transition-all duration-200 ${wasteType === w.id ? 'border-emerald-500 ring-2 ring-emerald-500 ring-offset-2' : 'border-slate-200 hover:border-emerald-300'
+                                } ${w.customImage ? 'h-32 p-0' : 'h-32 p-4 flex flex-col items-center justify-center'}`}
+                        >
                             {w.customImage ? (
-                                <img src={w.customImage} alt={w.label} className="w-10 h-10 object-contain mb-2" />
+                                <>
+                                    <img src={w.customImage} alt={w.label} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                    <div className={`absolute inset-0 flex items-end justify-center p-2 ${wasteType === w.id ? 'bg-black/40' : 'bg-black/20 group-hover:bg-black/30'}`}>
+                                        <span className="text-white text-sm font-bold drop-shadow-md text-center leading-tight">{w.label}</span>
+                                    </div>
+                                    {wasteType === w.id && (
+                                        <div className="absolute top-2 right-2 bg-emerald-500 text-white p-1 rounded-full shadow-lg">
+                                            <CheckCircle2 size={14} />
+                                        </div>
+                                    )}
+                                </>
                             ) : (
-                                <span className="text-3xl block mb-2">{w.icon}</span>
+                                <>
+                                    <span className="text-4xl block mb-2 filter drop-shadow-sm transition-transform duration-200 group-hover:scale-110">{w.icon}</span>
+                                    <span className={`text-sm font-medium text-center ${wasteType === w.id ? 'text-emerald-700' : 'text-slate-600'}`}>{w.label}</span>
+                                </>
                             )}
-                            <span className="text-sm font-medium">{w.label}</span>
                         </button>
                     ))}
                 </div>
