@@ -359,7 +359,9 @@ export const AuthProvider = ({ children }) => {
         if (!companyCode) return null;
         try {
             console.log('Fetching waste types for:', companyCode);
-            const { data, error } = await supabase.from('companies').select('waste_types').eq('code', companyCode).single();
+            // Handle whitespace: search for both raw and trimmed code
+            const codesToSearch = [companyCode, companyCode.trim()].filter((v, i, a) => a.indexOf(v) === i);
+            const { data, error } = await supabase.from('companies').select('waste_types').in('code', codesToSearch).limit(1).single();
             console.log('Fetch result:', data, error);
             if (error) throw error;
             return data?.waste_types || null;
@@ -634,10 +636,20 @@ export const AuthProvider = ({ children }) => {
     const deleteConversation = async (partnerId) => {
         if (!user) return;
         try {
-            // Delete all messages between current user and partner
-            await supabase.from('messages')
+            // Delete messages where current user is sender and partner is receiver
+            const { error: error1 } = await supabase.from('messages')
                 .delete()
-                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`);
+                .eq('sender_id', user.id)
+                .eq('receiver_id', partnerId);
+            if (error1) throw error1;
+
+            // Delete messages where partner is sender and current user is receiver
+            const { error: error2 } = await supabase.from('messages')
+                .delete()
+                .eq('sender_id', partnerId)
+                .eq('receiver_id', user.id);
+            if (error2) throw error2;
+
             fetchUnreadCount();
             return { success: true };
         } catch (error) { console.error('Error deleting conversation:', error); throw error; }
