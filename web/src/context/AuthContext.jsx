@@ -279,7 +279,11 @@ export const AuthProvider = ({ children }) => {
             const { error } = await supabase.from('users').update({ name: newName }).eq('id', user.id);
             if (error) throw error;
             // Update local user state
-            setUser(prev => ({ ...prev, name: newName }));
+            const updatedUser = { ...user, name: newName };
+            setUser(updatedUser);
+            // Update local storage
+            const session = JSON.parse(localStorage.getItem('eco_session') || '{}');
+            localStorage.setItem('eco_session', JSON.stringify({ ...session, user: updatedUser }));
             return { success: true };
         } catch (error) { throw error; }
     };
@@ -293,6 +297,9 @@ export const AuthProvider = ({ children }) => {
             if (error) throw error;
             // Update local state
             setCompanyName(newCompanyName);
+            // Update local storage
+            const session = JSON.parse(localStorage.getItem('eco_session') || '{}');
+            localStorage.setItem('eco_session', JSON.stringify({ ...session, companyName: newCompanyName }));
             return { success: true };
         } catch (error) { throw error; }
     };

@@ -760,14 +760,14 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
             {/* Search & Field Selection */}
             <div className="bg-white rounded-2xl border p-6">
                 <div className="flex flex-wrap gap-4 mb-4">
-                    <div className="relative flex-1 min-w-[250px]">
-                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <div className="relative flex-1 md:max-w-md">
+                        <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-500" />
                         <input
                             type="text"
-                            placeholder="Pretraži..."
+                            placeholder="Pretraži po imenu, vrsti, datumu..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                            className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none text-sm placeholder:text-slate-400"
                         />
                     </div>
                 </div>
@@ -987,14 +987,14 @@ const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
         <div className="space-y-4">
             {/* Search and Filters */}
             <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <div className="relative flex-1 md:max-w-xs">
+                    <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-500" />
                     <input
                         type="text"
-                        placeholder="Pretraži po imenu ili vrsti..."
+                        placeholder="Pretraži..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm"
+                        className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none text-sm placeholder:text-slate-400"
                     />
                 </div>
                 <select
@@ -1676,6 +1676,7 @@ const getStablePosition = (id, baseLatitude = 44.8, baseLongitude = 20.45) => {
 // Draggable Marker component
 const DraggableMarker = ({ position, onPositionChange }) => {
     const [markerPosition, setMarkerPosition] = useState(position);
+    const markerRef = useRef(null);
 
     const eventHandlers = useMemo(() => ({
         dragend(e) {
@@ -1690,12 +1691,15 @@ const DraggableMarker = ({ position, onPositionChange }) => {
         setMarkerPosition(position);
     }, [position]);
 
+    const markerIcon = useMemo(() => createIcon('red'), []);
+
     return (
         <Marker
             position={markerPosition}
             draggable={true}
             eventHandlers={eventHandlers}
-            icon={createIcon('red')}
+            icon={markerIcon}
+            ref={markerRef}
         >
             <Popup>Prevuci marker na željenu lokaciju</Popup>
         </Marker>
