@@ -19,14 +19,14 @@ import {
     NewRequestForm, ClientRequestsView, ClientHistoryView, ManagerRequestsTable,
     PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement,
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
-    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal,
+    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal
 } from './DashboardComponents';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -42,6 +42,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [submitLoading, setSubmitLoading] = useState(false);
     const [selectedRequest, setSelectedRequest] = useState(null);
+    const [processingRequest, setProcessingRequest] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [editingClientLocation, setEditingClientLocation] = useState(null);
     const [showNotifications, setShowNotifications] = useState(false);
@@ -153,7 +154,10 @@ export default function Dashboard() {
 
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
     const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { alert(err.message); } finally { setSubmitLoading(false); } };
-    const handleProcessRequest = async (req) => { if (window.confirm(`Označiti kao obrađen?`)) try { await markRequestAsProcessed(req); } catch (err) { alert(err.message); } };
+    const handleProcessRequest = (req) => setProcessingRequest(req);
+    const handleConfirmProcess = async (req, proofImageUrl, note) => {
+        await markRequestAsProcessed(req, proofImageUrl, note);
+    };
     const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { alert(err.message); } };
     const handleDeleteClient = async (id) => { if (window.confirm('Obrisati klijenta?')) try { await deleteClient?.(id); setClients(await fetchCompanyClients()); } catch (err) { alert(err.message); } };
     const handleGenerateCode = async () => { try { await generateMasterCode(); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
@@ -339,7 +343,7 @@ export default function Dashboard() {
     const renderContent = () => {
         // Chat is available for both managers and clients
         if (activeTab === 'messages') {
-            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} />;
+            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} />;
         }
         if (userRole === 'client') {
             if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} />;
@@ -595,7 +599,7 @@ export default function Dashboard() {
                                                     </div>
                                                     <button onClick={() => clearNotification(n.id)} className="p-1 text-slate-300 hover:text-slate-500"><X size={14} /></button>
                                                 </div>
-                                            )) : pending.filter(r => r.urgency === '24h').length === 0 && (
+                                            )) : pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length === 0 && (
                                                 <div className="px-4 py-8 text-center text-slate-400">
                                                     <Bell size={24} className="mx-auto mb-2 opacity-50" />
                                                     <p className="text-sm">{language === 'sr' ? 'Nema novih obaveštenja' : 'No new notifications'}</p>
@@ -677,6 +681,7 @@ export default function Dashboard() {
                 </main>
             </div>
             <RequestDetailsModal request={selectedRequest} onClose={() => setSelectedRequest(null)} />
+            <ProcessRequestModal request={processingRequest} onProcess={handleConfirmProcess} onClose={() => setProcessingRequest(null)} />
             <ClientDetailsModal client={selectedClient} equipment={equipment} onClose={() => setSelectedClient(null)} />
             {editingClientLocation && (
                 <Modal open={!!editingClientLocation} onClose={() => setEditingClientLocation(null)} title="Podesi lokaciju klijenta">

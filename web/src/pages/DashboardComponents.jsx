@@ -396,6 +396,7 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortBy, setSortBy] = useState('processed_at'); // processed_at, created_at, type
     const [sortDir, setSortDir] = useState('desc');
+    const [viewingProof, setViewingProof] = useState(null);
     const itemsPerPage = 10;
 
     if (loading) {
@@ -483,12 +484,73 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                                             {r.urgency === '24h' ? 'Bilo hitno' : r.urgency === '48h' ? 'Bilo srednje' : 'Bilo normalno'}
                                         </span>
                                     )}
+                                    {r.proof_image_url && (
+                                        <button
+                                            onClick={() => setViewingProof(r)}
+                                            className="px-3 py-1.5 text-xs font-medium rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1"
+                                        >
+                                            <Image size={14} /> Dokaz
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
             </div>
+
+            {/* Proof Image/PDF Modal */}
+            {viewingProof && (
+                <Modal open={!!viewingProof} onClose={() => setViewingProof(null)} title="Dokaz o izvršenoj usluzi">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                            <span className="text-2xl">{wasteTypes.find(w => w.id === viewingProof.waste_type)?.icon}</span>
+                            <div>
+                                <p className="font-medium">{viewingProof.waste_label}</p>
+                                <p className="text-xs text-slate-500">
+                                    Obrađeno: {new Date(viewingProof.processed_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Check if PDF or Image */}
+                        {viewingProof.proof_image_url?.toLowerCase().endsWith('.pdf') ? (
+                            <div className="border rounded-xl overflow-hidden">
+                                <iframe
+                                    src={viewingProof.proof_image_url}
+                                    className="w-full h-96"
+                                    title="PDF Dokaz"
+                                />
+                            </div>
+                        ) : (
+                            <img
+                                src={viewingProof.proof_image_url}
+                                alt="Dokaz o izvršenoj usluzi"
+                                className="w-full rounded-xl"
+                            />
+                        )}
+
+                        {viewingProof.processing_note && (
+                            <div className="p-3 bg-amber-50 rounded-xl">
+                                <p className="text-xs text-amber-600 mb-1">Napomena pri obradi</p>
+                                <p className="text-sm">{viewingProof.processing_note}</p>
+                            </div>
+                        )}
+
+                        {/* Download button */}
+                        <a
+                            href={viewingProof.proof_image_url}
+                            download={`dokaz_${viewingProof.id || Date.now()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors"
+                        >
+                            <Download size={18} />
+                            Preuzmi dokaz
+                        </a>
+                    </div>
+                </Modal>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (
@@ -1159,6 +1221,7 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
     const [sortDir, setSortDir] = useState('desc');
+    const [viewingProof, setViewingProof] = useState(null);
 
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
@@ -1269,11 +1332,12 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                                 </button>
                             </th>
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Status</th>
+                            <th className="px-2 py-3 text-center">Dokaz</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => (
                             <tr key={req.id || idx} className="hover:bg-slate-50">
                                 <td className="px-3 md:px-4 py-3">
@@ -1301,11 +1365,79 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                                         Obrađen
                                     </span>
                                 </td>
+                                <td className="px-2 py-3 text-center">
+                                    {req.proof_image_url ? (
+                                        <button
+                                            onClick={() => setViewingProof(req)}
+                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                            title="Pogledaj dokaz"
+                                        >
+                                            <Image size={18} />
+                                        </button>
+                                    ) : (
+                                        <span className="text-slate-300"><Image size={18} /></span>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+
+            {/* Proof Image/PDF Modal */}
+            {viewingProof && (
+                <Modal open={!!viewingProof} onClose={() => setViewingProof(null)} title="Dokaz o izvršenoj usluzi">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                            <span className="text-2xl">{wasteTypes.find(w => w.id === viewingProof.waste_type)?.icon}</span>
+                            <div>
+                                <p className="font-medium">{viewingProof.client_name}</p>
+                                <p className="text-xs text-slate-500">{viewingProof.waste_label}</p>
+                            </div>
+                        </div>
+
+                        {/* Check if PDF or Image */}
+                        {viewingProof.proof_image_url?.toLowerCase().endsWith('.pdf') ? (
+                            <div className="border rounded-xl overflow-hidden">
+                                <iframe
+                                    src={viewingProof.proof_image_url}
+                                    className="w-full h-96"
+                                    title="PDF Dokaz"
+                                />
+                            </div>
+                        ) : (
+                            <img
+                                src={viewingProof.proof_image_url}
+                                alt="Dokaz o izvršenoj usluzi"
+                                className="w-full rounded-xl"
+                            />
+                        )}
+
+                        {viewingProof.processing_note && (
+                            <div className="p-3 bg-amber-50 rounded-xl">
+                                <p className="text-xs text-amber-600 mb-1">Napomena pri obradi</p>
+                                <p className="text-sm">{viewingProof.processing_note}</p>
+                            </div>
+                        )}
+
+                        <p className="text-xs text-slate-500 text-center">
+                            Obrađeno: {formatDateTime(viewingProof.processed_at)}
+                        </p>
+
+                        {/* Download button */}
+                        <a
+                            href={viewingProof.proof_image_url}
+                            download={`dokaz_${viewingProof.id || Date.now()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors"
+                        >
+                            <Download size={18} />
+                            Preuzmi dokaz
+                        </a>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };
@@ -2223,6 +2355,168 @@ export const RequestDetailsModal = ({ request, onClose }) => {
     );
 };
 
+// Process Request Modal with Proof of Service photo/PDF upload
+export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
+    const [proofFile, setProofFile] = useState(null);
+    const [proofType, setProofType] = useState(null); // 'image' or 'pdf'
+    const [uploading, setUploading] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const [note, setNote] = useState('');
+
+    if (!request) return null;
+    const rem = getRemainingTime(request.created_at, request.urgency);
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const isImage = file.type.startsWith('image/');
+        const isPDF = file.type === 'application/pdf';
+
+        if (!isImage && !isPDF) {
+            alert('Molimo izaberite sliku ili PDF fajl');
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Fajl mora biti manji od 10MB');
+            return;
+        }
+        setUploading(true);
+        try {
+            const url = await uploadImage(file, 'proof_of_service');
+            setProofFile(url);
+            setProofType(isPDF ? 'pdf' : 'image');
+        } catch (err) {
+            alert('Greška pri uploadu: ' + err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleProcess = async () => {
+        setProcessing(true);
+        try {
+            await onProcess(request, proofFile, note);
+            onClose();
+        } catch (err) {
+            alert('Greška: ' + err.message);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    return (
+        <Modal open={!!request} onClose={onClose} title="Obrada zahteva">
+            <div className="space-y-4">
+                {/* Request summary */}
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                    <span className="text-4xl">{WASTE_TYPES.find(w => w.id === request.waste_type)?.icon}</span>
+                    <div className="flex-1">
+                        <h3 className="font-bold text-lg">{request.waste_label}</h3>
+                        <p className="text-sm text-slate-500">{request.client_name}</p>
+                    </div>
+                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span>
+                </div>
+
+                {/* Address */}
+                <div className="p-3 bg-slate-50 rounded-xl">
+                    <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin size={14} /> Adresa</p>
+                    <p className="font-medium">{request.client_address || 'Nije uneta'}</p>
+                </div>
+
+                {/* Proof of Service photo/PDF */}
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
+                    <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                        <Image size={18} className="text-emerald-600" />
+                        Dokaz o izvršenoj usluzi (opciono)
+                    </p>
+                    <p className="text-xs text-slate-500 mb-3">Uploadujte sliku ili PDF dokument kao dokaz</p>
+
+                    {proofFile ? (
+                        <div className="relative">
+                            {proofType === 'pdf' ? (
+                                <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl">
+                                    <FileText size={32} className="text-blue-600" />
+                                    <div className="flex-1">
+                                        <p className="font-medium text-blue-900">PDF dokument</p>
+                                        <p className="text-xs text-blue-600">Uploadovan uspešno</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProofFile(null); setProofType(null); }}
+                                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative inline-block">
+                                    <img src={proofFile} alt="Dokaz" className="w-full max-w-xs h-48 object-cover rounded-xl" />
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProofFile(null); setProofType(null); }}
+                                        className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <label className="cursor-pointer block">
+                            <div className="w-full h-32 bg-slate-100 rounded-xl flex flex-col items-center justify-center hover:bg-slate-200 transition-colors border border-slate-200">
+                                {uploading ? (
+                                    <Loader2 size={32} className="text-emerald-500 animate-spin" />
+                                ) : (
+                                    <>
+                                        <Upload size={32} className="text-slate-400 mb-2" />
+                                        <span className="text-sm text-slate-500">Kliknite za upload slike ili PDF</span>
+                                    </>
+                                )}
+                            </div>
+                            <input type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFileUpload} className="hidden" disabled={uploading} />
+                        </label>
+                    )}
+                </div>
+
+                {/* Optional note */}
+                <div>
+                    <label className="text-sm font-medium text-slate-700 mb-2 block">Napomena (opciono)</label>
+                    <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Dodatne informacije o obradi..."
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none"
+                        rows={2}
+                    />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                    <button
+                        onClick={onClose}
+                        disabled={processing}
+                        className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium disabled:opacity-50"
+                    >
+                        Otkaži
+                    </button>
+                    <button
+                        onClick={handleProcess}
+                        disabled={processing || uploading}
+                        className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {processing ? (
+                            <><Loader2 size={18} className="animate-spin" /> Obrada...</>
+                        ) : (
+                            <><CheckCircle2 size={18} /> Označi kao obrađeno</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 // Client Details Modal
 export const ClientDetailsModal = ({ client, equipment, onClose }) => {
     if (!client) return null;
@@ -2847,7 +3141,7 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
 };
 
 // Chat Interface Component
-export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, fetchCompanyMembers, sendMessageToAdmins, userRole }) => {
+export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, fetchCompanyMembers, sendMessageToAdmins, userRole, subscribeToMessages }) => {
     const [conversations, setConversations] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
@@ -2877,14 +3171,31 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatMessages]);
 
-    // Real-time subscription for selected chat
+    // Real-time subscription for new messages (replaces polling)
     useEffect(() => {
-        if (!selectedChat) return;
-        const interval = setInterval(() => {
-            loadMessages(selectedChat.partnerId);
-        }, 3000);
-        return () => clearInterval(interval);
-    }, [selectedChat]);
+        if (!subscribeToMessages) return;
+        const unsubscribe = subscribeToMessages((newMsg, type) => {
+            // Check if this message belongs to current chat
+            if (selectedChat) {
+                const isFromPartner = newMsg.sender_id === selectedChat.partnerId;
+                const isToPartner = newMsg.receiver_id === selectedChat.partnerId;
+                if (isFromPartner || isToPartner) {
+                    // Add message to chat if not already there
+                    setChatMessages(prev => {
+                        if (prev.some(m => m.id === newMsg.id)) return prev;
+                        return [...prev, newMsg];
+                    });
+                    // Mark as read if received
+                    if (type === 'received' && isFromPartner) {
+                        markMessagesAsRead(selectedChat.partnerId);
+                    }
+                }
+            }
+            // Refresh conversations list for any new message
+            loadConversations();
+        });
+        return unsubscribe;
+    }, [subscribeToMessages, selectedChat]);
 
     const loadConversations = async () => {
         setLoading(true);

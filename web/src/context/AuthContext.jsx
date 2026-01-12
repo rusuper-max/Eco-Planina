@@ -258,9 +258,23 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
-    const markRequestAsProcessed = async (request) => {
+    const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null) => {
         try {
-            const processedRecord = { company_code: companyCode, client_id: request.user_id, client_name: request.client_name, client_address: request.client_address, waste_type: request.waste_type, waste_label: request.waste_label, fill_level: request.fill_level, urgency: request.urgency, note: request.note, created_at: request.created_at, processed_at: new Date().toISOString() };
+            const processedRecord = {
+                company_code: companyCode,
+                client_id: request.user_id,
+                client_name: request.client_name,
+                client_address: request.client_address,
+                waste_type: request.waste_type,
+                waste_label: request.waste_label,
+                fill_level: request.fill_level,
+                urgency: request.urgency,
+                note: request.note,
+                processing_note: processingNote,
+                created_at: request.created_at,
+                processed_at: new Date().toISOString(),
+                proof_image_url: proofImageUrl
+            };
             await supabase.from('processed_requests').insert([processedRecord]);
             await removePickupRequest(request.id);
             return { success: true };
@@ -623,19 +637,33 @@ export const AuthProvider = ({ children }) => {
         } catch (error) { console.error('Error fetching conversations:', error); return []; }
     };
 
-    // Subscribe to new messages
+    // Message subscription callbacks (for real-time chat updates)
+    const [messageSubscribers, setMessageSubscribers] = useState([]);
+
+    const subscribeToMessages = (callback) => {
+        setMessageSubscribers(prev => [...prev, callback]);
+        return () => setMessageSubscribers(prev => prev.filter(cb => cb !== callback));
+    };
+
+    // Subscribe to new messages (both sent and received)
     useEffect(() => {
         if (!user) return;
         fetchUnreadCount();
-        const channelName = `messages_${user.id}`;
+        const channelName = `messages_realtime_${user.id}`;
         const subscription = supabase
             .channel(channelName)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, () => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, (payload) => {
                 fetchUnreadCount();
+                // Notify all subscribers about new message
+                messageSubscribers.forEach(cb => cb(payload.new, 'received'));
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${user.id}` }, (payload) => {
+                // Notify subscribers when we send a message (for multi-device sync)
+                messageSubscribers.forEach(cb => cb(payload.new, 'sent'));
             })
             .subscribe();
         return () => { supabase.removeChannel(subscription); };
-    }, [user]);
+    }, [user, messageSubscribers]);
 
     // Fetch all admin users (for contact admin feature)
     const fetchAdmins = async () => {
@@ -683,7 +711,7 @@ export const AuthProvider = ({ children }) => {
         // Impersonation
         originalUser, impersonateUser, exitImpersonation, changeUserRole,
         // Chat
-        messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations, deleteConversation,
+        messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations, deleteConversation, subscribeToMessages,
         // Admin contact
         fetchAdmins, sendMessageToAdmins,
     };
