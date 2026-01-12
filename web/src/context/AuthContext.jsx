@@ -443,8 +443,7 @@ export const AuthProvider = ({ children }) => {
                 sender_id: user.id,
                 receiver_id: admin.id,
                 company_code: companyCode,
-                content: content.trim(),
-                is_support: true
+                content: content.trim()
             }));
 
             const { error } = await supabase.from('messages').insert(messages);

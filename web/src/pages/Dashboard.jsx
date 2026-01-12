@@ -563,7 +563,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
             <!DOCTYPE html>
             <html>
             <head>
-                <title>EcoMountainT - Štampa</title>
+                <title>EcoMountainTracking - Štampa</title>
                 <style>
                     body { font-family: Arial, sans-serif; margin: 20px; }
                     h1 { color: #059669; margin-bottom: 5px; }
@@ -577,7 +577,7 @@ const PrintExport = ({ clients, requests, processedRequests, wasteTypes = WASTE_
                 </style>
             </head>
             <body>
-                <h1>EcoMountainT</h1>
+                <h1>EcoMountainTracking</h1>
                 <p class="subtitle">${dataType === 'clients' ? 'Lista klijenata' : dataType === 'requests' ? 'Aktivni zahtevi' : 'Istorija zahteva'} - ${new Date().toLocaleDateString('sr-RS')}</p>
                 <table>
                     <thead><tr>
@@ -1526,9 +1526,9 @@ const getStablePosition = (id, baseLatitude = 44.8, baseLongitude = 20.45) => {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash; // Convert to 32bit integer
     }
-    // Use hash to generate stable offsets - wider spread (0.3 degrees ~ 30km)
-    const latOffset = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.3;
-    const lngOffset = ((Math.abs(hash >> 10) % 1000) / 1000 - 0.5) * 0.3;
+    // Use hash to generate stable offsets - smaller spread (0.1 degrees ~ 10km) so markers stay visible
+    const latOffset = ((Math.abs(hash) % 1000) / 1000 - 0.5) * 0.1;
+    const lngOffset = ((Math.abs(hash >> 10) % 1000) / 1000 - 0.5) * 0.1;
     return [baseLatitude + latOffset, baseLongitude + lngOffset];
 };
 
@@ -1652,16 +1652,24 @@ const LocationPicker = ({ initialPosition, onSave, onCancel, clientName }) => {
 };
 
 // Map
-// Component to auto-fit map bounds to markers
+// Component to auto-fit map bounds to markers - only on initial load or when marker count changes
 const FitBounds = ({ positions }) => {
     const map = useMap();
+    const [hasFitted, setHasFitted] = useState(false);
+    const prevLengthRef = useRef(positions?.length || 0);
 
     useEffect(() => {
-        if (positions && positions.length > 0) {
-            const bounds = L.latLngBounds(positions);
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+        const currentLength = positions?.length || 0;
+        // Only fit bounds on initial load or when number of markers changes
+        if (positions && currentLength > 0 && (!hasFitted || currentLength !== prevLengthRef.current)) {
+            setTimeout(() => {
+                const bounds = L.latLngBounds(positions);
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+                setHasFitted(true);
+                prevLengthRef.current = currentLength;
+            }, 100);
         }
-    }, [map, positions]);
+    }, [map, positions, hasFitted]);
 
     return null;
 };
@@ -1678,16 +1686,40 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
 
     // Calculate positions for all items
     const markers = useMemo(() => {
-        return filteredItems.map((item, index) => {
+        // First, separate items with and without coordinates
+        const withCoords = [];
+        const withoutCoords = [];
+
+        filteredItems.forEach((item, index) => {
             const lat = item.latitude ? parseFloat(item.latitude) : null;
             const lng = item.longitude ? parseFloat(item.longitude) : null;
+            const hasValidCoords = lat && lng && !isNaN(lat) && !isNaN(lng);
 
-            const position = (lat && lng && !isNaN(lat) && !isNaN(lng))
-                ? [lat, lng]
-                : getStablePosition(item.id || `item-${index}`);
-
-            return { item, position, index };
+            if (hasValidCoords) {
+                withCoords.push({ item, position: [lat, lng], index, hasCoords: true });
+            } else {
+                withoutCoords.push({ item, index, hasCoords: false });
+            }
         });
+
+        // Calculate center for items without coords (use center of items with coords, or default)
+        let centerLat = 44.0;  // Serbia center
+        let centerLng = 20.9;
+        if (withCoords.length > 0) {
+            centerLat = withCoords.reduce((sum, m) => sum + m.position[0], 0) / withCoords.length;
+            centerLng = withCoords.reduce((sum, m) => sum + m.position[1], 0) / withCoords.length;
+        }
+
+        // Distribute items without coords in a circle around the center
+        const radius = 0.05; // ~5km radius
+        withoutCoords.forEach((item, i) => {
+            const angle = (2 * Math.PI * i) / Math.max(withoutCoords.length, 1);
+            const lat = centerLat + radius * Math.cos(angle);
+            const lng = centerLng + radius * Math.sin(angle);
+            item.position = [lat, lng];
+        });
+
+        return [...withCoords, ...withoutCoords];
     }, [filteredItems]);
 
     // Extract all positions for bounds fitting
@@ -1740,16 +1772,18 @@ const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
             <MapContainer center={[44.8, 20.45]} zoom={11} style={{ height: type === 'requests' ? 'calc(100% - 52px)' : '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FitBounds positions={allPositions} />
-                {markers.map(({ item, position, index }) => (
+                {markers.map(({ item, position, index, hasCoords }) => (
                     <Marker
                         key={item.id || `marker-${index}`}
                         position={position}
                         icon={createCustomIcon(item.urgency, item.waste_type, type === 'clients')}
+                        opacity={hasCoords ? 1 : 0.7}
                     >
                         <Popup>
                             <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
                             <p className="text-sm">{type === 'requests' ? item.waste_label : item.phone}</p>
                             <p className="text-xs text-gray-500">{type === 'requests' ? item.client_address : item.address}</p>
+                            {!hasCoords && <p className="text-xs text-orange-500 mt-1">⚠️ Lokacija nije podešena</p>}
                             {type === 'clients' && onClientLocationEdit && (
                                 <button
                                     onClick={() => onClientLocationEdit(item)}
@@ -2650,7 +2684,7 @@ export default function Dashboard() {
             <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-800 transition-transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                 <div className="h-full flex flex-col">
                     <div className="h-20 flex items-center justify-between px-6 border-b border-slate-700">
-                        <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white"><Mountain size={20} /></div><span className="font-bold text-xl text-white">EcoMountain<span className="text-emerald-400">T</span></span></div>
+                        <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0"><Mountain size={20} /></div><div className="flex flex-col leading-tight"><span className="font-bold text-lg text-white">EcoMountain</span><span className="font-bold text-sm text-emerald-400">Tracking</span></div></div>
                         <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24} /></button>
                     </div>
                     <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} onClick={() => { setActiveTab(m.id); setSidebarOpen(false); }} />)}</nav>
