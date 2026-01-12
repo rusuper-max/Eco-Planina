@@ -21,14 +21,19 @@ export const AuthProvider = ({ children }) => {
     const [processedNotification, setProcessedNotification] = useState(null);
     const [messages, setMessages] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [originalUser, setOriginalUser] = useState(null); // For impersonation
 
     useEffect(() => {
         const savedSession = localStorage.getItem('eco_session');
+        const savedOriginalUser = localStorage.getItem('eco_original_user');
         if (savedSession) {
             const session = JSON.parse(savedSession);
             setUser(session.user);
             setCompanyCode(session.companyCode);
             setCompanyName(session.companyName);
+        }
+        if (savedOriginalUser) {
+            setOriginalUser(JSON.parse(savedOriginalUser));
         }
         setIsLoading(false);
     }, []);
@@ -128,7 +133,74 @@ export const AuthProvider = ({ children }) => {
 
     const logout = () => {
         setUser(null); setCompanyCode(null); setCompanyName(null); setPickupRequests([]);
+        setOriginalUser(null);
         localStorage.removeItem('eco_session');
+        localStorage.removeItem('eco_original_user');
+    };
+
+    // Impersonate user (login as another user) - only for admin/developer
+    const impersonateUser = async (userId) => {
+        const currentRole = user?.role;
+        if (currentRole !== 'developer' && currentRole !== 'admin') {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+        try {
+            const { data: targetUser, error } = await supabase.from('users').select('*').eq('id', userId).single();
+            if (error || !targetUser) throw new Error('Korisnik nije pronađen');
+
+            // Save original user session
+            const originalSession = { user, companyCode, companyName };
+            setOriginalUser(originalSession);
+            localStorage.setItem('eco_original_user', JSON.stringify(originalSession));
+
+            // Get company data for target user
+            let companyData = null;
+            if (targetUser.company_code) {
+                const { data: company } = await supabase.from('companies').select('*').eq('code', targetUser.company_code).single();
+                companyData = company;
+            }
+
+            // Set new session as target user
+            const isAdminRole = targetUser.role === 'developer' || targetUser.role === 'admin';
+            const newCompanyCode = isAdminRole ? null : (companyData?.code || targetUser.company_code);
+            const newCompanyName = isAdminRole ? null : (companyData?.name || 'Nepoznato');
+            const userObj = { id: targetUser.id, name: targetUser.name, role: targetUser.role, address: targetUser.address, phone: targetUser.phone, latitude: targetUser.latitude, longitude: targetUser.longitude };
+
+            setUser(userObj);
+            setCompanyCode(newCompanyCode);
+            setCompanyName(newCompanyName);
+            localStorage.setItem('eco_session', JSON.stringify({ user: userObj, companyCode: newCompanyCode, companyName: newCompanyName }));
+
+            return { success: true, role: targetUser.role };
+        } catch (error) { throw error; }
+    };
+
+    // Exit impersonation and return to original user
+    const exitImpersonation = () => {
+        if (!originalUser) return;
+        setUser(originalUser.user);
+        setCompanyCode(originalUser.companyCode);
+        setCompanyName(originalUser.companyName);
+        localStorage.setItem('eco_session', JSON.stringify(originalUser));
+        setOriginalUser(null);
+        localStorage.removeItem('eco_original_user');
+    };
+
+    // Change user role (client <-> manager only)
+    const changeUserRole = async (userId, newRole) => {
+        const currentRole = user?.role;
+        if (currentRole !== 'developer' && currentRole !== 'admin') {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+        // Only allow client <-> manager changes
+        if (newRole !== 'client' && newRole !== 'manager') {
+            throw new Error('Možete menjati samo između Klijent i Menadžer uloga');
+        }
+        try {
+            const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) { throw error; }
     };
 
     const register = async ({ name, phone, password, address, companyCode: inputCode, role, joinExisting }) => {
@@ -550,6 +622,8 @@ export const AuthProvider = ({ children }) => {
         updateProfile, updateCompanyName,
         // Admin functions
         toggleCompanyStatus,
+        // Impersonation
+        originalUser, impersonateUser, exitImpersonation, changeUserRole,
         // Chat
         messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
         // Admin contact

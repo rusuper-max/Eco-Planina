@@ -9,7 +9,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle
+    Lock, Unlock, AlertTriangle, LogIn
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -2215,7 +2215,7 @@ const AdminCompaniesTable = ({ companies, onView }) => {
     );
 };
 
-const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
+const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh }) => {
     // State
     const [searchQuery, setSearchQuery] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
@@ -2223,6 +2223,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
     const [deleteModal, setDeleteModal] = useState(null);
     const [detailsModal, setDetailsModal] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [changingRole, setChangingRole] = useState(null);
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -2363,7 +2364,7 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
                                     </div>
                                 </th>
                             ))}
-                            {isDeveloper && <th className="px-6 py-4 text-right">Akcije</th>}
+                            <th className="px-6 py-4 text-right">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -2395,18 +2396,49 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
                                             {u.company?.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
                                         </div>
                                     </td>
-                                    {isDeveloper && (
-                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                            {!isProtected(u.role) && (
+                                    <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex items-center justify-end gap-1">
+                                            {/* Impersonate button - for non-admin/dev users */}
+                                            {!isProtected(u.role) && u.role !== 'admin' && (
+                                                <button
+                                                    onClick={() => onImpersonate(u.id)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Pristupi nalogu"
+                                                >
+                                                    <LogIn size={18} />
+                                                </button>
+                                            )}
+                                            {/* Role change button - only for client/manager */}
+                                            {(u.role === 'client' || u.role === 'manager') && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setChangingRole(u.id);
+                                                        const newRole = u.role === 'client' ? 'manager' : 'client';
+                                                        try {
+                                                            await onChangeRole(u.id, newRole);
+                                                            onRefresh();
+                                                        } catch (err) { alert(err.message); }
+                                                        finally { setChangingRole(null); }
+                                                    }}
+                                                    disabled={changingRole === u.id}
+                                                    className={`p-2 rounded-lg transition-colors ${u.role === 'client' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-orange-600 hover:bg-orange-50'}`}
+                                                    title={u.role === 'client' ? 'Promovi u Menadžera' : 'Degradiraj u Klijenta'}
+                                                >
+                                                    {changingRole === u.id ? <Loader2 size={18} className="animate-spin" /> : (u.role === 'client' ? <ArrowUp size={18} /> : <ArrowDown size={18} />)}
+                                                </button>
+                                            )}
+                                            {/* Delete button - only for developer */}
+                                            {isDeveloper && !isProtected(u.role) && (
                                                 <button
                                                     onClick={() => setDeleteModal({ type: 'single', ids: [u.id], expected: 'DELETE' })}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Obriši"
                                                 >
                                                     <Trash2 size={18} />
                                                 </button>
                                             )}
-                                        </td>
-                                    )}
+                                        </div>
+                                    </td>
                                 </tr>
                             ))
                         )}
@@ -2945,7 +2977,7 @@ const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose, onCon
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, originalUser, impersonateUser, exitImpersonation, changeUserRole } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -3062,6 +3094,18 @@ export default function Dashboard() {
     const handleCopyCode = (code) => { navigator.clipboard.writeText(code); alert('Kopirano!'); };
     const handleDeleteCode = async (id) => { if (window.confirm('Obrisati?')) try { await deleteMasterCode(id); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
     const handleDeleteUser = async (id) => { if (window.confirm('Obrisati?')) try { await deleteUser(id); setUsers(await fetchAllUsers()); } catch (err) { alert(err.message); } };
+    const handleImpersonateUser = async (userId) => {
+        if (!window.confirm('Želite da pristupite ovom nalogu?')) return;
+        try {
+            const result = await impersonateUser(userId);
+            // Navigate based on role
+            if (result.role === 'manager') navigate('/manager');
+            else if (result.role === 'client') navigate('/client');
+            else navigate('/admin');
+            window.location.reload();
+        } catch (err) { alert(err.message); }
+    };
+    const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
 
     // Equipment handlers (local state for now, later connect to Supabase)
     const handleAddEquipment = (newEq) => {
@@ -3197,7 +3241,7 @@ export default function Dashboard() {
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onView={(c) => alert(`${c.name}\n${c.code}`)} />;
-            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} />;
+            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} />;
             if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} />;
             return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div></div>;
         }
@@ -3218,6 +3262,22 @@ export default function Dashboard() {
             </aside>
             <div className="flex-1 flex flex-col min-w-0 relative">
                 <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" style={{ backgroundImage: 'url(https://vmsfsstxxndpxbsdylog.supabase.co/storage/v1/object/public/assets/background.jpg)' }} />
+                {/* Impersonation Banner */}
+                {originalUser && (
+                    <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between relative z-40">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle size={18} />
+                            <span className="font-medium">Prijavljen kao: <strong>{user?.name}</strong> ({user?.role})</span>
+                        </div>
+                        <button
+                            onClick={() => { exitImpersonation(); navigate('/admin'); window.location.reload(); }}
+                            className="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg font-medium transition-colors"
+                        >
+                            <LogOut size={16} />
+                            Vrati se na {originalUser.user?.name}
+                        </button>
+                    </div>
+                )}
                 <header className="h-20 bg-white/80 backdrop-blur-sm border-b flex items-center justify-between px-6 relative z-30">
                     <div className="flex items-center gap-4">
                         <button onClick={() => setSidebarOpen(true)} className="p-2 text-slate-500 lg:hidden"><Menu size={24} /></button>
