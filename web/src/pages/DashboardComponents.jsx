@@ -135,17 +135,17 @@ export const WASTE_TYPES = [
 ];
 
 // Image upload helper
-export const uploadImage = async (file, folder = 'uploads') => {
+export const uploadImage = async (file, folder = 'uploads', bucket = 'receipts') => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${folder}/${Date.now()}.${fileExt}`;
-    const { data, error } = await supabase.storage.from('receipts').upload(fileName, file);
+    const { data, error } = await supabase.storage.from(bucket).upload(fileName, file);
     if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName);
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(fileName);
     return publicUrl;
 };
 
 // Image upload component
-export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koristi svoju sliku" }) => {
+export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koristi svoju sliku", bucket = 'receipts' }) => {
     const [uploading, setUploading] = useState(false);
 
     const handleFileChange = async (e) => {
@@ -161,7 +161,7 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
         }
         setUploading(true);
         try {
-            const url = await uploadImage(file);
+            const url = await uploadImage(file, 'uploads', bucket);
             onUpload(url);
         } catch (err) {
             alert('Greška pri uploadu: ' + err.message);
@@ -2011,6 +2011,7 @@ export const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, onEd
                                 onUpload={(url) => setNewEquipment({ ...newEquipment, customImage: url })}
                                 onRemove={() => setNewEquipment({ ...newEquipment, customImage: null })}
                                 label="Slika opreme (opciono)"
+                                bucket="assets"
                             />
                         </div>
                     </div>
@@ -2052,6 +2053,7 @@ export const EquipmentManagement = ({ equipment, onAdd, onAssign, onDelete, onEd
                                 onUpload={(url) => setEditingEquipment({ ...editingEquipment, customImage: url })}
                                 onRemove={() => setEditingEquipment({ ...editingEquipment, customImage: null })}
                                 label="Slika opreme (opciono)"
+                                bucket="assets"
                             />
                         </div>
                     </div>
@@ -2211,6 +2213,7 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) =>
                                 onUpload={(url) => setNewType({ ...newType, customImage: url })}
                                 onRemove={() => setNewType({ ...newType, customImage: null })}
                                 label="Koristi svoju sliku"
+                                bucket="assets"
                             />
                         </div>
                     </div>
@@ -2257,6 +2260,7 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) =>
                                 onUpload={(url) => setEditingType({ ...editingType, customImage: url })}
                                 onRemove={() => setEditingType({ ...editingType, customImage: null })}
                                 label="Koristi svoju sliku"
+                                bucket="assets"
                             />
                         </div>
                     </div>
