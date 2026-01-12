@@ -9,7 +9,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn
+    Lock, Unlock, AlertTriangle, LogIn, Scale
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -138,9 +138,9 @@ export const WASTE_TYPES = [
 export const uploadImage = async (file, folder = 'uploads') => {
     const fileExt = file.name.split('.').pop();
     const fileName = `${folder}/${Date.now()}.${fileExt}`;
-    const { data, error } = await supabase.storage.from('assets').upload(fileName, file);
+    const { data, error } = await supabase.storage.from('receipts').upload(fileName, file);
     if (error) throw error;
-    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(fileName);
+    const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName);
     return publicUrl;
 };
 
@@ -1216,12 +1216,13 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
 };
 
 // History Table (Processed/Rejected Requests)
-export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
+export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
+    const [editingRequest, setEditingRequest] = useState(null);
 
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
@@ -1331,13 +1332,14 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                                     Obrađeno <SortIcon column="processed_at" />
                                 </button>
                             </th>
-                            <th className="hidden sm:table-cell px-4 py-3 text-center">Status</th>
+                            <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
                             <th className="px-2 py-3 text-center">Dokaz</th>
+                            <th className="px-2 py-3 text-center">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => (
                             <tr key={req.id || idx} className="hover:bg-slate-50">
                                 <td className="px-3 md:px-4 py-3">
@@ -1361,9 +1363,13 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                                     </div>
                                 </td>
                                 <td className="hidden sm:table-cell px-4 py-3 text-center">
-                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
-                                        Obrađen
-                                    </span>
+                                    {req.weight ? (
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                            {req.weight} {req.weight_unit || 'kg'}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-300 text-xs">-</span>
+                                    )}
                                 </td>
                                 <td className="px-2 py-3 text-center">
                                     {req.proof_image_url ? (
@@ -1377,6 +1383,15 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                                     ) : (
                                         <span className="text-slate-300"><Image size={18} /></span>
                                     )}
+                                </td>
+                                <td className="px-2 py-3 text-center">
+                                    <button
+                                        onClick={() => setEditingRequest(req)}
+                                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
+                                        title="Dopuni podatke"
+                                    >
+                                        <Edit3 size={18} />
+                                    </button>
                                 </td>
                             </tr>
                         ))}
@@ -1438,7 +1453,214 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES }) => {
                     </div>
                 </Modal>
             )}
+
+            {/* Edit Processed Request Modal */}
+            {editingRequest && (
+                <EditProcessedRequestModal
+                    request={editingRequest}
+                    wasteTypes={wasteTypes}
+                    onSave={async (updates) => {
+                        if (onEdit) {
+                            await onEdit(editingRequest.id, updates);
+                        }
+                        setEditingRequest(null);
+                    }}
+                    onClose={() => setEditingRequest(null)}
+                />
+            )}
         </div>
+    );
+};
+
+// Edit Processed Request Modal (for adding proof/weight later)
+export const EditProcessedRequestModal = ({ request, wasteTypes = WASTE_TYPES, onSave, onClose }) => {
+    const [proofFile, setProofFile] = useState(request?.proof_image_url || null);
+    const [proofType, setProofType] = useState(request?.proof_image_url?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image');
+    const [weight, setWeight] = useState(request?.weight?.toString() || '');
+    const [weightUnit, setWeightUnit] = useState(request?.weight_unit || 'kg');
+    const [note, setNote] = useState(request?.processing_note || '');
+    const [uploading, setUploading] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    if (!request) return null;
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const isImage = file.type.startsWith('image/');
+        const isPDF = file.type === 'application/pdf';
+
+        if (!isImage && !isPDF) {
+            alert('Molimo izaberite sliku ili PDF fajl');
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Fajl mora biti manji od 10MB');
+            return;
+        }
+        setUploading(true);
+        try {
+            const url = await uploadImage(file, 'proof_of_service');
+            setProofFile(url);
+            setProofType(isPDF ? 'pdf' : 'image');
+        } catch (err) {
+            alert('Greška pri uploadu: ' + err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const updates = {
+                proof_image_url: proofFile,
+                processing_note: note || null,
+                weight: weight ? parseFloat(weight) : null,
+                weight_unit: weight ? weightUnit : null
+            };
+            await onSave(updates);
+        } catch (err) {
+            alert('Greška: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const hasChanges = proofFile !== request?.proof_image_url ||
+        note !== (request?.processing_note || '') ||
+        weight !== (request?.weight?.toString() || '') ||
+        weightUnit !== (request?.weight_unit || 'kg');
+
+    return (
+        <Modal open={!!request} onClose={onClose} title="Dopuni podatke o obradi">
+            <div className="space-y-4">
+                {/* Request summary */}
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                    <span className="text-4xl">{wasteTypes.find(w => w.id === request.waste_type)?.icon}</span>
+                    <div className="flex-1">
+                        <h3 className="font-bold text-lg">{request.waste_label}</h3>
+                        <p className="text-sm text-slate-500">{request.client_name}</p>
+                    </div>
+                </div>
+
+                {/* Weight input */}
+                <div className="p-4 bg-blue-50 rounded-xl">
+                    <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                        <Scale size={18} className="text-blue-600" />
+                        Količina otpada
+                    </p>
+                    <div className="flex gap-3">
+                        <input
+                            type="number"
+                            value={weight}
+                            onChange={(e) => setWeight(e.target.value)}
+                            placeholder="Unesite količinu"
+                            min="0"
+                            step="0.01"
+                            className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm bg-white"
+                        />
+                        <select
+                            value={weightUnit}
+                            onChange={(e) => setWeightUnit(e.target.value)}
+                            className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm bg-white font-medium"
+                        >
+                            <option value="kg">kg</option>
+                            <option value="t">tona</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Proof of Service photo/PDF */}
+                <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">
+                    <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                        <Image size={18} className="text-emerald-600" />
+                        Dokaz o izvršenoj usluzi
+                    </p>
+
+                    {proofFile ? (
+                        <div className="relative">
+                            {proofType === 'pdf' ? (
+                                <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl">
+                                    <FileText size={32} className="text-blue-600" />
+                                    <div className="flex-1">
+                                        <p className="font-medium text-blue-900">PDF dokument</p>
+                                        <p className="text-xs text-blue-600">Uploadovan</p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProofFile(null); setProofType(null); }}
+                                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative inline-block">
+                                    <img src={proofFile} alt="Dokaz" className="w-full max-w-xs h-48 object-cover rounded-xl" />
+                                    <button
+                                        type="button"
+                                        onClick={() => { setProofFile(null); setProofType(null); }}
+                                        className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <label className="cursor-pointer block">
+                            <div className="w-full h-32 bg-slate-100 rounded-xl flex flex-col items-center justify-center hover:bg-slate-200 transition-colors border border-slate-200">
+                                {uploading ? (
+                                    <Loader2 size={32} className="text-emerald-500 animate-spin" />
+                                ) : (
+                                    <>
+                                        <Upload size={32} className="text-slate-400 mb-2" />
+                                        <span className="text-sm text-slate-500">Kliknite za upload slike ili PDF</span>
+                                    </>
+                                )}
+                            </div>
+                            <input type="file" accept="image/*,application/pdf" capture="environment" onChange={handleFileUpload} className="hidden" disabled={uploading} />
+                        </label>
+                    )}
+                </div>
+
+                {/* Optional note */}
+                <div>
+                    <label className="text-sm font-medium text-slate-700 mb-2 block">Napomena</label>
+                    <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Dodatne informacije o obradi..."
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none"
+                        rows={2}
+                    />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium disabled:opacity-50"
+                    >
+                        Otkaži
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving || uploading || !hasChanges}
+                        className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {saving ? (
+                            <><Loader2 size={18} className="animate-spin" /> Čuvanje...</>
+                        ) : (
+                            <><CheckCircle2 size={18} /> Sačuvaj</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </Modal>
     );
 };
 
@@ -2362,6 +2584,8 @@ export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
     const [uploading, setUploading] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [note, setNote] = useState('');
+    const [weight, setWeight] = useState('');
+    const [weightUnit, setWeightUnit] = useState('kg'); // 'kg' or 't'
 
     if (!request) return null;
     const rem = getRemainingTime(request.created_at, request.urgency);
@@ -2396,7 +2620,8 @@ export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
     const handleProcess = async () => {
         setProcessing(true);
         try {
-            await onProcess(request, proofFile, note);
+            const weightData = weight ? { weight: parseFloat(weight), weight_unit: weightUnit } : null;
+            await onProcess(request, proofFile, note, weightData);
             onClose();
         } catch (err) {
             alert('Greška: ' + err.message);
@@ -2422,6 +2647,33 @@ export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
                 <div className="p-3 bg-slate-50 rounded-xl">
                     <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin size={14} /> Adresa</p>
                     <p className="font-medium">{request.client_address || 'Nije uneta'}</p>
+                </div>
+
+                {/* Weight input */}
+                <div className="p-4 bg-blue-50 rounded-xl">
+                    <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                        <Scale size={18} className="text-blue-600" />
+                        Količina otpada (opciono)
+                    </p>
+                    <div className="flex gap-3">
+                        <input
+                            type="number"
+                            value={weight}
+                            onChange={(e) => setWeight(e.target.value)}
+                            placeholder="Unesite količinu"
+                            min="0"
+                            step="0.01"
+                            className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm"
+                        />
+                        <select
+                            value={weightUnit}
+                            onChange={(e) => setWeightUnit(e.target.value)}
+                            className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-sm bg-white font-medium"
+                        >
+                            <option value="kg">kg</option>
+                            <option value="t">tona</option>
+                        </select>
+                    </div>
                 </div>
 
                 {/* Proof of Service photo/PDF */}
@@ -3840,12 +4092,429 @@ export const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose
     );
 };
 
+// Analytics Page with Charts
+export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
+    const [dateRange, setDateRange] = useState('month'); // 'week', 'month', 'year', 'all'
+    const [selectedWasteType, setSelectedWasteType] = useState('all');
+
+    // Filter requests by date range
+    const getFilteredRequests = () => {
+        if (!processedRequests) return [];
+        const now = new Date();
+        let startDate = null;
+
+        switch (dateRange) {
+            case 'week':
+                startDate = new Date(now.setDate(now.getDate() - 7));
+                break;
+            case 'month':
+                startDate = new Date(now.setMonth(now.getMonth() - 1));
+                break;
+            case 'year':
+                startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+                break;
+            default:
+                startDate = null;
+        }
+
+        let filtered = processedRequests;
+        if (startDate) {
+            filtered = filtered.filter(r => new Date(r.processed_at) >= startDate);
+        }
+        if (selectedWasteType !== 'all') {
+            filtered = filtered.filter(r => r.waste_type === selectedWasteType);
+        }
+        return filtered;
+    };
+
+    const filteredRequests = getFilteredRequests();
+
+    // Calculate total weight (convert tonnes to kg for consistency)
+    const calculateTotalWeight = (requests) => {
+        return requests.reduce((total, r) => {
+            if (!r.weight) return total;
+            const weightInKg = r.weight_unit === 't' ? r.weight * 1000 : r.weight;
+            return total + weightInKg;
+        }, 0);
+    };
+
+    // Get weight by waste type
+    const getWeightByWasteType = () => {
+        const byType = {};
+        filteredRequests.forEach(r => {
+            if (!r.weight) return;
+            const typeLabel = r.waste_label || r.waste_type || 'Nepoznato';
+            const weightInKg = r.weight_unit === 't' ? r.weight * 1000 : r.weight;
+            byType[typeLabel] = (byType[typeLabel] || 0) + weightInKg;
+        });
+        return Object.entries(byType)
+            .map(([type, weight]) => ({ type, weight }))
+            .sort((a, b) => b.weight - a.weight);
+    };
+
+    // Get weight by client
+    const getWeightByClient = () => {
+        const byClient = {};
+        filteredRequests.forEach(r => {
+            if (!r.weight) return;
+            const clientName = r.client_name || 'Nepoznat';
+            const weightInKg = r.weight_unit === 't' ? r.weight * 1000 : r.weight;
+            byClient[clientName] = (byClient[clientName] || 0) + weightInKg;
+        });
+        return Object.entries(byClient)
+            .map(([client, weight]) => ({ client, weight }))
+            .sort((a, b) => b.weight - a.weight);
+    };
+
+    // Get requests by date (for chart)
+    const getRequestsByDate = () => {
+        const byDate = {};
+        filteredRequests.forEach(r => {
+            const date = new Date(r.processed_at).toLocaleDateString('sr-RS');
+            byDate[date] = (byDate[date] || 0) + 1;
+        });
+        return Object.entries(byDate)
+            .map(([date, count]) => ({ date, count }))
+            .slice(-14); // Last 14 data points
+    };
+
+    // Get weight by date
+    const getWeightByDate = () => {
+        const byDate = {};
+        filteredRequests.forEach(r => {
+            if (!r.weight) return;
+            const date = new Date(r.processed_at).toLocaleDateString('sr-RS');
+            const weightInKg = r.weight_unit === 't' ? r.weight * 1000 : r.weight;
+            byDate[date] = (byDate[date] || 0) + weightInKg;
+        });
+        return Object.entries(byDate)
+            .map(([date, weight]) => ({ date, weight }))
+            .slice(-14);
+    };
+
+    const totalWeight = calculateTotalWeight(filteredRequests);
+    const weightByType = getWeightByWasteType();
+    const weightByClient = getWeightByClient();
+    const requestsByDate = getRequestsByDate();
+    const weightByDate = getWeightByDate();
+    const requestsWithWeight = filteredRequests.filter(r => r.weight).length;
+
+    // Format weight for display
+    const formatWeight = (kg) => {
+        if (kg >= 1000) {
+            return `${(kg / 1000).toFixed(2)} t`;
+        }
+        return `${kg.toFixed(1)} kg`;
+    };
+
+    // Get max value for bar charts
+    const maxWeightByType = Math.max(...weightByType.map(w => w.weight), 1);
+    const maxWeightByClient = Math.max(...weightByClient.map(w => w.weight), 1);
+    const maxRequestsByDate = Math.max(...requestsByDate.map(r => r.count), 1);
+    const maxWeightByDate = Math.max(...weightByDate.map(w => w.weight), 1);
+
+    return (
+        <div className="space-y-6">
+            {/* Header with filters */}
+            <div className="bg-white rounded-2xl border p-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <BarChart3 className="text-emerald-600" />
+                            Analitika
+                        </h2>
+                        <p className="text-sm text-slate-500 mt-1">Pregled statistika po težini otpada</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                        <select
+                            value={dateRange}
+                            onChange={(e) => setDateRange(e.target.value)}
+                            className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 outline-none bg-white"
+                        >
+                            <option value="week">Poslednjih 7 dana</option>
+                            <option value="month">Poslednji mesec</option>
+                            <option value="year">Poslednja godina</option>
+                            <option value="all">Sve vreme</option>
+                        </select>
+                        <select
+                            value={selectedWasteType}
+                            onChange={(e) => setSelectedWasteType(e.target.value)}
+                            className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 outline-none bg-white"
+                        >
+                            <option value="all">Sve vrste otpada</option>
+                            {wasteTypes?.map(wt => (
+                                <option key={wt.id} value={wt.id}>{wt.icon} {wt.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl border p-5">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
+                        <Scale className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{formatWeight(totalWeight)}</p>
+                    <p className="text-sm text-slate-500">Ukupna težina</p>
+                </div>
+                <div className="bg-white rounded-2xl border p-5">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
+                        <Truck className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{filteredRequests.length}</p>
+                    <p className="text-sm text-slate-500">Obrađenih zahteva</p>
+                </div>
+                <div className="bg-white rounded-2xl border p-5">
+                    <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
+                        <CheckCircle2 className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{requestsWithWeight}</p>
+                    <p className="text-sm text-slate-500">Sa unetom težinom</p>
+                </div>
+                <div className="bg-white rounded-2xl border p-5">
+                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
+                        <Recycle className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{weightByType.length}</p>
+                    <p className="text-sm text-slate-500">Vrsta otpada</p>
+                </div>
+            </div>
+
+            {/* Charts Row 1 */}
+            <div className="grid md:grid-cols-2 gap-6">
+                {/* Weight by Waste Type */}
+                <div className="bg-white rounded-2xl border p-5">
+                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Recycle className="text-emerald-600" size={20} />
+                        Težina po vrsti otpada
+                    </h3>
+                    {weightByType.length === 0 ? (
+                        <p className="text-slate-500 text-sm py-8 text-center">Nema podataka o težini</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {weightByType.slice(0, 8).map((item, idx) => (
+                                <div key={idx}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span className="text-slate-700 truncate mr-2">{item.type}</span>
+                                        <span className="font-medium text-slate-800">{formatWeight(item.weight)}</span>
+                                    </div>
+                                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full transition-all duration-500"
+                                            style={{ width: `${(item.weight / maxWeightByType) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Weight by Client */}
+                <div className="bg-white rounded-2xl border p-5">
+                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Users className="text-blue-600" size={20} />
+                        Težina po klijentu
+                    </h3>
+                    {weightByClient.length === 0 ? (
+                        <p className="text-slate-500 text-sm py-8 text-center">Nema podataka o težini</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {weightByClient.slice(0, 8).map((item, idx) => (
+                                <div key={idx}>
+                                    <div className="flex justify-between text-sm mb-1">
+                                        <span className="text-slate-700 truncate mr-2">{item.client}</span>
+                                        <span className="font-medium text-slate-800">{formatWeight(item.weight)}</span>
+                                    </div>
+                                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all duration-500"
+                                            style={{ width: `${(item.weight / maxWeightByClient) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Charts Row 2 */}
+            <div className="grid md:grid-cols-2 gap-6">
+                {/* Requests by Date */}
+                <div className="bg-white rounded-2xl border p-5">
+                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Calendar className="text-amber-600" size={20} />
+                        Zahtevi po datumu
+                    </h3>
+                    {requestsByDate.length === 0 ? (
+                        <p className="text-slate-500 text-sm py-8 text-center">Nema podataka</p>
+                    ) : (
+                        <div className="flex items-end justify-between gap-1 h-40">
+                            {requestsByDate.map((item, idx) => (
+                                <div key={idx} className="flex-1 flex flex-col items-center">
+                                    <div
+                                        className="w-full bg-gradient-to-t from-amber-500 to-amber-400 rounded-t-lg transition-all duration-500 min-h-[4px]"
+                                        style={{ height: `${(item.count / maxRequestsByDate) * 100}%` }}
+                                        title={`${item.date}: ${item.count} zahteva`}
+                                    />
+                                    <span className="text-[10px] text-slate-400 mt-1 transform -rotate-45 origin-top-left whitespace-nowrap">
+                                        {item.date.slice(0, 5)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Weight by Date */}
+                <div className="bg-white rounded-2xl border p-5">
+                    <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Scale className="text-purple-600" size={20} />
+                        Težina po datumu
+                    </h3>
+                    {weightByDate.length === 0 ? (
+                        <p className="text-slate-500 text-sm py-8 text-center">Nema podataka o težini</p>
+                    ) : (
+                        <div className="flex items-end justify-between gap-1 h-40">
+                            {weightByDate.map((item, idx) => (
+                                <div key={idx} className="flex-1 flex flex-col items-center">
+                                    <div
+                                        className="w-full bg-gradient-to-t from-purple-500 to-purple-400 rounded-t-lg transition-all duration-500 min-h-[4px]"
+                                        style={{ height: `${(item.weight / maxWeightByDate) * 100}%` }}
+                                        title={`${item.date}: ${formatWeight(item.weight)}`}
+                                    />
+                                    <span className="text-[10px] text-slate-400 mt-1 transform -rotate-45 origin-top-left whitespace-nowrap">
+                                        {item.date.slice(0, 5)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Large Weight vs Date Chart */}
+            <div className="bg-white rounded-2xl border p-5">
+                <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <BarChart3 className="text-emerald-600" size={20} />
+                    Dijagram: Težina (kg) po datumu
+                </h3>
+                {weightByDate.length === 0 ? (
+                    <p className="text-slate-500 text-sm py-8 text-center">Nema podataka o težini za prikaz dijagrama</p>
+                ) : (
+                    <div className="relative">
+                        {/* Y-axis labels */}
+                        <div className="flex">
+                            <div className="w-16 flex flex-col justify-between h-64 pr-2 text-right">
+                                <span className="text-xs text-slate-500">{formatWeight(maxWeightByDate)}</span>
+                                <span className="text-xs text-slate-500">{formatWeight(maxWeightByDate * 0.75)}</span>
+                                <span className="text-xs text-slate-500">{formatWeight(maxWeightByDate * 0.5)}</span>
+                                <span className="text-xs text-slate-500">{formatWeight(maxWeightByDate * 0.25)}</span>
+                                <span className="text-xs text-slate-500">0</span>
+                            </div>
+                            {/* Chart area */}
+                            <div className="flex-1 relative h-64 border-l border-b border-slate-200">
+                                {/* Grid lines */}
+                                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                                    {[0, 1, 2, 3].map(i => (
+                                        <div key={i} className="border-t border-slate-100 w-full" />
+                                    ))}
+                                </div>
+                                {/* Bars */}
+                                <div className="absolute inset-0 flex items-end justify-around px-2 gap-2">
+                                    {weightByDate.map((item, idx) => (
+                                        <div key={idx} className="flex-1 flex flex-col items-center max-w-16 group">
+                                            <div className="relative w-full flex justify-center">
+                                                {/* Tooltip */}
+                                                <div className="absolute bottom-full mb-2 hidden group-hover:block bg-slate-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap z-10">
+                                                    {item.date}: {formatWeight(item.weight)}
+                                                </div>
+                                                <div
+                                                    className="w-full max-w-10 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md transition-all duration-500 hover:from-emerald-500 hover:to-emerald-300 cursor-pointer"
+                                                    style={{ height: `${Math.max((item.weight / maxWeightByDate) * 100, 2)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        {/* X-axis labels */}
+                        <div className="flex ml-16">
+                            <div className="flex-1 flex justify-around px-2 mt-2">
+                                {weightByDate.map((item, idx) => (
+                                    <span key={idx} className="text-xs text-slate-500 max-w-16 text-center truncate flex-1">
+                                        {item.date.slice(0, 5)}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                        {/* Axis labels */}
+                        <div className="flex justify-between mt-4 text-sm text-slate-600">
+                            <span className="font-medium">Y: Težina (kg/t)</span>
+                            <span className="font-medium">X: Datum obrade</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Top clients table */}
+            {weightByClient.length > 0 && (
+                <div className="bg-white rounded-2xl border overflow-hidden">
+                    <div className="p-5 border-b">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                            <Users className="text-emerald-600" size={20} />
+                            Top klijenti po količini otpada
+                        </h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="text-left py-3 px-5 text-sm font-medium text-slate-600">#</th>
+                                    <th className="text-left py-3 px-5 text-sm font-medium text-slate-600">Klijent</th>
+                                    <th className="text-right py-3 px-5 text-sm font-medium text-slate-600">Ukupna težina</th>
+                                    <th className="text-right py-3 px-5 text-sm font-medium text-slate-600">Broj zahteva</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {weightByClient.slice(0, 10).map((item, idx) => {
+                                    const clientRequestCount = filteredRequests.filter(r => r.client_name === item.client).length;
+                                    return (
+                                        <tr key={idx} className="border-t hover:bg-slate-50">
+                                            <td className="py-3 px-5">
+                                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-amber-100 text-amber-700' :
+                                                        idx === 1 ? 'bg-slate-200 text-slate-700' :
+                                                            idx === 2 ? 'bg-orange-100 text-orange-700' :
+                                                                'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                    {idx + 1}
+                                                </span>
+                                            </td>
+                                            <td className="py-3 px-5 font-medium text-slate-800">{item.client}</td>
+                                            <td className="py-3 px-5 text-right font-bold text-emerald-600">{formatWeight(item.weight)}</td>
+                                            <td className="py-3 px-5 text-right text-slate-600">{clientRequestCount}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Re-export icons for Dashboard.jsx to use
 export {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn
+    Lock, Unlock, AlertTriangle, LogIn, Scale
 };
 
 // Re-export hooks and utilities

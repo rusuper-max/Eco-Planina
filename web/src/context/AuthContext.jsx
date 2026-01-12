@@ -258,7 +258,7 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
-    const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null) => {
+    const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
         try {
             const processedRecord = {
                 company_code: companyCode,
@@ -273,10 +273,24 @@ export const AuthProvider = ({ children }) => {
                 processing_note: processingNote,
                 created_at: request.created_at,
                 processed_at: new Date().toISOString(),
-                proof_image_url: proofImageUrl
+                proof_image_url: proofImageUrl,
+                weight: weightData?.weight || null,
+                weight_unit: weightData?.weight_unit || null
             };
             await supabase.from('processed_requests').insert([processedRecord]);
             await removePickupRequest(request.id);
+            return { success: true };
+        } catch (error) { throw error; }
+    };
+
+    // Update processed request (add proof/weight later)
+    const updateProcessedRequest = async (requestId, updates) => {
+        try {
+            const { error } = await supabase
+                .from('processed_requests')
+                .update(updates)
+                .eq('id', requestId);
+            if (error) throw error;
             return { success: true };
         } catch (error) { throw error; }
     };
@@ -700,7 +714,7 @@ export const AuthProvider = ({ children }) => {
 
     const value = {
         user, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests, fetchClientHistory,
-        login, logout, register, removePickupRequest, markRequestAsProcessed, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
+        login, logout, register, removePickupRequest, markRequestAsProcessed, updateProcessedRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
         isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,

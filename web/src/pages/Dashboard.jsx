@@ -21,7 +21,8 @@ import {
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
     RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
-    UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal
+    UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
+    AnalyticsPage
 } from './DashboardComponents';
 
 export default function Dashboard() {
@@ -155,8 +156,8 @@ export default function Dashboard() {
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
     const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { alert(err.message); } finally { setSubmitLoading(false); } };
     const handleProcessRequest = (req) => setProcessingRequest(req);
-    const handleConfirmProcess = async (req, proofImageUrl, note) => {
-        await markRequestAsProcessed(req, proofImageUrl, note);
+    const handleConfirmProcess = async (req, proofImageUrl, note, weightData) => {
+        await markRequestAsProcessed(req, proofImageUrl, note, weightData);
     };
     const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { alert(err.message); } };
     const handleDeleteClient = async (id) => { if (window.confirm('Obrisati klijenta?')) try { await deleteClient?.(id); setClients(await fetchCompanyClients()); } catch (err) { alert(err.message); } };
@@ -253,6 +254,7 @@ export default function Dashboard() {
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
             { id: 'history', icon: History, label: 'Istorija' },
+            { id: 'analytics', icon: BarChart3, label: 'Analitika' },
             { id: 'clients', icon: Users, label: 'Klijenti' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null },
             { id: 'print', icon: Printer, label: 'Štampaj/Export' },
@@ -444,12 +446,19 @@ export default function Dashboard() {
         if (userRole === 'manager') {
             if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
             if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
             if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} /></div>;
-            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Nedavni zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={pending.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} /></div>}</div>;
+            // Sort by remaining time (most urgent first) for dashboard preview
+            const sortedByUrgency = [...pending].sort((a, b) => {
+                const remA = getRemainingTime(a.created_at, a.urgency);
+                const remB = getRemainingTime(b.created_at, b.urgency);
+                return remA.ms - remB.ms;
+            });
+            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} /></div>}</div>;
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;
