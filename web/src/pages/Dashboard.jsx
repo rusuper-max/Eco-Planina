@@ -82,7 +82,7 @@ export default function Dashboard() {
 
 
 
-    useEffect(() => { loadData(); }, [userRole, activeTab]);
+    useEffect(() => { loadData(); }, [userRole, activeTab, companyCode]);
 
     // Load client history when client logs in or history tab is opened
     useEffect(() => {
