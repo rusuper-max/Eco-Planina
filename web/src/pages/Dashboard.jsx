@@ -338,32 +338,34 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
                 <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500 border-b">
                         <tr>
-                            <th className="px-4 py-3 text-left">
+                            <th className="px-3 md:px-4 py-3 text-left">
                                 <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     Klijent <SortIcon column="client" />
                                 </button>
                             </th>
-                            <th className="px-4 py-3 text-left">
+                            <th className="px-3 md:px-4 py-3 text-left">
                                 <button onClick={() => handleSort('type')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     Tip <SortIcon column="type" />
                                 </button>
                             </th>
-                            <th className="px-4 py-3 text-left">
+                            <th className="hidden md:table-cell px-4 py-3 text-left">
                                 <button onClick={() => handleSort('fill')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     % <SortIcon column="fill" />
                                 </button>
                             </th>
-                            <th className="px-4 py-3 text-left">
+                            <th className="px-3 md:px-4 py-3 text-left">
                                 <button onClick={() => handleSort('remaining')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Preostalo <SortIcon column="remaining" />
+                                    <span className="hidden sm:inline">Preostalo</span>
+                                    <span className="sm:hidden">Vreme</span>
+                                    <SortIcon column="remaining" />
                                 </button>
                             </th>
-                            <th className="px-4 py-3 text-left">
+                            <th className="hidden md:table-cell px-4 py-3 text-left">
                                 <button onClick={() => handleSort('date')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     Datum <SortIcon column="date" />
                                 </button>
                             </th>
-                            <th className="px-4 py-3 text-right">Akcije</th>
+                            <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -373,27 +375,25 @@ const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, wasteType
                             const rem = getRemainingTime(req.created_at, req.urgency);
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-3">
-                                            <span className="font-medium">{req.client_name}</span>
-                                            <button onClick={() => onView(req)} className="px-2.5 py-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-colors">
-                                                <Info size={14} />
-                                                Info
-                                            </button>
-                                        </div>
+                                    <td className="px-3 md:px-4 py-3">
+                                        <span className="font-medium text-sm">{req.client_name}</span>
                                     </td>
-                                    <td className="px-4 py-3">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'} {req.waste_label}</td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 md:px-4 py-3">
+                                        <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
+                                        <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                    </td>
+                                    <td className="hidden md:table-cell px-4 py-3">
                                         <div className="flex items-center gap-2">
                                             <div className="w-12 h-2 bg-slate-200 rounded-full"><div className={`h-full rounded-full ${req.fill_level > 80 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${req.fill_level}%` }} /></div>
                                             <span className="text-xs">{req.fill_level}%</span>
                                         </div>
                                     </td>
-                                    <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span></td>
-                                    <td className="px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
-                                    <td className="px-4 py-3 text-right">
-                                        <button onClick={() => onProcess(req)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg"><CheckCircle2 size={18} /></button>
-                                        <button onClick={() => onDelete(req.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                                    <td className="px-3 md:px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span></td>
+                                    <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
+                                    <td className="px-2 md:px-4 py-3 text-right whitespace-nowrap">
+                                        <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
+                                        <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
+                                        <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
                                     </td>
                                 </tr>
                             );
@@ -413,32 +413,38 @@ const ClientsTable = ({ clients, onView, onDelete, onEditLocation }) => {
             <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-500 border-b">
                     <tr>
-                        <th className="px-4 py-3 text-left">Klijent</th>
-                        <th className="px-4 py-3 text-left">Telefon</th>
-                        <th className="px-4 py-3 text-left">Lokacija</th>
-                        <th className="px-4 py-3 text-right">Akcije</th>
+                        <th className="px-3 md:px-4 py-3 text-left">Klijent</th>
+                        <th className="hidden sm:table-cell px-4 py-3 text-left">Telefon</th>
+                        <th className="px-3 md:px-4 py-3 text-left">Lokacija</th>
+                        <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y">
                     {clients.map(c => (
                         <tr key={c.id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 font-medium">{c.name}</td>
-                            <td className="px-4 py-3 text-slate-600">{c.phone}</td>
-                            <td className="px-4 py-3">
-                                {c.latitude && c.longitude ? (
-                                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">Podešena</span>
-                                ) : (
-                                    <span className="text-xs text-slate-400">Nije podešena</span>
-                                )}
+                            <td className="px-3 md:px-4 py-3">
+                                <div className="font-medium">{c.name}</div>
+                                <div className="sm:hidden text-xs text-slate-500 mt-0.5">{c.phone}</div>
                             </td>
-                            <td className="px-4 py-3 text-right flex justify-end gap-1">
-                                <button onClick={() => onEditLocation(c)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Podesi lokaciju">
-                                    <MapPin size={18} />
+                            <td className="hidden sm:table-cell px-4 py-3 text-slate-600">{c.phone}</td>
+                            <td className="px-3 md:px-4 py-3">
+                                <button
+                                    onClick={() => onEditLocation(c)}
+                                    className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${c.latitude && c.longitude
+                                        ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
+                                        : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    <MapPin size={12} />
+                                    <span className="hidden sm:inline">{c.latitude && c.longitude ? 'Podešena' : 'Podesi'}</span>
+                                    <span className="sm:hidden">{c.latitude && c.longitude ? 'OK' : 'Podesi'}</span>
                                 </button>
-                                <button onClick={() => onView(c)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Detalji">
+                            </td>
+                            <td className="px-2 md:px-4 py-3 text-right whitespace-nowrap">
+                                <button onClick={() => onView(c)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Detalji">
                                     <Eye size={18} />
                                 </button>
-                                <button onClick={() => onDelete(c.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
+                                <button onClick={() => onDelete(c.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
                                     <Trash2 size={18} />
                                 </button>
                             </td>
