@@ -8,7 +8,8 @@ import 'leaflet/dist/leaflet.css';
 import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
-    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet
+    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
+    Lock, Unlock, AlertTriangle
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -2215,7 +2216,13 @@ const AdminCompaniesTable = ({ companies, onView }) => {
 };
 
 const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
-    if (!users?.length) return <EmptyState icon={Users} title="Nema korisnika" desc="Korisnici će se prikazati ovde" />;
+    // State
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'desc' });
+    const [selectedUsers, setSelectedUsers] = useState(new Set());
+    const [deleteModal, setDeleteModal] = useState(null);
+    const [detailsModal, setDetailsModal] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const getRoleConfig = (role) => {
         switch (role) {
@@ -2231,63 +2238,275 @@ const AdminUsersTable = ({ users, onDelete, isDeveloper }) => {
         }
     };
 
+    // Filter & Sort
+    const filteredUsers = useMemo(() => {
+        let result = [...(users || [])];
+        if (searchQuery) {
+            const low = searchQuery.toLowerCase();
+            result = result.filter(u =>
+                u.name?.toLowerCase().includes(low) ||
+                u.phone?.includes(low) ||
+                u.company?.name?.toLowerCase().includes(low) ||
+                (getRoleConfig(u.role).label.toLowerCase().includes(low))
+            );
+        }
+        if (sortConfig.key) {
+            result.sort((a, b) => {
+                let aVal = a[sortConfig.key] || '';
+                let bVal = b[sortConfig.key] || '';
+
+                if (sortConfig.key === 'company') { aVal = a.company?.name || ''; bVal = b.company?.name || ''; }
+                if (sortConfig.key === 'role') { aVal = getRoleConfig(a.role).label; bVal = getRoleConfig(b.role).label; }
+
+                if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
+                if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return result;
+    }, [users, searchQuery, sortConfig]);
+
+    const handleSort = (key) => {
+        setSortConfig(curr => ({ key, direction: curr.key === key && curr.direction === 'asc' ? 'desc' : 'asc' }));
+    };
+
+    const toggleSelect = (id, e) => {
+        e.stopPropagation();
+        const newSet = new Set(selectedUsers);
+        if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
+        setSelectedUsers(newSet);
+    };
+
+    const toggleSelectAll = () => {
+        // Filter out protected roles from selection
+        const selectableUsers = filteredUsers.filter(u => u.role !== 'god' && u.role !== 'developer');
+        if (selectedUsers.size === selectableUsers.length) setSelectedUsers(new Set());
+        else setSelectedUsers(new Set(selectableUsers.map(u => u.id)));
+    };
+
+    const confirmDelete = async () => {
+        setIsDeleting(true);
+        try {
+            if (deleteModal.type === 'bulk') {
+                for (const id of deleteModal.ids) {
+                    await onDelete(id);
+                }
+            } else {
+                await onDelete(deleteModal.ids[0]);
+            }
+            setSelectedUsers(new Set());
+            setDeleteModal(null);
+        } catch (error) {
+            console.error(error);
+            alert('Greška pri brisanju korisnika');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const isProtected = (role) => role === 'god' || role === 'developer';
+
+    if (!users?.length && !searchQuery) return <EmptyState icon={Users} title="Nema korisnika" desc="Korisnici će se prikazati ovde" />;
+
     return (
-        <div className="bg-white rounded-2xl border overflow-hidden">
-            <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-slate-500 border-b">
-                    <tr><th className="px-6 py-4 text-left">Korisnik</th><th className="px-6 py-4 text-left">Telefon</th><th className="px-6 py-4 text-left">Uloga</th><th className="px-6 py-4 text-left">Firma</th>{isDeveloper && <th className="px-6 py-4 text-right">Akcije</th>}</tr>
-                </thead>
-                <tbody className="divide-y">
-                    {users.map(u => (
-                        <tr key={u.id} className="hover:bg-slate-50">
-                            <td className="px-6 py-4 font-medium">{u.name}</td>
-                            <td className="px-6 py-4 text-slate-600">{u.phone}</td>
-                            <td className="px-6 py-4">
-                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleConfig(u.role).className}`}>
-                                    {getRoleConfig(u.role).label}
-                                </span>
-                            </td>
-                            <td className="px-6 py-4 text-slate-600">{u.company?.name || '-'}</td>
-                            {isDeveloper && <td className="px-6 py-4 text-right"><button onClick={() => onDelete(u.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button></td>}
+        <div className="space-y-4">
+            {/* Controls */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input
+                        type="text"
+                        placeholder="Pretraži korisnike, firme, telefone..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                </div>
+                {selectedUsers.size > 0 && isDeveloper && (
+                    <button
+                        onClick={() => setDeleteModal({ type: 'bulk', ids: [...selectedUsers], expected: 'DELETE' })}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 font-medium transition-colors"
+                    >
+                        <Trash2 size={18} />
+                        <span>Obriši označene ({selectedUsers.size})</span>
+                    </button>
+                )}
+            </div>
+
+            <div className="bg-white rounded-2xl border overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b">
+                        <tr>
+                            <th className="px-6 py-4 w-10">
+                                <input
+                                    type="checkbox"
+                                    checked={filteredUsers.length > 0 && selectedUsers.size === filteredUsers.filter(u => !isProtected(u.role)).length}
+                                    onChange={toggleSelectAll}
+                                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                />
+                            </th>
+                            {[
+                                { key: 'name', label: 'Korisnik' },
+                                { key: 'phone', label: 'Telefon' },
+                                { key: 'role', label: 'Uloga' },
+                                { key: 'company', label: 'Firma' }
+                            ].map(col => (
+                                <th key={col.key} className="px-6 py-4 text-left cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort(col.key)}>
+                                    <div className="flex items-center gap-1">
+                                        {col.label}
+                                        {sortConfig.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+                                    </div>
+                                </th>
+                            ))}
+                            {isDeveloper && <th className="px-6 py-4 text-right">Akcije</th>}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody className="divide-y">
+                        {filteredUsers.length === 0 ? (
+                            <tr><td colSpan="6" className="px-6 py-12 text-center text-slate-400">Nema rezultata za "{searchQuery}"</td></tr>
+                        ) : (
+                            filteredUsers.map(u => (
+                                <tr key={u.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setDetailsModal(u)}>
+                                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                                        {!isProtected(u.role) && (
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUsers.has(u.id)}
+                                                onChange={(e) => toggleSelect(u.id, e)}
+                                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                            />
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 font-medium">{u.name}</td>
+                                    <td className="px-6 py-4 text-slate-600">{u.phone}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleConfig(u.role).className}`}>
+                                            {getRoleConfig(u.role).label}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-slate-600">{u.company?.name || '-'}</span>
+                                            {u.company?.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
+                                        </div>
+                                    </td>
+                                    {isDeveloper && (
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                            {!isProtected(u.role) && (
+                                                <button
+                                                    onClick={() => setDeleteModal({ type: 'single', ids: [u.id], expected: 'DELETE' })}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                        </td>
+                                    )}
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Modals */}
+            {detailsModal && <UserDetailsModal user={detailsModal} onClose={() => setDetailsModal(null)} />}
+            {deleteModal && (
+                <DeleteConfirmationModal
+                    title={deleteModal.type === 'bulk' ? 'Obriši označene korisnike' : 'Obriši korisnika'}
+                    warning="Ova akcija je trajna i ne može se poništiti."
+                    expectedInput={deleteModal.expected}
+                    onClose={() => setDeleteModal(null)}
+                    onConfirm={confirmDelete}
+                    loading={isDeleting}
+                />
+            )}
         </div>
     );
 };
 
-const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) => (
-    <div className="space-y-4">
-        <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold">Master Kodovi</h2>
-            <button onClick={onGenerate} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm"><Plus size={18} /> Generiši</button>
-        </div>
-        {!codes?.length ? <EmptyState icon={FileText} title="Nema kodova" desc="Generiši prvi kod" /> : (
-            <div className="bg-white rounded-2xl border overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-500 border-b">
-                        <tr><th className="px-6 py-4 text-left">Kod</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">Kreiran</th><th className="px-6 py-4 text-right">Akcije</th></tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {codes.map(c => (
-                            <tr key={c.id} className="hover:bg-slate-50">
-                                <td className="px-6 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono">{c.code}</code></td>
-                                <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : 'Dostupan'}</span></td>
-                                <td className="px-6 py-4 text-slate-600">{c.company?.name || '-'}</td>
-                                <td className="px-6 py-4 text-xs text-slate-500">{new Date(c.created_at).toLocaleDateString('sr-RS')}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg"><Copy size={16} /></button>
-                                    {isDeveloper && c.status !== 'used' && <button onClick={() => onDelete(c.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper }) => {
+    const { toggleCompanyStatus } = useAuth();
+    const [deleteModal, setDeleteModal] = useState(null);
+    const [freezing, setFreezing] = useState(null);
+
+    const handleFreeze = async (companyId, currentStatus) => {
+        setFreezing(companyId);
+        try {
+            await toggleCompanyStatus(companyId, currentStatus);
+            // We assume parent refreshes data or context updates propagates.
+            // If not, we might need a callback to force refresh.
+            window.location.reload(); // Hard refresh to ensure consistency for now, or use a callback from parent if available
+        } catch (e) { alert(e.message); }
+        setFreezing(null);
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center">
+                <h2 className="text-lg font-bold">Master Kodovi</h2>
+                <button onClick={onGenerate} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm"><Plus size={18} /> Generiši</button>
             </div>
-        )}
-    </div>
-);
+
+            {deleteModal && (
+                <DeleteConfirmationModal
+                    title="Obriši Master Kod"
+                    warning="Ova akcija će obrisati firmu i SVE njene korisnike vezane za ovaj kod!"
+                    expectedInput={`DELETE ${deleteModal.code}`}
+                    onClose={() => setDeleteModal(null)}
+                    onConfirm={async () => { await onDelete(deleteModal.id); setDeleteModal(null); }}
+                />
+            )}
+
+            {!codes?.length ? <EmptyState icon={FileText} title="Nema kodova" desc="Generiši prvi kod" /> : (
+                <div className="bg-white rounded-2xl border overflow-hidden">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-slate-500 border-b">
+                            <tr><th className="px-6 py-4 text-left">Kod</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">Kreiran</th><th className="px-6 py-4 text-right">Akcije</th></tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {codes.map(c => (
+                                <tr key={c.id} className="hover:bg-slate-50">
+                                    <td className="px-6 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono">{c.code}</code></td>
+                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : 'Dostupan'}</span></td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-slate-600">{c.company?.name || '-'}</span>
+                                            {c.company?.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-xs text-slate-500">{new Date(c.created_at).toLocaleDateString('sr-RS')}</td>
+                                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                                        <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
+
+                                        {c.status === 'used' && c.company && (
+                                            <button
+                                                onClick={() => handleFreeze(c.company.id, c.company.status)}
+                                                className={`p-2 rounded-lg ${c.company.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
+                                                title={c.company.status === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
+                                            >
+                                                {freezing === c.company.id ? <Loader2 size={16} className="animate-spin" /> : c.company.status === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
+                                            </button>
+                                        )}
+
+                                        {isDeveloper && c.status !== 'used' && (
+                                            <button onClick={() => setDeleteModal({ id: c.id, code: c.code })} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
 
 // Chat Interface Component
 const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, getConversations, fetchCompanyClients, sendMessageToAdmins, userRole }) => {
@@ -2650,6 +2869,79 @@ const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAsRead, g
 };
 
 // Main Dashboard
+const UserDetailsModal = ({ user, onClose }) => {
+    if (!user) return null;
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                    <h3 className="font-bold text-slate-800">Detalji korisnika</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg"><X size={20} /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-bold text-2xl">
+                            {user.name.charAt(0)}
+                        </div>
+                        <div>
+                            <h4 className="font-bold text-lg">{user.name}</h4>
+                            <span className="text-sm px-2 py-1 bg-slate-100 rounded-lg capitalize">{user.role}</span>
+                        </div>
+                    </div>
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-slate-600"><Phone size={18} /> <span>{user.phone}</span></div>
+                        <div className="flex items-center gap-3 text-slate-600"><MapPin size={18} /> <span>{user.address || 'Nema adrese'}</span></div>
+                        <div className="flex items-center gap-3 text-slate-600"><Building2 size={18} /> <span>{user.company?.name || 'Nema firme'}</span></div>
+                        {user.company?.status === 'frozen' && <div className="text-red-600 font-bold text-sm bg-red-50 p-2 rounded">Firma je zamrznuta</div>}
+                    </div>
+                </div>
+                <div className="p-4 bg-slate-50 border-t flex justify-end">
+                    <button onClick={onClose} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl font-medium text-slate-700">Zatvori</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose, onConfirm, loading }) => {
+    const [input, setInput] = useState('');
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div className="p-6">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4 text-red-600 mx-auto">
+                        <AlertTriangle size={24} />
+                    </div>
+                    <h3 className="text-xl font-bold text-center mb-2">{title}</h3>
+                    <p className="text-slate-500 text-center mb-6">{warning}</p>
+
+                    <div className="mb-6">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Ukucajte "{expectedInput}" za potvrdu</label>
+                        <input
+                            type="text"
+                            className="w-full px-4 py-3 border-2 border-red-200 rounded-xl focus:border-red-500 focus:ring-0 outline-none font-bold"
+                            placeholder={expectedInput}
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium text-slate-700">Odustani</button>
+                        <button
+                            onClick={onConfirm}
+                            disabled={input !== expectedInput || loading}
+                            className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-red-200"
+                        >
+                            {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Trajno obriši'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchProcessedRequests, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName } = useAuth();

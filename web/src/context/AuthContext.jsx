@@ -97,6 +97,10 @@ export const AuthProvider = ({ children }) => {
                 const { data: companyByManager } = await supabase.from('companies').select('*').eq('manager_id', userData.id).single();
                 companyData = companyByManager;
             }
+
+            if (companyData?.status === 'frozen') {
+                throw new Error('Vaša firma je zamrznuta. Kontaktirajte administratora.');
+            }
             let actualCompanyCode = companyData?.code || userData.company_code;
             const userObj = { id: userData.id, name: userData.name, role: userData.role, address: userData.address, phone: userData.phone, latitude: userData.latitude, longitude: userData.longitude };
             setUser(userObj);
@@ -211,6 +215,16 @@ export const AuthProvider = ({ children }) => {
         catch (error) { throw error; }
     };
 
+    const toggleCompanyStatus = async (companyId, currentStatus) => {
+        if (!isAdmin()) throw new Error('Nemate dozvolu');
+        try {
+            const newStatus = currentStatus === 'frozen' ? 'active' : 'frozen';
+            const { error } = await supabase.from('companies').update({ status: newStatus }).eq('id', companyId);
+            if (error) throw error;
+            return { success: true, newStatus };
+        } catch (error) { throw error; }
+    };
+
     const fetchAllMasterCodes = async () => {
         if (!isAdmin()) return [];
         try {
@@ -220,7 +234,7 @@ export const AuthProvider = ({ children }) => {
             if (creatorIds.length > 0) { const { data: creators } = await supabase.from('users').select('id, name').in('id', creatorIds); creatorMap = (creators || []).reduce((acc, u) => { acc[u.id] = u.name; return acc; }, {}); }
             const companyIds = [...new Set((codes || []).filter(c => c.used_by_company).map(c => c.used_by_company))];
             let companyMap = {};
-            if (companyIds.length > 0) { const { data: companies } = await supabase.from('companies').select('id, name, code').in('id', companyIds); companyMap = (companies || []).reduce((acc, c) => { acc[c.id] = { name: c.name, code: c.code }; return acc; }, {}); }
+            if (companyIds.length > 0) { const { data: companies } = await supabase.from('companies').select('id, name, code, status').in('id', companyIds); companyMap = (companies || []).reduce((acc, c) => { acc[c.id] = { name: c.name, code: c.code, status: c.status }; return acc; }, {}); }
             return (codes || []).map(c => ({ ...c, creator: c.created_by ? { name: creatorMap[c.created_by] || null } : null, company: c.used_by_company ? companyMap[c.used_by_company] || null : null }));
         } catch { return []; }
     };
@@ -232,8 +246,8 @@ export const AuthProvider = ({ children }) => {
             const { data: users, error } = await query; if (error) throw error;
             const companyCodes = [...new Set((users || []).filter(u => u.company_code).map(u => u.company_code))];
             let companyMap = {};
-            if (companyCodes.length > 0) { const { data: companies } = await supabase.from('companies').select('code, name').in('code', companyCodes); companyMap = (companies || []).reduce((acc, c) => { acc[c.code] = c.name; return acc; }, {}); }
-            return (users || []).map(u => ({ ...u, company: u.company_code ? { name: companyMap[u.company_code] || null } : null }));
+            if (companyCodes.length > 0) { const { data: companies } = await supabase.from('companies').select('code, name, status').in('code', companyCodes); companyMap = (companies || []).reduce((acc, c) => { acc[c.code] = { name: c.name, status: c.status }; return acc; }, {}); }
+            return (users || []).map(u => ({ ...u, company: u.company_code ? { name: companyMap[u.company_code]?.name || null, status: companyMap[u.company_code]?.status } : null }));
         } catch { return []; }
     };
 
@@ -504,6 +518,8 @@ export const AuthProvider = ({ children }) => {
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
         // Profile updates
         updateProfile, updateCompanyName,
+        // Admin functions
+        toggleCompanyStatus,
         // Chat
         messages, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, fetchUnreadCount, getConversations,
         // Admin contact
