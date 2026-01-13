@@ -505,6 +505,7 @@ export const AuthProvider = ({ children }) => {
                 processing_note: processingNote,
                 created_at: request.created_at,
                 proof_image_url: proofImageUrl,
+                request_id: request.id, // Store original request ID for linking with driver history
             };
 
             if (weightData) {
@@ -517,6 +518,17 @@ export const AuthProvider = ({ children }) => {
             console.log('Inserting processedRecord:', processedRecord);
             const { error: insertError } = await supabase.from('processed_requests').insert([processedRecord]);
             if (insertError) throw insertError;
+
+            // Update driver assignment status to 'completed' if exists
+            // This preserves driver history after manager processes the request
+            await supabase
+                .from('driver_assignments')
+                .update({
+                    status: 'completed',
+                    completed_at: new Date().toISOString()
+                })
+                .eq('request_id', request.id)
+                .is('deleted_at', null);
 
             const { error: deleteError } = await supabase.from('pickup_requests').delete().eq('id', request.id);
             if (deleteError) throw deleteError;

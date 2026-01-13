@@ -494,17 +494,19 @@ export default function DriverDashboard() {
     const loadHistory = async () => {
         setLoadingHistory(true);
         try {
-            // Get delivered assignments - data is stored in the assignment itself
+            // Get delivered/completed assignments - data is stored in the assignment itself
+            // Include both 'delivered' and 'completed' status to show full history
             const { data, error } = await supabase
                 .from('driver_assignments')
                 .select('*')
                 .eq('driver_id', myUserId)
-                .eq('status', 'delivered')
+                .in('status', ['delivered', 'completed'])
                 .is('deleted_at', null)
-                .order('delivered_at', { ascending: false })
+                .order('delivered_at', { ascending: false, nullsFirst: false })
                 .limit(50);
 
             if (error) throw error;
+            console.log('Driver history loaded:', data?.length, 'items for driver:', myUserId);
             setHistoryRequests(data || []);
         } catch (err) {
             console.error('Error loading history:', err);
