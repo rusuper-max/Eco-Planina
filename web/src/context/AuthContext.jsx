@@ -283,12 +283,16 @@ export const AuthProvider = ({ children }) => {
     const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role, joinExisting }) => {
         setIsLoading(true);
         try {
+            // Use same URL and key as supabase client
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://vmsfsstxxndpxbsdylog.supabase.co';
+            const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtc2Zzc3R4eG5kcHhic2R5bG9nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MDcyMzQsImV4cCI6MjA4MzQ4MzIzNH0.pivFU5_iCsiG0VlV__5LOl6pgCj7Uc6R-xJcTn5c4ds';
+
             // Call Edge Function for secure registration
-            const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auth-register`, {
+            const response = await fetch(`${supabaseUrl}/functions/v1/auth-register`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                    'Authorization': `Bearer ${supabaseAnonKey}`
                 },
                 body: JSON.stringify({
                     name,
