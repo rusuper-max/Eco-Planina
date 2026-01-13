@@ -11,7 +11,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Scale
+    Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff
 } from 'lucide-react';
 
 // Fix Leaflet icons
@@ -386,7 +386,7 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
 };
 
 // Components - memoized for performance
-export const StatCard = memo(({ label, value, icon, onClick }) => (
+export const StatCard = memo(({ label, value, subtitle, icon, onClick }) => (
     <div
         onClick={onClick}
         className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-100 ${onClick ? 'cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all' : ''}`}
@@ -395,6 +395,7 @@ export const StatCard = memo(({ label, value, icon, onClick }) => (
             <div>
                 <p className="text-slate-500 text-sm">{label}</p>
                 <h3 className="text-3xl font-bold text-slate-800 mt-1">{value}</h3>
+                {subtitle && <p className="text-xs text-slate-400 mt-1">{subtitle}</p>}
             </div>
             <div className="p-3 bg-slate-50 rounded-xl">{icon}</div>
         </div>
@@ -3759,19 +3760,52 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
     );
 };
 
-export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper, isAdmin }) => {
+export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper, isAdmin, onUpdatePrice }) => {
     const { toggleCompanyStatus } = useAuth();
     const [deleteModal, setDeleteModal] = useState(null);
     const [freezing, setFreezing] = useState(null);
+    const [revealedPrices, setRevealedPrices] = useState({});
+    const [editingPrice, setEditingPrice] = useState(null);
+    const [priceForm, setPriceForm] = useState({ price: '', billing_type: 'one_time', currency: 'EUR' });
 
     const handleFreeze = async (masterCodeId, currentStatus) => {
         setFreezing(masterCodeId);
         try {
             await toggleCompanyStatus(masterCodeId, currentStatus);
-            // We assume parent refreshes data or context updates propagates.
             window.location.reload();
         } catch (e) { alert(e.message); }
         setFreezing(null);
+    };
+
+    const togglePriceReveal = (codeId) => {
+        setRevealedPrices(prev => ({ ...prev, [codeId]: !prev[codeId] }));
+    };
+
+    const startEditPrice = (code) => {
+        setEditingPrice(code.id);
+        setPriceForm({
+            price: code.price || '',
+            billing_type: code.billing_type || 'one_time',
+            currency: code.currency || 'EUR'
+        });
+    };
+
+    const savePrice = async (codeId) => {
+        if (onUpdatePrice) {
+            await onUpdatePrice(codeId, priceForm);
+        }
+        setEditingPrice(null);
+    };
+
+    const billingTypeLabels = {
+        one_time: 'Jednokratno',
+        monthly: 'Mesečno',
+        yearly: 'Godišnje'
+    };
+
+    const formatPrice = (code) => {
+        if (!code.price) return '-';
+        return `${code.price} ${code.currency || 'EUR'}`;
     };
 
     return (
@@ -3792,24 +3826,99 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
             )}
 
             {!codes?.length ? <EmptyState icon={FileText} title="Nema kodova" desc="Generiši prvi kod" /> : (
-                <div className="bg-white rounded-2xl border overflow-hidden">
+                <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-slate-500 border-b">
-                            <tr><th className="px-6 py-4 text-left">Kod</th><th className="px-6 py-4 text-left">Status</th><th className="px-6 py-4 text-left">Firma</th><th className="px-6 py-4 text-left">Kreiran</th><th className="px-6 py-4 text-right">Akcije</th></tr>
+                            <tr>
+                                <th className="px-4 py-4 text-left">Kod</th>
+                                <th className="px-4 py-4 text-left">Status</th>
+                                <th className="px-4 py-4 text-left">Firma</th>
+                                <th className="px-4 py-4 text-left">Korisnici</th>
+                                <th className="px-4 py-4 text-left">Cena</th>
+                                <th className="px-4 py-4 text-left">Kreiran</th>
+                                <th className="px-4 py-4 text-right">Akcije</th>
+                            </tr>
                         </thead>
                         <tbody className="divide-y">
                             {codes.map(c => (
                                 <tr key={c.id} className="hover:bg-slate-50">
-                                    <td className="px-6 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono">{c.code}</code></td>
-                                    <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : c.status === 'frozen' ? 'bg-red-100 text-red-700 font-bold' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : c.status === 'frozen' ? 'ZAMRZNUTO' : 'Dostupan'}</span></td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-slate-600">{c.company?.name || '-'}</span>
-                                            {c.status === 'frozen' && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1 rounded">FROZEN</span>}
+                                    <td className="px-4 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono text-xs">{c.code}</code></td>
+                                    <td className="px-4 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : c.status === 'frozen' ? 'bg-red-100 text-red-700 font-bold' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : c.status === 'frozen' ? 'ZAMRZNUTO' : 'Dostupan'}</span></td>
+                                    <td className="px-4 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-700 font-medium">{c.companyName || '-'}</span>
+                                            {c.status === 'frozen' && <span className="text-[10px] font-bold text-red-600">FROZEN</span>}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-slate-500">{new Date(c.created_at).toLocaleDateString('sr-RS')}</td>
-                                    <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
+                                    <td className="px-4 py-4">
+                                        {c.status === 'used' || c.status === 'frozen' ? (
+                                            <div className="flex flex-col gap-0.5 text-xs">
+                                                <span className="text-blue-600">{c.userCounts?.managers || 0} menadžera</span>
+                                                <span className="text-emerald-600">{c.userCounts?.clients || 0} klijenata</span>
+                                                <span className="text-purple-600">{c.userCounts?.drivers || 0} vozača</span>
+                                            </div>
+                                        ) : <span className="text-slate-400">-</span>}
+                                    </td>
+                                    <td className="px-4 py-4">
+                                        {editingPrice === c.id ? (
+                                            <div className="flex flex-col gap-2 min-w-[180px]">
+                                                <div className="flex gap-1">
+                                                    <input
+                                                        type="number"
+                                                        value={priceForm.price}
+                                                        onChange={(e) => setPriceForm(prev => ({ ...prev, price: e.target.value }))}
+                                                        placeholder="Cena"
+                                                        className="w-20 px-2 py-1 border rounded text-xs"
+                                                    />
+                                                    <select
+                                                        value={priceForm.currency}
+                                                        onChange={(e) => setPriceForm(prev => ({ ...prev, currency: e.target.value }))}
+                                                        className="px-1 py-1 border rounded text-xs"
+                                                    >
+                                                        <option value="EUR">EUR</option>
+                                                        <option value="RSD">RSD</option>
+                                                        <option value="USD">USD</option>
+                                                    </select>
+                                                </div>
+                                                <select
+                                                    value={priceForm.billing_type}
+                                                    onChange={(e) => setPriceForm(prev => ({ ...prev, billing_type: e.target.value }))}
+                                                    className="px-2 py-1 border rounded text-xs"
+                                                >
+                                                    <option value="one_time">Jednokratno</option>
+                                                    <option value="monthly">Mesečno</option>
+                                                    <option value="yearly">Godišnje</option>
+                                                </select>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => savePrice(c.id)} className="px-2 py-1 bg-emerald-600 text-white rounded text-xs">Sačuvaj</button>
+                                                    <button onClick={() => setEditingPrice(null)} className="px-2 py-1 bg-slate-200 rounded text-xs">Otkaži</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => togglePriceReveal(c.id)}
+                                                    className="flex items-center gap-1 group"
+                                                    title="Klikni da vidiš cenu"
+                                                >
+                                                    {revealedPrices[c.id] ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-slate-700">{formatPrice(c)}</span>
+                                                            {c.billing_type && <span className="text-[10px] text-slate-500">{billingTypeLabels[c.billing_type]}</span>}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="px-3 py-1 bg-slate-200 rounded text-slate-400 blur-[4px] select-none">{c.price ? `${c.price} ${c.currency || 'EUR'}` : '---'}</span>
+                                                    )}
+                                                    {revealedPrices[c.id] ? <EyeOff size={14} className="text-slate-400" /> : <Eye size={14} className="text-slate-400" />}
+                                                </button>
+                                                <button onClick={() => startEditPrice(c)} className="p-1 hover:bg-slate-100 rounded" title="Izmeni cenu">
+                                                    <Edit3 size={14} className="text-slate-400" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-4 text-xs text-slate-500">{new Date(c.created_at).toLocaleDateString('sr-RS')}</td>
+                                    <td className="px-4 py-4 text-right flex items-center justify-end gap-1">
                                         <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
 
                                         {(c.status === 'used' || c.status === 'frozen') && (

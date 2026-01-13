@@ -28,7 +28,7 @@ import DriverManagement from './DriverManagement';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -224,6 +224,7 @@ export default function Dashboard() {
     const handleGenerateCode = async () => { try { await generateMasterCode(); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
     const handleCopyCode = (code) => { navigator.clipboard.writeText(code); alert('Kopirano!'); };
     const handleDeleteCode = async (id) => { if (window.confirm('Obrisati?')) try { await deleteMasterCode(id); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
+    const handleUpdateCodePrice = async (codeId, priceData) => { try { await updateMasterCodePrice(codeId, priceData); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
     const handleDeleteUser = async (id) => { if (window.confirm('Obrisati?')) try { await deleteUser(id); setUsers(await fetchAllUsers()); } catch (err) { alert(err.message); } };
     const handleImpersonateUser = async (userId) => {
         if (!window.confirm('Želite da pristupite ovom nalogu?')) return;
@@ -354,7 +355,7 @@ export default function Dashboard() {
     const getStats = () => {
         if (userRole === 'admin' && stats) return [
             { label: 'Firme', value: stats.totalCompanies, icon: <Building2 className="w-6 h-6 text-emerald-600" />, onClick: () => setActiveTab('companies') },
-            { label: 'Korisnici', value: stats.totalUsers, icon: <Users className="w-6 h-6 text-blue-600" />, onClick: () => setActiveTab('users') },
+            { label: 'Korisnici', value: stats.totalUsers, subtitle: `${stats.totalManagers || 0} menadž. / ${stats.totalClients || 0} klij. / ${stats.totalDrivers || 0} voz.`, icon: <Users className="w-6 h-6 text-blue-600" />, onClick: () => setActiveTab('users') },
             { label: 'Master kodovi', value: stats.totalCodes, icon: <FileText className="w-6 h-6 text-orange-600" />, onClick: () => setActiveTab('codes') },
             { label: 'Dostupni', value: stats.availableCodes, icon: <Recycle className="w-6 h-6 text-green-600" />, onClick: () => setActiveTab('codes') }
         ];
@@ -558,7 +559,7 @@ export default function Dashboard() {
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;
             if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} isAdmin={true} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
-            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} isDeveloper={isDeveloper()} isAdmin={true} />;
+            if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} onUpdatePrice={handleUpdateCodePrice} isDeveloper={isDeveloper()} isAdmin={true} />;
             return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Export podataka</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"><button onClick={handleExportUsers} className="p-4 bg-blue-50 rounded-xl hover:bg-blue-100 text-left flex items-center gap-3"><Download size={20} className="text-blue-600" /><div><p className="font-semibold text-blue-900">Korisnici</p><p className="text-xs text-blue-600">Export u CSV</p></div></button><button onClick={handleExportCompanies} className="p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 text-left flex items-center gap-3"><Download size={20} className="text-emerald-600" /><div><p className="font-semibold text-emerald-900">Firme</p><p className="text-xs text-emerald-600">Export u CSV</p></div></button></div></div></div>;
         }
     };

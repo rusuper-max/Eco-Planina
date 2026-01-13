@@ -715,6 +715,7 @@ export const AuthProvider = ({ children }) => {
             const companyIds = [...new Set((codes || []).filter(c => c.used_by_company).map(c => c.used_by_company))];
             let creatorsMap = {};
             let companiesMap = {};
+            let userCountsMap = {};
             if (creatorIds.length) {
                 const { data: creators } = await supabase.from('users').select('id, name').in('id', creatorIds);
                 creatorsMap = (creators || []).reduce((acc, c) => { acc[c.id] = c.name; return acc; }, {});
@@ -722,8 +723,30 @@ export const AuthProvider = ({ children }) => {
             if (companyIds.length) {
                 const { data: companies } = await supabase.from('companies').select('id, name, code').in('id', companyIds);
                 companiesMap = (companies || []).reduce((acc, c) => { acc[c.id] = { name: c.name, code: c.code }; return acc; }, {});
+                // Get user counts per company code
+                const companyCodes = companies?.map(c => c.code) || [];
+                if (companyCodes.length) {
+                    const { data: users } = await supabase.from('users').select('company_code, role').in('company_code', companyCodes).is('deleted_at', null);
+                    userCountsMap = (users || []).reduce((acc, u) => {
+                        if (!acc[u.company_code]) acc[u.company_code] = { managers: 0, clients: 0, drivers: 0 };
+                        if (u.role === 'manager') acc[u.company_code].managers++;
+                        else if (u.role === 'client') acc[u.company_code].clients++;
+                        else if (u.role === 'driver') acc[u.company_code].drivers++;
+                        return acc;
+                    }, {});
+                }
             }
-            return (codes || []).map(c => ({ ...c, creatorName: creatorsMap[c.created_by] || null, companyName: companiesMap[c.used_by_company]?.name || null, companyCode: companiesMap[c.used_by_company]?.code || null }));
+            return (codes || []).map(c => {
+                const companyCode = companiesMap[c.used_by_company]?.code;
+                const userCounts = companyCode ? userCountsMap[companyCode] : null;
+                return {
+                    ...c,
+                    creatorName: creatorsMap[c.created_by] || null,
+                    companyName: companiesMap[c.used_by_company]?.name || null,
+                    companyCode: companyCode || null,
+                    userCounts: userCounts || { managers: 0, clients: 0, drivers: 0 }
+                };
+            });
         } catch {
             return [];
         }
@@ -797,13 +820,14 @@ export const AuthProvider = ({ children }) => {
     const getAdminStats = async () => {
         if (!isAdmin()) return null;
         try {
-            const [{ count: totalUsers }, { count: totalCompanies }, { count: totalCodes }, { count: usedCodes }, { count: totalManagers }, { count: totalClients }, { count: totalAdmins }] = await Promise.all([
+            const [{ count: totalUsers }, { count: totalCompanies }, { count: totalCodes }, { count: usedCodes }, { count: totalManagers }, { count: totalClients }, { count: totalDrivers }, { count: totalAdmins }] = await Promise.all([
                 supabase.from('users').select('*', { count: 'exact', head: true }).is('deleted_at', null),
                 supabase.from('companies').select('*', { count: 'exact', head: true }).is('deleted_at', null),
                 supabase.from('master_codes').select('*', { count: 'exact', head: true }),
                 supabase.from('master_codes').select('*', { count: 'exact', head: true }).eq('status', 'used'),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'manager').is('deleted_at', null),
                 supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'client').is('deleted_at', null),
+                supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'driver').is('deleted_at', null),
                 supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'developer']).is('deleted_at', null)
             ]);
             return {
@@ -814,6 +838,7 @@ export const AuthProvider = ({ children }) => {
                 availableCodes: (totalCodes || 0) - (usedCodes || 0),
                 totalManagers: totalManagers || 0,
                 totalClients: totalClients || 0,
+                totalDrivers: totalDrivers || 0,
                 totalAdmins: totalAdmins || 0
             };
         } catch {
@@ -1099,11 +1124,26 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const updateMasterCodePrice = async (codeId, priceData) => {
+        if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
+        try {
+            const { error } = await supabase.from('master_codes').update({
+                price: priceData.price ? parseFloat(priceData.price) : null,
+                billing_type: priceData.billing_type,
+                currency: priceData.currency
+            }).eq('id', codeId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
     const value = {
         user, authUser, companyCode, companyName, isLoading, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, fetchClientRequests, fetchClientHistory,
         login, logout, register, removePickupRequest, markRequestAsProcessed, updateProcessedRequest, deleteProcessedRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateClientDetails, addPickupRequest, fetchPickupRequests,
-        isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats,
+        isAdmin, isDeveloper, generateMasterCode, fetchAllMasterCodes, fetchAllUsers, fetchAllCompanies, promoteToAdmin, demoteFromAdmin, getAdminStats, updateMasterCodePrice,
         deleteUser, updateUser, deleteCompany, updateCompany, fetchCompanyDetails, deleteMasterCode, deleteClient,
         updateProfile, updateCompanyName, updateLocation, toggleCompanyStatus,
         originalUser, impersonateUser, exitImpersonation, changeUserRole,
