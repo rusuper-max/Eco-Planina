@@ -39,20 +39,23 @@ export default function DriverDashboard() {
     const [processing, setProcessing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [assignments, setAssignments] = useState([]);
-    const [myUserId, setMyUserId] = useState(null);
     const [todayStats, setTodayStats] = useState({ picked: 0, delivered: 0 });
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', '24h', '48h', '72h'
 
-    // Safety timeout - never show loading for more than 8 seconds
+    // Use user.id directly from AuthContext instead of fetching separately
+    const myUserId = user?.id;
+
+    // Safety timeout - never show loading for more than 5 seconds
     useEffect(() => {
+        if (!loading) return; // Already not loading
+
         const safetyTimeout = setTimeout(() => {
-            if (loading) {
-                console.warn('Driver dashboard safety timeout triggered');
-                setLoading(false);
-            }
-        }, 8000);
+            console.warn('Driver dashboard safety timeout triggered - forcing loading off');
+            setLoading(false);
+        }, 5000);
+
         return () => clearTimeout(safetyTimeout);
-    }, []);
+    }, [loading]);
 
     // Messages state
     const [conversations, setConversations] = useState([]);
@@ -72,46 +75,24 @@ export default function DriverDashboard() {
     // Check if user is a driver
     const isDriver = user?.role === 'driver';
 
-    // Get current user's ID from users table
+    // Fetch driver's assignments when user is loaded
     useEffect(() => {
-        const fetchMyUserId = async () => {
-            try {
-                const { data: authUser } = await supabase.auth.getUser();
-                if (authUser?.user?.id) {
-                    const { data } = await supabase
-                        .from('users')
-                        .select('id')
-                        .eq('auth_id', authUser.user.id)
-                        .single();
-                    if (data) {
-                        setMyUserId(data.id);
-                    } else {
-                        // User not found in users table
-                        console.error('User ID not found in users table');
-                        setLoading(false);
-                    }
-                } else {
-                    // No auth user
-                    console.error('No authenticated user');
-                    setLoading(false);
-                }
-            } catch (err) {
-                console.error('Error fetching user ID:', err);
-                setLoading(false);
-            }
-        };
-        fetchMyUserId();
-    }, []);
+        console.log('Driver effect:', { myUserId, isDriver, user: user?.name });
 
-    // Fetch driver's assignments
-    useEffect(() => {
+        if (!user) {
+            // User not loaded yet, keep loading
+            return;
+        }
+
         if (myUserId && isDriver) {
             fetchMyAssignments();
             fetchTodayStats();
-        } else if (!isDriver) {
+        } else {
+            // User exists but is not a driver, or no user ID
+            console.log('Setting loading false - user exists but not driver or no ID');
             setLoading(false);
         }
-    }, [myUserId, isDriver]);
+    }, [myUserId, isDriver, user]);
 
     const fetchMyAssignments = async () => {
         try {
