@@ -326,65 +326,68 @@ export default function RegisterPage() {
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Adresa</label>
-                                <div className="relative">
-                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                    <input
-                                        ref={addressInputRef}
-                                        type="text"
-                                        value={addressQuery}
-                                        onChange={(e) => {
-                                            setAddressQuery(e.target.value);
-                                            setFormData({ ...formData, address: e.target.value, latitude: null, longitude: null });
-                                        }}
-                                        onFocus={() => addressSuggestions.length > 0 && setShowAddressSuggestions(true)}
-                                        placeholder="Počnite kucati adresu..."
-                                        className="w-full pl-12 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                                        required
-                                    />
-                                    {addressLoading && (
-                                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 animate-spin" />
-                                    )}
-                                    {!addressLoading && formData.latitude && (
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
-                                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                    {showAddressSuggestions && addressSuggestions.length > 0 && (
-                                        <div
-                                            ref={suggestionsRef}
-                                            className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto"
-                                        >
-                                            {addressSuggestions.map((suggestion, index) => (
-                                                <button
-                                                    key={suggestion.place_id || index}
-                                                    type="button"
-                                                    onClick={() => handleAddressSelect(suggestion)}
-                                                    className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0"
-                                                >
-                                                    <div className="flex items-start gap-3">
-                                                        <MapPin className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-                                                        <span className="text-sm text-slate-700 line-clamp-2">{suggestion.display_name}</span>
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
+                            {/* Address field - not shown for drivers */}
+                            {role !== 'driver' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">Adresa</label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                        <input
+                                            ref={addressInputRef}
+                                            type="text"
+                                            value={addressQuery}
+                                            onChange={(e) => {
+                                                setAddressQuery(e.target.value);
+                                                setFormData({ ...formData, address: e.target.value, latitude: null, longitude: null });
+                                            }}
+                                            onFocus={() => addressSuggestions.length > 0 && setShowAddressSuggestions(true)}
+                                            placeholder="Počnite kucati adresu..."
+                                            className="w-full pl-12 pr-12 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                            required
+                                        />
+                                        {addressLoading && (
+                                            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 animate-spin" />
+                                        )}
+                                        {!addressLoading && formData.latitude && (
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                        {showAddressSuggestions && addressSuggestions.length > 0 && (
+                                            <div
+                                                ref={suggestionsRef}
+                                                className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 max-h-60 overflow-y-auto"
+                                            >
+                                                {addressSuggestions.map((suggestion, index) => (
+                                                    <button
+                                                        key={suggestion.place_id || index}
+                                                        type="button"
+                                                        onClick={() => handleAddressSelect(suggestion)}
+                                                        className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0"
+                                                    >
+                                                        <div className="flex items-start gap-3">
+                                                            <MapPin className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                                                            <span className="text-sm text-slate-700 line-clamp-2">{suggestion.display_name}</span>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {formData.latitude && formData.longitude && (
+                                        <p className="mt-2 text-xs text-emerald-600 flex items-center gap-1">
+                                            <MapPin className="w-3 h-3" />
+                                            Lokacija potvrđena ({formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)})
+                                        </p>
                                     )}
                                 </div>
-                                {formData.latitude && formData.longitude && (
-                                    <p className="mt-2 text-xs text-emerald-600 flex items-center gap-1">
-                                        <MapPin className="w-3 h-3" />
-                                        Lokacija potvrđena ({formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)})
-                                    </p>
-                                )}
-                            </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    {role === 'client' ? 'ECO Kod firme' : joinExisting ? 'ECO Kod firme' : 'Master Code'}
+                                    {role === 'client' || role === 'driver' ? 'ECO Kod firme' : joinExisting ? 'ECO Kod firme' : 'Master Code'}
                                 </label>
                                 <div className="relative">
                                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
