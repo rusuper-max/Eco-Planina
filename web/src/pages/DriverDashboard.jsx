@@ -176,6 +176,13 @@ const HistoryCard = ({ item, wasteTypes }) => {
                                 )}
                             </div>
                         ))}
+                        {/* Show processed (purple) dot if status is 'completed' */}
+                        {item.status === 'completed' && (
+                            <>
+                                <div className="w-8 h-0.5 bg-slate-300" />
+                                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                            </>
+                        )}
                         <span className="text-xs text-slate-400 ml-2">
                             Ukupno: {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
                         </span>
