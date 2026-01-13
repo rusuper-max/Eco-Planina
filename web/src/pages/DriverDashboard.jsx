@@ -145,23 +145,23 @@ const HistoryCard = ({ item, wasteTypes }) => {
                                 {item.waste_label || 'Nepoznata vrsta'}
                             </p>
                             {item.client_address && (
-                                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-                                    <MapPin size={10} />
-                                    {item.client_address}
+                                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1 max-w-[180px] sm:max-w-none">
+                                    <MapPin size={10} className="shrink-0" />
+                                    <span className="truncate">{item.client_address}</span>
                                 </p>
                             )}
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
-                            <p className="text-xs font-medium text-emerald-600">
-                                {item.delivered_at ? new Date(item.delivered_at).toLocaleDateString('sr-RS') : '-'}
+                            <p className="text-xs font-medium text-emerald-600 whitespace-nowrap">
+                                {item.delivered_at ? new Date(item.delivered_at).toLocaleDateString('sr-RS', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\. /g, '.').replace(/\.$/, '') : '-'}
                             </p>
                             <p className="text-xs text-slate-400">
                                 {item.delivered_at ? new Date(item.delivered_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) : ''}
                             </p>
                         </div>
-                        {expanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+                        {expanded ? <ChevronUp size={20} className="text-slate-400 shrink-0" /> : <ChevronDown size={20} className="text-slate-400 shrink-0" />}
                     </div>
                 </div>
 
