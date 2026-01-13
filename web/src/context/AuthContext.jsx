@@ -77,8 +77,34 @@ export const AuthProvider = ({ children }) => {
             }
         });
 
-        return () => subscription.unsubscribe();
-    }, []);
+        // Handle tab visibility change - refresh session when user returns to tab
+        const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible') {
+                try {
+                    const { data: { session }, error } = await supabase.auth.getSession();
+                    if (error) {
+                        console.error('Session refresh error:', error);
+                        return;
+                    }
+                    // If we have a session but no user loaded, reload profile
+                    if (session?.user && !user) {
+                        setIsLoading(true);
+                        await loadUserProfile(session.user);
+                        setIsLoading(false);
+                    }
+                } catch (err) {
+                    console.error('Visibility change error:', err);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            subscription.unsubscribe();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [user]);
 
     // Load user profile from public.users table
     const loadUserProfile = async (authUserData) => {
