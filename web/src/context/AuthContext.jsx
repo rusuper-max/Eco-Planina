@@ -1014,8 +1014,10 @@ export const AuthProvider = ({ children }) => {
     const markMessagesAsRead = async (senderId) => {
         if (!user) return;
         try {
-            await supabase.from('messages').update({ is_read: true }).eq('sender_id', senderId).eq('receiver_id', user.id).eq('is_read', false);
-            fetchUnreadCount();
+            const { error } = await supabase.from('messages').update({ is_read: true }).eq('sender_id', senderId).eq('receiver_id', user.id).eq('is_read', false);
+            if (error) throw error;
+            // Immediately update unread count after marking as read
+            await fetchUnreadCount();
         } catch (error) {
             console.error('Error marking messages as read:', error);
         }

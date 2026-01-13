@@ -529,6 +529,8 @@ export default function DriverDashboard() {
         const msgs = await fetchMessages(partner.id);
         setChatMessages(msgs);
         await markMessagesAsRead(partner.id);
+        // Refresh conversations to update unread badges
+        loadConversations();
         setLoadingMessages(false);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };
