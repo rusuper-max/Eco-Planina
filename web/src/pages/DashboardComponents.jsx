@@ -1642,8 +1642,8 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit, onDel
                                 </button>
                             </th>
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
-                            <th className="px-2 py-3 text-center">Dokaz</th>
-                            <th className="px-2 py-3 text-center">Akcije</th>
+                            <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
+                            <th className="px-2 py-3 text-center w-20">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -1680,21 +1680,31 @@ export const HistoryTable = ({ requests, wasteTypes = WASTE_TYPES, onEdit, onDel
                                         <span className="text-slate-300 text-xs">-</span>
                                     )}
                                 </td>
-                                <td className="px-2 py-3 text-center">
-                                    {req.proof_image_url ? (
+                                <td className="hidden xs:table-cell px-2 py-3">
+                                    <div className="flex items-center justify-center">
+                                        {req.proof_image_url ? (
+                                            <button
+                                                onClick={() => setViewingProof(req)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                title="Pogledaj dokaz"
+                                            >
+                                                <Image size={18} />
+                                            </button>
+                                        ) : (
+                                            <span className="text-slate-300"><Image size={18} /></span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-2 py-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                        {/* On very small screens, show proof button in actions if dokaz column is hidden */}
                                         <button
-                                            onClick={() => setViewingProof(req)}
-                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                            title="Pogledaj dokaz"
+                                            onClick={() => req.proof_image_url && setViewingProof(req)}
+                                            className={`xs:hidden p-1.5 rounded-lg ${req.proof_image_url ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-default'}`}
+                                            title={req.proof_image_url ? "Pogledaj dokaz" : "Nema dokaza"}
                                         >
                                             <Image size={18} />
                                         </button>
-                                    ) : (
-                                        <span className="text-slate-300"><Image size={18} /></span>
-                                    )}
-                                </td>
-                                <td className="px-2 py-3 text-center">
-                                    <div className="flex items-center justify-center gap-1">
                                         <button
                                             onClick={() => setEditingRequest(req)}
                                             className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"

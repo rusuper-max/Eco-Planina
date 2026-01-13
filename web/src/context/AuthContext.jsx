@@ -30,13 +30,17 @@ export const AuthProvider = ({ children }) => {
         userRef.current = user;
     }, [user]);
 
+    // Track if profile loading is in progress to prevent duplicate calls
+    const loadingProfileRef = useRef(false);
+
     // Initialize auth state from Supabase Auth session (runs only once)
     useEffect(() => {
-        // Safety timeout - never show loading for more than 10 seconds
+        // Safety timeout - never show loading for more than 8 seconds
         const safetyTimeout = setTimeout(() => {
             console.warn('Auth init safety timeout triggered');
+            loadingProfileRef.current = false;
             setIsLoading(false);
-        }, 10000);
+        }, 8000);
 
         const initAuth = async () => {
             try {
@@ -44,7 +48,9 @@ export const AuthProvider = ({ children }) => {
                 const { data: { session } } = await supabase.auth.getSession();
 
                 if (session?.user) {
+                    loadingProfileRef.current = true;
                     await loadUserProfile(session.user);
+                    loadingProfileRef.current = false;
                 } else {
                     // Check for legacy session (migration period)
                     const legacySession = localStorage.getItem('eco_session');
@@ -64,6 +70,7 @@ export const AuthProvider = ({ children }) => {
                 }
             } catch (error) {
                 console.error('Auth init error:', error);
+                loadingProfileRef.current = false;
             } finally {
                 clearTimeout(safetyTimeout);
                 setIsLoading(false);
@@ -75,11 +82,19 @@ export const AuthProvider = ({ children }) => {
         // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
             console.log('Auth state change:', event);
+
             if (event === 'SIGNED_IN' && session?.user) {
+                // Skip if user is already loaded OR profile loading is in progress
+                if (userRef.current || loadingProfileRef.current) {
+                    console.log('User already loaded or loading in progress, skipping');
+                    return;
+                }
+                loadingProfileRef.current = true;
                 setIsLoading(true);
                 try {
                     await loadUserProfile(session.user);
                 } finally {
+                    loadingProfileRef.current = false;
                     setIsLoading(false);
                 }
             } else if (event === 'SIGNED_OUT') {
@@ -90,44 +105,21 @@ export const AuthProvider = ({ children }) => {
             }
         });
 
-        // Handle tab visibility change - refresh session when user returns to tab
+        // Handle tab visibility change - silently check session validity
+        // DO NOT set isLoading here - it causes infinite loading on tab return
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'visible') {
-                // Safety: always ensure loading is false after max 5 seconds
-                const visibilitySafetyTimeout = setTimeout(() => {
-                    setIsLoading(false);
-                }, 5000);
-
+            if (document.visibilityState === 'visible' && userRef.current) {
+                // User exists, just silently verify session is still valid
                 try {
-                    const { data: { session }, error } = await supabase.auth.getSession();
-                    clearTimeout(visibilitySafetyTimeout);
+                    const { data: { session } } = await supabase.auth.getSession();
 
-                    if (error) {
-                        console.error('Session refresh error:', error);
-                        setIsLoading(false);
-                        return;
-                    }
-
-                    // If no session, ensure we're not loading
+                    // If session expired while away, clear local state
                     if (!session?.user) {
-                        setIsLoading(false);
-                        return;
-                    }
-
-                    // Session exists - user should already be loaded from initAuth
-                    // Only reload if user state is somehow lost (use ref to avoid stale closure)
-                    if (!userRef.current) {
-                        setIsLoading(true);
-                        try {
-                            await loadUserProfile(session.user);
-                        } finally {
-                            setIsLoading(false);
-                        }
+                        console.log('Session expired while tab was hidden');
+                        clearSession();
                     }
                 } catch (err) {
-                    clearTimeout(visibilitySafetyTimeout);
-                    console.error('Visibility change error:', err);
-                    setIsLoading(false);
+                    console.error('Visibility change session check error:', err);
                 }
             }
         };
