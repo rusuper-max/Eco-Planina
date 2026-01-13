@@ -68,6 +68,7 @@ export default function Dashboard() {
     const [editingCompany, setEditingCompany] = useState(null);
     const [clientHistory, setClientHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [driverAssignments, setDriverAssignments] = useState([]);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
@@ -158,11 +159,30 @@ export default function Dashboard() {
 
                 if (userRole === 'manager') {
                     setClients(await fetchCompanyClients() || []);
+                    // Fetch driver assignments for status display
+                    await fetchDriverAssignments();
                 }
             }
             setInitialDataLoaded(true);
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
+    };
+
+    // Fetch driver assignments for manager view
+    const fetchDriverAssignments = async () => {
+        if (!companyCode) return;
+        try {
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select('*, driver:driver_id(id, name)')
+                .eq('company_code', companyCode)
+                .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
+                .is('deleted_at', null);
+            if (error) throw error;
+            setDriverAssignments(data || []);
+        } catch (err) {
+            console.error('Error fetching driver assignments:', err);
+        }
     };
 
     // Load tab-specific data (doesn't block UI with spinner)
@@ -504,7 +524,7 @@ export default function Dashboard() {
             );
         }
         if (userRole === 'manager') {
-            if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
+            if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} />;
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
             if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onEdit={async (id, updates) => {
                 try {
@@ -533,7 +553,7 @@ export default function Dashboard() {
                 const remB = getRemainingTime(b.created_at, b.urgency);
                 return remA.ms - remB.ms;
             });
-            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} /></div>}</div>;
+            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} assignments={driverAssignments} /></div>}</div>;
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;

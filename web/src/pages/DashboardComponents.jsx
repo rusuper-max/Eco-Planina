@@ -174,6 +174,29 @@ export const WASTE_TYPES = [
     { id: 'glass', label: 'Staklo', icon: '🍾' },
 ];
 
+// Request Status Badge for manager view
+export const RequestStatusBadge = ({ status, driverName }) => {
+    const configs = {
+        'not_assigned': { label: 'Nije dodeljeno', bg: 'bg-slate-100', color: 'text-slate-600', icon: '○' },
+        'assigned': { label: 'Čeka preuzimanje', bg: 'bg-blue-100', color: 'text-blue-700', icon: '⏳' },
+        'in_progress': { label: 'U toku', bg: 'bg-blue-100', color: 'text-blue-700', icon: '🚚' },
+        'picked_up': { label: 'Preuzeto', bg: 'bg-amber-100', color: 'text-amber-700', icon: '📦' },
+        'delivered': { label: 'Dostavljeno', bg: 'bg-emerald-100', color: 'text-emerald-700', icon: '✓' }
+    };
+    const config = configs[status] || configs['not_assigned'];
+    return (
+        <div className="flex flex-col gap-0.5">
+            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>
+                <span>{config.icon}</span>
+                {config.label}
+            </span>
+            {driverName && status !== 'not_assigned' && (
+                <span className="text-xs text-slate-400 pl-1 truncate max-w-[100px]">{driverName}</span>
+            )}
+        </div>
+    );
+};
+
 // Image upload helper
 export const uploadImage = async (file, folder = 'uploads', bucket = 'receipts') => {
     const fileExt = file.name.split('.').pop();
@@ -779,7 +802,7 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
 };
 
 // Manager Table with sorting, filtering and search
-export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, onClientClick, wasteTypes = WASTE_TYPES, initialUrgencyFilter = 'all', onUrgencyFilterChange }) => {
+export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, onClientClick, wasteTypes = WASTE_TYPES, initialUrgencyFilter = 'all', onUrgencyFilterChange, assignments = [] }) => {
     const [sortBy, setSortBy] = useState('remaining'); // remaining, client, type, fill, date
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
@@ -916,6 +939,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                     Tip <SortIcon column="type" />
                                 </button>
                             </th>
+                            <th className="hidden lg:table-cell px-4 py-3 text-left">Status</th>
                             <th className="hidden md:table-cell px-4 py-3 text-left">
                                 <button onClick={() => handleSort('fill')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     % <SortIcon column="fill" />
@@ -938,10 +962,13 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map(req => {
                             const rem = getRemainingTime(req.created_at, req.urgency);
                             const currentUrg = getCurrentUrgency(req.created_at, req.urgency);
+                            const assignment = assignments.find(a => a.request_id === req.id);
+                            const assignmentStatus = assignment?.status || 'not_assigned';
+                            const driverName = assignment?.driver?.name;
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
                                     <td className="px-3 md:px-4 py-3">
@@ -955,6 +982,9 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                     <td className="px-3 md:px-4 py-3">
                                         <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
                                         <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                    </td>
+                                    <td className="hidden lg:table-cell px-4 py-3">
+                                        <RequestStatusBadge status={assignmentStatus} driverName={driverName} />
                                     </td>
                                     <td className="hidden md:table-cell px-4 py-3">
                                         <FillLevelBar fillLevel={req.fill_level} />
