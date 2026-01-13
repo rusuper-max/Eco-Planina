@@ -87,12 +87,30 @@ export const AuthProvider = ({ children }) => {
                 if (cancelled || timeoutHit) return;
 
                 if (data?.session?.user) {
-                    await loadUserProfile(data.session.user);
-                }
+                    // Check if there's an active impersonation
+                    const impersonatedData = localStorage.getItem('eco_impersonated_user');
+                    const originalData = localStorage.getItem('eco_original_user');
 
-                // Check impersonation
-                const imp = localStorage.getItem('eco_original_user');
-                if (imp && !cancelled) setOriginalUser(JSON.parse(imp));
+                    if (impersonatedData && originalData) {
+                        // Restore impersonation state
+                        console.log('[Auth] Restoring impersonation...');
+                        const impersonated = JSON.parse(impersonatedData);
+                        const original = JSON.parse(originalData);
+
+                        setUser(impersonated.user);
+                        setCompanyCode(impersonated.companyCode);
+                        setCompanyName(impersonated.companyName);
+                        setOriginalUser(original);
+                        setAuthUser(data.session.user);
+                    } else {
+                        // Normal login - load profile from auth user
+                        await loadUserProfile(data.session.user);
+                    }
+                } else {
+                    // No session - clear any stale impersonation data
+                    localStorage.removeItem('eco_impersonated_user');
+                    localStorage.removeItem('eco_original_user');
+                }
 
             } catch (e) {
                 console.error('[Auth] Init error:', e);
@@ -185,6 +203,7 @@ export const AuthProvider = ({ children }) => {
         setOriginalUser(null);
         localStorage.removeItem('eco_session');
         localStorage.removeItem('eco_original_user');
+        localStorage.removeItem('eco_impersonated_user');
     };
 
     // Real-time subscriptions for pickup requests
@@ -378,29 +397,44 @@ export const AuthProvider = ({ children }) => {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
         try {
-            const { data: targetUser, error } = await supabase
+            console.log('[Impersonate] Starting for userId:', userId);
+
+            // Use limit(1) instead of single() to avoid 406 errors
+            const { data: users, error } = await supabase
                 .from('users')
                 .select('*')
                 .eq('id', userId)
                 .is('deleted_at', null)
-                .single();
-            if (error || !targetUser) throw new Error('Korisnik nije pronađen');
+                .limit(1);
 
-            // Save original user session
-            const originalSession = { user, companyCode, companyName };
-            setOriginalUser(originalSession);
-            localStorage.setItem('eco_original_user', JSON.stringify(originalSession));
+            console.log('[Impersonate] Query result:', { users, error });
+
+            const targetUser = users?.[0];
+            if (error) {
+                console.error('[Impersonate] DB error:', error);
+                throw new Error('Greška pri učitavanju korisnika: ' + error.message);
+            }
+            if (!targetUser) {
+                console.error('[Impersonate] User not found for id:', userId);
+                throw new Error('Korisnik nije pronađen');
+            }
+
+            // Save original user session (only if not already impersonating)
+            if (!originalUser) {
+                const originalSession = { user, companyCode, companyName };
+                setOriginalUser(originalSession);
+                localStorage.setItem('eco_original_user', JSON.stringify(originalSession));
+            }
 
             // Get company data for target user
             let companyData = null;
             if (targetUser.company_code) {
-                const { data: company } = await supabase
+                const { data: companies } = await supabase
                     .from('companies')
                     .select('*')
                     .eq('code', targetUser.company_code)
-                    .is('deleted_at', null)
-                    .single();
-                companyData = company;
+                    .limit(1);
+                companyData = companies?.[0];
             }
 
             // Set new session as target user
@@ -417,12 +451,18 @@ export const AuthProvider = ({ children }) => {
                 longitude: targetUser.longitude
             };
 
+            // Save impersonated user to localStorage for persistence across refreshes
+            const impersonatedSession = { user: userObj, companyCode: newCompanyCode, companyName: newCompanyName };
+            localStorage.setItem('eco_impersonated_user', JSON.stringify(impersonatedSession));
+
             setUser(userObj);
             setCompanyCode(newCompanyCode);
             setCompanyName(newCompanyName);
 
+            console.log('[Impersonate] Success, role:', targetUser.role);
             return { success: true, role: targetUser.role };
         } catch (error) {
+            console.error('[Impersonate] Error:', error);
             throw error;
         }
     };
@@ -434,6 +474,7 @@ export const AuthProvider = ({ children }) => {
         setCompanyName(originalUser.companyName);
         setOriginalUser(null);
         localStorage.removeItem('eco_original_user');
+        localStorage.removeItem('eco_impersonated_user');
     };
 
     const changeUserRole = async (userId, newRole) => {
@@ -660,11 +701,19 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // Generate short request code (e.g., "REQ-A3X7")
+    const generateRequestCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid confusing chars like 0/O, 1/I
+        const code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        return `REQ-${code}`;
+    };
+
     const addPickupRequest = async (requestData) => {
         if (!user || !companyCode) throw new Error('Niste prijavljeni ili nemate firmu');
         try {
             // Map camelCase to snake_case for database
             const { fillLevel, wasteType, wasteLabel, ...rest } = requestData;
+            const requestCode = generateRequestCode();
             const { data, error } = await supabase.from('pickup_requests').insert([{
                 user_id: user.id,
                 company_code: companyCode,
@@ -673,6 +722,7 @@ export const AuthProvider = ({ children }) => {
                 fill_level: fillLevel,
                 waste_type: wasteType,
                 waste_label: wasteLabel,
+                request_code: requestCode,
                 ...rest,
                 status: 'pending'
             }]).select().single();
@@ -794,20 +844,22 @@ export const AuthProvider = ({ children }) => {
         try {
             const [{ data: companies, error: compError }, { data: users, error: userError }] = await Promise.all([
                 supabase.from('companies').select('*').is('deleted_at', null).order('name'),
-                supabase.from('users').select('company_code, role').in('role', ['manager', 'client']).is('deleted_at', null)
+                supabase.from('users').select('company_code, role').in('role', ['manager', 'client', 'driver']).is('deleted_at', null)
             ]);
             if (compError) throw compError;
             if (userError) throw userError;
             const counts = (users || []).reduce((acc, u) => {
-                if (!acc[u.company_code]) acc[u.company_code] = { managers: 0, clients: 0 };
+                if (!acc[u.company_code]) acc[u.company_code] = { managers: 0, clients: 0, drivers: 0 };
                 if (u.role === 'manager') acc[u.company_code].managers++;
                 else if (u.role === 'client') acc[u.company_code].clients++;
+                else if (u.role === 'driver') acc[u.company_code].drivers++;
                 return acc;
             }, {});
             return (companies || []).map(company => ({
                 ...company,
                 managerCount: counts[company.code]?.managers || 0,
-                clientCount: counts[company.code]?.clients || 0
+                clientCount: counts[company.code]?.clients || 0,
+                driverCount: counts[company.code]?.drivers || 0
             }));
         } catch {
             return [];

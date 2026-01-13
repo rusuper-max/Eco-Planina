@@ -953,6 +953,9 @@ export default function DriverDashboard() {
                                                         )}
                                                     </div>
                                                     <p className="text-sm text-slate-600">{item.waste_label}</p>
+                                                    {item.request_code && (
+                                                        <p className="text-xs text-slate-400 font-mono">{item.request_code}</p>
+                                                    )}
                                                     <p className="text-xs text-slate-500 mt-1">{item.client_address}</p>
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <span className="text-xs text-slate-500">Popunjenost:</span>
@@ -1063,6 +1066,9 @@ export default function DriverDashboard() {
                                                     <div>
                                                         <h3 className="font-bold text-slate-800">{request.client_name}</h3>
                                                         <p className="text-sm text-slate-500">{request.waste_label}</p>
+                                                        {request.request_code && (
+                                                            <p className="text-xs text-slate-400 font-mono">{request.request_code}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1">

@@ -4,7 +4,7 @@ import { supabase } from '../config/supabase';
 import {
     Truck, Users, MapPin, Phone, CheckCircle2, Clock, AlertCircle,
     ChevronDown, ChevronUp, Search, Filter, X, Plus, Trash2, Navigation,
-    RefreshCw, User, Package, PackageCheck, CircleDot
+    RefreshCw, User, Package, PackageCheck, CircleDot, ArrowLeftRight
 } from 'lucide-react';
 import {
     Modal, CountdownTimer, FillLevelBar, getCurrentUrgency, getRemainingTime, WASTE_TYPES
@@ -119,6 +119,9 @@ const RequestRow = ({ request, isSelected, onToggle, wasteTypes, assignment, dri
                     <div>
                         <p className="font-medium text-slate-800">{request.client_name}</p>
                         <p className="text-sm text-slate-500">{request.waste_label}</p>
+                        {request.request_code && (
+                            <p className="text-xs text-slate-400 font-mono">{request.request_code}</p>
+                        )}
                     </div>
                 </div>
             </td>
@@ -223,6 +226,9 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
     const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(true);
     const [showAddDriverModal, setShowAddDriverModal] = useState(false);
     const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+    const [showChangeDriverModal, setShowChangeDriverModal] = useState(false);
+    const [assignmentToChange, setAssignmentToChange] = useState(null);
+    const [changingDriver, setChangingDriver] = useState(false);
     const driverDropdownButtonRef = useRef(null);
 
     // Fetch drivers and assignments
@@ -391,6 +397,44 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
         }
     };
 
+    // Open change driver modal
+    const openChangeDriverModal = (assignment, request) => {
+        setAssignmentToChange({ assignment, request });
+        setShowChangeDriverModal(true);
+    };
+
+    // Change driver for assignment
+    const handleChangeDriver = async (newDriverId) => {
+        if (!assignmentToChange || changingDriver) return;
+
+        setChangingDriver(true);
+        try {
+            const { error } = await supabase
+                .from('driver_assignments')
+                .update({
+                    driver_id: newDriverId,
+                    assigned_at: new Date().toISOString(), // Reset assignment time
+                    status: 'assigned', // Reset to assigned status
+                    picked_up_at: null,
+                    delivered_at: null
+                })
+                .eq('id', assignmentToChange.assignment.id);
+
+            if (error) throw error;
+
+            await fetchAssignments();
+            setShowChangeDriverModal(false);
+            setAssignmentToChange(null);
+
+            const newDriver = drivers.find(d => d.id === newDriverId);
+            alert(`Zahtev preusmeren na vozača: ${newDriver?.name || 'Nepoznato'}`);
+        } catch (err) {
+            alert('Greška pri promeni vozača: ' + err.message);
+        } finally {
+            setChangingDriver(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -470,6 +514,13 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                     <div className="flex items-center gap-3">
                                         <StatusBadge status={assignment.status} />
                                         <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                        <button
+                                            onClick={() => openChangeDriverModal(assignment, request)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                            title="Promeni vozača"
+                                        >
+                                            <ArrowLeftRight size={18} />
+                                        </button>
                                         <button
                                             onClick={() => handleUnassign(assignment.id)}
                                             className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
@@ -701,6 +752,69 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                             Zatvori
                         </button>
                     </div>
+                </div>
+            </Modal>
+
+            {/* Change Driver Modal */}
+            <Modal
+                open={showChangeDriverModal}
+                onClose={() => {
+                    setShowChangeDriverModal(false);
+                    setAssignmentToChange(null);
+                }}
+                title="Promeni vozača"
+            >
+                <div className="space-y-4">
+                    {assignmentToChange && (
+                        <div className="p-3 bg-slate-100 rounded-xl">
+                            <p className="text-sm text-slate-600">Zahtev:</p>
+                            <p className="font-medium">{assignmentToChange.request?.client_name}</p>
+                            <p className="text-sm text-slate-500">{assignmentToChange.request?.waste_label}</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Trenutni vozač: <strong>{assignmentToChange.assignment?.driver?.name || 'Nepoznato'}</strong>
+                            </p>
+                        </div>
+                    )}
+
+                    <div>
+                        <p className="text-sm text-slate-600 mb-2">Izaberite novog vozača:</p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {drivers.filter(d => d.id !== assignmentToChange?.assignment?.driver_id).map(driver => (
+                                <button
+                                    key={driver.id}
+                                    onClick={() => handleChangeDriver(driver.id)}
+                                    disabled={changingDriver}
+                                    className="w-full flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                                >
+                                    <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold">
+                                        {driver.name?.charAt(0)?.toUpperCase() || 'V'}
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-medium text-slate-800">{driver.name}</p>
+                                        <p className="text-xs text-slate-500">{driver.phone}</p>
+                                    </div>
+                                    {changingDriver && (
+                                        <RefreshCw size={16} className="ml-auto animate-spin text-emerald-600" />
+                                    )}
+                                </button>
+                            ))}
+                            {drivers.filter(d => d.id !== assignmentToChange?.assignment?.driver_id).length === 0 && (
+                                <p className="text-center text-slate-400 py-4">
+                                    Nema drugih dostupnih vozača
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            setShowChangeDriverModal(false);
+                            setAssignmentToChange(null);
+                        }}
+                        className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200"
+                    >
+                        Otkaži
+                    </button>
                 </div>
             </Modal>
         </div>

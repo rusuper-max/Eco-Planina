@@ -918,7 +918,8 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
             const matchesName = req.client_name?.toLowerCase().includes(query);
             const matchesType = req.waste_label?.toLowerCase().includes(query);
             const matchesDate = new Date(req.created_at).toLocaleDateString('sr-RS').includes(query);
-            if (!matchesName && !matchesType && !matchesDate) return false;
+            const matchesCode = req.request_code?.toLowerCase().includes(query);
+            if (!matchesName && !matchesType && !matchesDate && !matchesCode) return false;
         }
         // Type filter
         if (filterType !== 'all' && req.waste_type !== filterType) return false;
@@ -1067,6 +1068,9 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                         >
                                             {req.client_name}
                                         </button>
+                                        {req.request_code && (
+                                            <p className="text-xs text-slate-400 font-mono mt-0.5">{req.request_code}</p>
+                                        )}
                                     </td>
                                     <td className="px-3 md:px-4 py-3">
                                         <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
@@ -2792,9 +2796,41 @@ export const FitBounds = ({ positions }) => {
     return null;
 };
 
-export const MapView = ({ requests, clients, type, onClientLocationEdit, wasteTypes = WASTE_TYPES }) => {
+export const MapView = ({ requests, clients, type, onClientLocationEdit, wasteTypes = WASTE_TYPES, drivers = [], onAssignDriver, driverAssignments = [] }) => {
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 24h, 48h, 72h
+    const [showDriverModal, setShowDriverModal] = useState(false);
+    const [selectedForAssignment, setSelectedForAssignment] = useState(null); // single request or array for cluster
+    const [assigningDriver, setAssigningDriver] = useState(false);
     const items = type === 'requests' ? requests : clients;
+
+    // Get assignment info for a request
+    const getAssignment = (requestId) => {
+        return driverAssignments.find(a => a.request_id === requestId);
+    };
+
+    // Open driver selection modal
+    const openDriverModal = (requestOrRequests) => {
+        setSelectedForAssignment(requestOrRequests);
+        setShowDriverModal(true);
+    };
+
+    // Handle driver assignment
+    const handleAssignToDriver = async (driverId) => {
+        if (!onAssignDriver || !selectedForAssignment) return;
+        setAssigningDriver(true);
+        try {
+            const requestIds = Array.isArray(selectedForAssignment)
+                ? selectedForAssignment.map(r => r.id)
+                : [selectedForAssignment.id];
+            await onAssignDriver(requestIds, driverId);
+            setShowDriverModal(false);
+            setSelectedForAssignment(null);
+        } catch (err) {
+            alert('Greška pri dodeljivanju: ' + err.message);
+        } finally {
+            setAssigningDriver(false);
+        }
+    };
 
     // Helper to get waste type icon from wasteTypes array
     const getWasteIcon = (wasteTypeId) => {
@@ -2963,6 +2999,23 @@ export const MapView = ({ requests, clients, type, onClientLocationEdit, wasteTy
                                         </a>
                                     </div>
                                 )}
+                                {type === 'requests' && drivers.length > 0 && onAssignDriver && (
+                                    <div className="mt-2 pt-2 border-t">
+                                        {getAssignment(item.id) ? (
+                                            <div className="text-xs">
+                                                <span className="text-slate-500">Dodeljeno: </span>
+                                                <span className="font-medium text-emerald-600">{getAssignment(item.id)?.driver?.name}</span>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => openDriverModal(item)}
+                                                className="w-full px-2 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 flex items-center justify-center gap-1"
+                                            >
+                                                <Truck size={12} /> Dodeli vozaču
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                                 {type === 'clients' && onClientLocationEdit && (
                                     <button
                                         onClick={() => onClientLocationEdit(item)}
@@ -2976,6 +3029,84 @@ export const MapView = ({ requests, clients, type, onClientLocationEdit, wasteTy
                     ))}
                 </MarkerClusterGroup>
             </MapContainer>
+
+            {/* Driver Assignment Modal */}
+            {showDriverModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-xl">
+                        <div className="p-4 border-b flex items-center justify-between bg-slate-50">
+                            <h3 className="font-bold text-slate-800">Dodeli vozaču</h3>
+                            <button
+                                onClick={() => {
+                                    setShowDriverModal(false);
+                                    setSelectedForAssignment(null);
+                                }}
+                                className="p-2 hover:bg-slate-200 rounded-lg"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Selected requests info */}
+                        <div className="p-3 bg-emerald-50 border-b">
+                            {Array.isArray(selectedForAssignment) ? (
+                                <p className="text-sm text-emerald-700">
+                                    <strong>{selectedForAssignment.length}</strong> zahteva odabrano za dodelu
+                                </p>
+                            ) : selectedForAssignment && (
+                                <div>
+                                    <p className="font-medium text-slate-800">{selectedForAssignment.client_name}</p>
+                                    <p className="text-sm text-slate-500">{selectedForAssignment.waste_label}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Driver list */}
+                        <div className="overflow-y-auto max-h-96 p-2">
+                            {drivers.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400">
+                                    <Truck size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p className="text-sm">Nema registrovanih vozača</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {drivers.map(driver => (
+                                        <button
+                                            key={driver.id}
+                                            onClick={() => handleAssignToDriver(driver.id)}
+                                            disabled={assigningDriver}
+                                            className="w-full flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                                        >
+                                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold">
+                                                {driver.name?.charAt(0)?.toUpperCase() || 'V'}
+                                            </div>
+                                            <div className="text-left flex-1">
+                                                <p className="font-medium text-slate-800">{driver.name}</p>
+                                                <p className="text-xs text-slate-500">{driver.phone}</p>
+                                            </div>
+                                            {assigningDriver && (
+                                                <RefreshCw size={16} className="animate-spin text-emerald-600" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-3 border-t">
+                            <button
+                                onClick={() => {
+                                    setShowDriverModal(false);
+                                    setSelectedForAssignment(null);
+                                }}
+                                className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200"
+                            >
+                                Otkaži
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -3415,13 +3546,14 @@ export const AdminCompaniesTable = ({ companies, onEdit }) => {
     if (!companies?.length) return <EmptyState icon={Building2} title="Nema firmi" desc="Firme će se prikazati ovde" />;
     return (
         <div className="bg-white rounded-2xl border overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-slate-50 text-slate-500 border-b">
                     <tr>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">Firma</th>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">ECO Kod</th>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-left whitespace-nowrap">Status</th>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-center whitespace-nowrap">Menadžeri</th>
+                        <th className="px-3 md:px-6 py-3 md:py-4 text-center whitespace-nowrap">Vozači</th>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-center whitespace-nowrap">Klijenti</th>
                         <th className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-slate-50">Akcije</th>
                     </tr>
@@ -3439,6 +3571,7 @@ export const AdminCompaniesTable = ({ companies, onEdit }) => {
                                 )}
                             </td>
                             <td className="px-3 md:px-6 py-3 md:py-4 text-center">{c.managerCount || 0}</td>
+                            <td className="px-3 md:px-6 py-3 md:py-4 text-center">{c.driverCount || 0}</td>
                             <td className="px-3 md:px-6 py-3 md:py-4 text-center">{c.clientCount || 0}</td>
                             <td className="px-3 md:px-6 py-3 md:py-4 text-right sticky right-0 bg-white">
                                 <button onClick={() => onEdit(c)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600" title="Izmeni firmu">

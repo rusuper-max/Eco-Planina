@@ -69,6 +69,7 @@ export default function Dashboard() {
     const [clientHistory, setClientHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [driverAssignments, setDriverAssignments] = useState([]);
+    const [companyDrivers, setCompanyDrivers] = useState([]);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
 
@@ -161,6 +162,8 @@ export default function Dashboard() {
                     setClients(await fetchCompanyClients() || []);
                     // Fetch driver assignments for status display
                     await fetchDriverAssignments();
+                    // Fetch drivers for map assignment
+                    await fetchCompanyDrivers();
                 }
             }
             setInitialDataLoaded(true);
@@ -182,6 +185,58 @@ export default function Dashboard() {
             setDriverAssignments(data || []);
         } catch (err) {
             console.error('Error fetching driver assignments:', err);
+        }
+    };
+
+    // Fetch company drivers for map assignment
+    const fetchCompanyDrivers = async () => {
+        if (!companyCode) return;
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id, name, phone')
+                .eq('company_code', companyCode)
+                .eq('role', 'driver')
+                .is('deleted_at', null)
+                .order('name');
+            if (error) throw error;
+            setCompanyDrivers(data || []);
+        } catch (err) {
+            console.error('Error fetching drivers:', err);
+        }
+    };
+
+    // Assign requests to driver from map
+    const handleAssignDriverFromMap = async (requestIds, driverId) => {
+        try {
+            const { data: userData } = await supabase
+                .from('users')
+                .select('id')
+                .eq('auth_id', (await supabase.auth.getUser()).data.user?.id)
+                .single();
+
+            const assignmentsToInsert = requestIds.map(requestId => ({
+                driver_id: driverId,
+                request_id: requestId,
+                company_code: companyCode,
+                assigned_by: userData?.id,
+                status: 'assigned'
+            }));
+
+            const { error } = await supabase
+                .from('driver_assignments')
+                .insert(assignmentsToInsert);
+
+            if (error) throw error;
+
+            // Refresh assignments
+            await fetchDriverAssignments();
+
+            const driver = companyDrivers.find(d => d.id === driverId);
+            alert(`${requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
+        } catch (err) {
+            console.error('Error assigning driver:', err);
+            throw err;
         }
     };
 
@@ -236,7 +291,11 @@ export default function Dashboard() {
             else if (result.role === 'client') navigate('/client');
             else navigate('/admin');
             window.location.reload();
-        } catch (err) { alert(err.message); }
+        } catch (err) {
+            // More detailed error for debugging
+            const errorDetails = `Greška: ${err.message}\n\nAko problem i dalje postoji, pokušajte da osvežite stranicu ili se odjavite pa ponovo prijavite.`;
+            alert(errorDetails);
+        }
     };
     const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
     const refreshCompanies = async () => { setCompanies(await fetchAllCompanies()); };
@@ -547,7 +606,7 @@ export default function Dashboard() {
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
-            if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} wasteTypes={wasteTypes} /></div>;
+            if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} wasteTypes={wasteTypes} drivers={companyDrivers} onAssignDriver={handleAssignDriverFromMap} driverAssignments={driverAssignments} /></div>;
             // Sort by remaining time (most urgent first) for dashboard preview
             const sortedByUrgency = [...pending].sort((a, b) => {
                 const remA = getRemainingTime(a.created_at, a.urgency);
