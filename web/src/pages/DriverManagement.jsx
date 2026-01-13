@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
 import {
@@ -41,7 +41,7 @@ const DriverCard = ({ driver, isSelected, onSelect, assignedCount }) => (
     </div>
 );
 
-// Request Row with Checkbox
+// Request Row with Checkbox - always enabled
 const RequestRow = ({ request, isSelected, onToggle, wasteTypes }) => {
     const currentUrgency = getCurrentUrgency(request.created_at, request.urgency);
     const remaining = getRemainingTime(request.created_at, request.urgency);
@@ -96,6 +96,65 @@ const RequestRow = ({ request, isSelected, onToggle, wasteTypes }) => {
     );
 };
 
+// Driver Select Dropdown
+const DriverSelectDropdown = ({ drivers, selectedDriver, onSelect, isOpen, onToggle, buttonRef }) => {
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+                buttonRef.current && !buttonRef.current.contains(e.target)) {
+                onToggle(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [onToggle, buttonRef]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div
+            ref={dropdownRef}
+            className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-[250px] max-h-64 overflow-y-auto"
+        >
+            {drivers.length === 0 ? (
+                <div className="p-4 text-center text-slate-400 text-sm">
+                    Nema registrovanih vozača
+                </div>
+            ) : (
+                <div className="py-1">
+                    {drivers.map(driver => (
+                        <button
+                            key={driver.id}
+                            onClick={() => {
+                                onSelect(driver);
+                                onToggle(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left ${
+                                selectedDriver?.id === driver.id ? 'bg-emerald-50' : ''
+                            }`}
+                        >
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                                selectedDriver?.id === driver.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                                {driver.name?.charAt(0)?.toUpperCase() || 'V'}
+                            </div>
+                            <div>
+                                <p className="font-medium text-slate-800">{driver.name}</p>
+                                <p className="text-xs text-slate-500">{driver.phone}</p>
+                            </div>
+                            {selectedDriver?.id === driver.id && (
+                                <CheckCircle2 size={18} className="ml-auto text-emerald-600" />
+                            )}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // Main Component
 export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
     const { companyCode, pickupRequests } = useAuth();
@@ -108,6 +167,8 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
     const [search, setSearch] = useState('');
     const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(true);
     const [showAddDriverModal, setShowAddDriverModal] = useState(false);
+    const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+    const driverDropdownButtonRef = useRef(null);
 
     // Fetch drivers and assignments
     useEffect(() => {
@@ -198,7 +259,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
         return assignments.filter(a => a.driver_id === driverId);
     };
 
-    // Toggle request selection
+    // Toggle request selection - always enabled now
     const toggleRequest = (requestId) => {
         setSelectedRequests(prev => {
             const newSet = new Set(prev);
@@ -412,18 +473,18 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                         </div>
                     </div>
 
-                    {/* Quick select filtered results */}
-                    {selectedDriver && filteredRequests.length > 0 && (
+                    {/* Quick select - always available now */}
+                    {filteredRequests.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 onClick={selectAllVisible}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                    selectedRequests.size === filteredRequests.length
+                                    selectedRequests.size === filteredRequests.length && filteredRequests.length > 0
                                         ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                                 }`}
                             >
-                                {selectedRequests.size === filteredRequests.length
+                                {selectedRequests.size === filteredRequests.length && filteredRequests.length > 0
                                     ? `Odštikliraj sve (${filteredRequests.length})`
                                     : `Štikliraj sve prikazane (${filteredRequests.length})`
                                 }
@@ -437,11 +498,12 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                     )}
                 </div>
 
-                {/* Action Bar */}
-                {selectedDriver && selectedRequests.size > 0 && (
+                {/* Action Bar - shows when requests are selected */}
+                {selectedRequests.size > 0 && (
                     <div className="px-4 py-3 bg-emerald-50 border-b flex flex-wrap items-center justify-between gap-3">
                         <p className="text-sm text-emerald-700">
-                            <strong>{selectedRequests.size}</strong> zahteva odabrano za <strong>{selectedDriver.name}</strong>
+                            <strong>{selectedRequests.size}</strong> zahteva odabrano
+                            {selectedDriver && <> za <strong>{selectedDriver.name}</strong></>}
                         </p>
                         <div className="flex items-center gap-2">
                             <button
@@ -450,10 +512,36 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                             >
                                 Poništi
                             </button>
+
+                            {/* Driver selection dropdown */}
+                            <div className="relative">
+                                <button
+                                    ref={driverDropdownButtonRef}
+                                    onClick={() => setShowDriverDropdown(!showDriverDropdown)}
+                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
+                                        selectedDriver
+                                            ? 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                                            : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                    }`}
+                                >
+                                    <User size={16} />
+                                    {selectedDriver ? selectedDriver.name : 'Odaberi vozača'}
+                                    <ChevronDown size={16} />
+                                </button>
+                                <DriverSelectDropdown
+                                    drivers={drivers}
+                                    selectedDriver={selectedDriver}
+                                    onSelect={setSelectedDriver}
+                                    isOpen={showDriverDropdown}
+                                    onToggle={setShowDriverDropdown}
+                                    buttonRef={driverDropdownButtonRef}
+                                />
+                            </div>
+
                             <button
                                 onClick={handleAssign}
-                                disabled={assigning}
-                                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                                disabled={assigning || !selectedDriver}
+                                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
                                 {assigning ? <RefreshCw size={16} className="animate-spin" /> : <Truck size={16} />}
                                 Dodeli vozaču
@@ -462,10 +550,11 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                     </div>
                 )}
 
-                {!selectedDriver && filteredRequests.length > 0 && (
-                    <div className="px-4 py-3 bg-amber-50 border-b">
-                        <p className="text-sm text-amber-700">
-                            Odaberite vozača iznad da biste dodelili zahteve
+                {/* Info bar when no requests selected and no driver */}
+                {selectedRequests.size === 0 && !selectedDriver && filteredRequests.length > 0 && (
+                    <div className="px-4 py-3 bg-blue-50 border-b">
+                        <p className="text-sm text-blue-700">
+                            Odaberite zahteve koje želite dodeliti vozaču
                         </p>
                     </div>
                 )}
@@ -481,7 +570,6 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                         checked={selectedRequests.size === filteredRequests.length && filteredRequests.length > 0}
                                         onChange={selectAllVisible}
                                         className="w-5 h-5 rounded border-slate-300 text-emerald-600"
-                                        disabled={!selectedDriver}
                                     />
                                 </th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Klijent / Vrsta</th>
@@ -505,7 +593,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                         key={request.id}
                                         request={request}
                                         isSelected={selectedRequests.has(request.id)}
-                                        onToggle={selectedDriver ? toggleRequest : () => {}}
+                                        onToggle={toggleRequest}
                                         wasteTypes={wasteTypes}
                                     />
                                 ))
