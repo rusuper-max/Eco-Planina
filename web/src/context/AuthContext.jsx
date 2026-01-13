@@ -303,6 +303,19 @@ export const AuthProvider = ({ children }) => {
                 })
             });
 
+            // Check if response is OK before parsing
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage = 'Registracija nije uspela';
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.error || errorMessage;
+                } catch {
+                    console.error('Registration error response:', errorText);
+                }
+                throw new Error(errorMessage);
+            }
+
             const result = await response.json();
 
             if (!result.success) {
@@ -311,6 +324,7 @@ export const AuthProvider = ({ children }) => {
 
             return { success: true };
         } catch (error) {
+            console.error('Registration error:', error);
             throw error;
         } finally {
             setIsLoading(false);

@@ -15,12 +15,10 @@ serve(async (req) => {
   }
 
   try {
-    // Verify this is called with service role key
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader?.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')) {
-      throw new Error('Unauthorized - requires service role key')
-    }
+    // Get service role key from environment
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
+    // Create admin client - Edge Functions automatically have access to service role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
