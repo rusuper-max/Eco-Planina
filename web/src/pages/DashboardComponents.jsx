@@ -177,10 +177,12 @@ export const WASTE_TYPES = [
 // Request Status Badge for manager view - with clickable popup for details
 export const RequestStatusBadge = ({ status, driverName, assignment }) => {
     const [showPopup, setShowPopup] = useState(false);
+    const [popupPosition, setPopupPosition] = useState('bottom');
     const popupRef = useRef(null);
+    const buttonRef = useRef(null);
 
     const configs = {
-        'not_assigned': { label: 'Nedodeljeno', shortLabel: '–', bg: 'bg-slate-100', color: 'text-slate-600', icon: '○' },
+        'not_assigned': { label: 'Nije dodeljeno', shortLabel: 'N/D', bg: 'bg-slate-100', color: 'text-slate-500', icon: null },
         'assigned': { label: 'Dodeljeno', shortLabel: 'Čeka', bg: 'bg-blue-100', color: 'text-blue-700', icon: '⏳' },
         'in_progress': { label: 'U toku', shortLabel: 'U toku', bg: 'bg-blue-100', color: 'text-blue-700', icon: '🚚' },
         'picked_up': { label: 'Preuzeto', shortLabel: 'Preuzeto', bg: 'bg-amber-100', color: 'text-amber-700', icon: '📦' },
@@ -200,6 +202,19 @@ export const RequestStatusBadge = ({ status, driverName, assignment }) => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [showPopup]);
 
+    // Determine popup position based on available space
+    const handleClick = (e) => {
+        e.stopPropagation();
+        if (!hasDetails) return;
+
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            setPopupPosition(spaceBelow < 200 ? 'top' : 'bottom');
+        }
+        setShowPopup(!showPopup);
+    };
+
     const formatDateTime = (dateStr) => {
         if (!dateStr) return null;
         return new Date(dateStr).toLocaleString('sr-RS', {
@@ -210,17 +225,18 @@ export const RequestStatusBadge = ({ status, driverName, assignment }) => {
     return (
         <div className="relative" ref={popupRef}>
             <button
-                onClick={(e) => { e.stopPropagation(); if (hasDetails) setShowPopup(!showPopup); }}
+                ref={buttonRef}
+                onClick={handleClick}
                 className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.bg} ${config.color} ${hasDetails ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-                title={hasDetails ? 'Klikni za detalje' : ''}
+                title={hasDetails ? 'Klikni za detalje' : 'Nije dodeljeno vozaču'}
             >
-                <span>{config.icon}</span>
-                <span className="hidden sm:inline">{config.shortLabel}</span>
+                {config.icon && <span>{config.icon}</span>}
+                <span>{config.shortLabel}</span>
             </button>
 
-            {/* Details Popup */}
+            {/* Details Popup - positioned above or below based on available space */}
             {showPopup && hasDetails && (
-                <div className="absolute z-50 left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 p-3 text-left">
+                <div className={`absolute z-50 left-0 w-56 bg-white rounded-xl shadow-xl border border-slate-200 p-3 text-left ${popupPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>
