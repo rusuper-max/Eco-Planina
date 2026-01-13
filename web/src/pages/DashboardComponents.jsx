@@ -3344,8 +3344,10 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
                 return { label: 'Admin', className: 'bg-blue-100 text-blue-700', priority: 2 };
             case 'manager':
                 return { label: 'Menadžer', className: 'bg-emerald-100 text-emerald-700', priority: 3 };
+            case 'driver':
+                return { label: 'Vozač', className: 'bg-amber-100 text-amber-700', priority: 4 };
             default:
-                return { label: 'Klijent', className: 'bg-slate-100 text-slate-700', priority: 4 };
+                return { label: 'Klijent', className: 'bg-slate-100 text-slate-700', priority: 5 };
         }
     };
 
@@ -3905,8 +3907,8 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                                                     <span className="text-xs text-slate-400 ml-2 flex-shrink-0">{formatTime(conv.lastMessageAt)}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                        {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Admin' : 'Menadžer'}
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : conv.partner.role === 'driver' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                        {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Admin' : conv.partner.role === 'driver' ? 'Vozač' : 'Menadžer'}
                                                     </span>
                                                 </div>
                                                 <p className={`text-sm truncate mt-1 ${conv.unread > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{conv.lastMessage}</p>
@@ -3955,8 +3957,8 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                                         {['admin', 'developer'].includes(selectedChat.partner.role) ? 'Admin Chat' : selectedChat.partner.name}
                                     </h3>
                                     <p className="text-xs text-slate-500 flex items-center gap-1">
-                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-blue-500' : 'bg-emerald-500'}`}></span>
-                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.phone}
+                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-blue-500' : selectedChat.partner.role === 'driver' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.role === 'driver' ? 'Vozač' : selectedChat.partner.phone}
                                     </p>
                                 </div>
                             </div>
@@ -4050,7 +4052,7 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                                             <div className="flex-1">
                                                 <p className="font-semibold text-slate-800">{contact.name}</p>
                                                 <p className="text-sm text-slate-500">
-                                                    {contact.role === 'client' ? 'Klijent' : contact.role === 'manager' ? 'Menadžer' : contact.role === 'admin' || contact.role === 'developer' ? 'Administrator' : contact.role}
+                                                    {contact.role === 'client' ? 'Klijent' : contact.role === 'manager' ? 'Menadžer' : contact.role === 'driver' ? 'Vozač' : contact.role === 'admin' || contact.role === 'developer' ? 'Administrator' : contact.role}
                                                 </p>
                                             </div>
                                             <ChevronRight size={20} className="text-slate-300" />
@@ -4309,8 +4311,8 @@ export const UserEditModal = ({ user, onClose, onSave }) => {
                                 {formData.name.charAt(0) || '?'}
                             </div>
                             <div>
-                                <span className={`text-sm px-2 py-1 rounded-lg ${user.role === 'developer' ? 'bg-purple-100 text-purple-700' : user.role === 'admin' ? 'bg-blue-100 text-blue-700' : user.role === 'manager' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}`}>
-                                    {user.role === 'developer' ? 'Developer' : user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Menadžer' : 'Klijent'}
+                                <span className={`text-sm px-2 py-1 rounded-lg ${user.role === 'developer' ? 'bg-purple-100 text-purple-700' : user.role === 'admin' ? 'bg-blue-100 text-blue-700' : user.role === 'manager' ? 'bg-emerald-100 text-emerald-700' : user.role === 'driver' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}`}>
+                                    {user.role === 'developer' ? 'Developer' : user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Menadžer' : user.role === 'driver' ? 'Vozač' : 'Klijent'}
                                 </span>
                                 <p className="text-xs text-slate-400 mt-1">ID: {user.id?.slice(0, 8)}...</p>
                             </div>
