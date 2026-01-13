@@ -463,11 +463,15 @@ export default function DriverDashboard() {
     // Subscribe to messages
     useEffect(() => {
         if (!user) return;
-        const unsubscribe = subscribeToMessages((msg, type) => {
+        const unsubscribe = subscribeToMessages(async (msg, type) => {
             if (selectedChat && (msg.sender_id === selectedChat.id || msg.receiver_id === selectedChat.id)) {
                 setChatMessages(prev => [...prev, msg]);
+                // Mark as read if we're in this chat and received a message
+                if (type === 'received') {
+                    await markMessagesAsRead(selectedChat.id);
+                }
             }
-            loadConversations();
+            await loadConversations();
         });
         return () => unsubscribe();
     }, [user, selectedChat]);
@@ -529,8 +533,8 @@ export default function DriverDashboard() {
         const msgs = await fetchMessages(partner.id);
         setChatMessages(msgs);
         await markMessagesAsRead(partner.id);
-        // Refresh conversations to update unread badges
-        loadConversations();
+        // Refresh conversations to update unread badges - must await to ensure UI updates
+        await loadConversations();
         setLoadingMessages(false);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };

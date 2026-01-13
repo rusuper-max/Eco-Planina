@@ -3972,8 +3972,8 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
             const openChat = async () => {
                 await loadMessages(selectedChat.partnerId);
                 await markMessagesAsRead(selectedChat.partnerId);
-                // Refresh conversations to update unread badges
-                loadConversations();
+                // Refresh conversations to update unread badges - must await to ensure UI updates
+                await loadConversations();
             };
             openChat();
         }
@@ -4003,8 +4003,8 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                     }
                 }
             }
-            // Refresh conversations list for any new message
-            loadConversations();
+            // Refresh conversations list for any new message - await to ensure badge updates
+            await loadConversations();
         });
         return unsubscribe;
     }, [subscribeToMessages, selectedChat]);
