@@ -763,11 +763,23 @@ export const AuthProvider = ({ children }) => {
             const companyCodes = [...new Set((users || []).filter(u => u.company_code).map(u => u.company_code))];
             let companyMap = {};
             if (companyCodes.length) {
-                const { data: companies } = await supabase.from('companies').select('code, name, status').in('code', companyCodes);
-                companyMap = (companies || []).reduce((acc, c) => { acc[c.code] = { name: c.name, status: c.status }; return acc; }, {});
+                // Include all companies (even deleted) to show user's company name
+                const { data: companies } = await supabase.from('companies').select('code, name, status, deleted_at').in('code', companyCodes);
+                companyMap = (companies || []).reduce((acc, c) => {
+                    acc[c.code] = { name: c.name, status: c.status, deleted: !!c.deleted_at };
+                    return acc;
+                }, {});
             }
-            return (users || []).map(u => ({ ...u, company: u.company_code ? { name: companyMap[u.company_code]?.name || null, status: companyMap[u.company_code]?.status } : null }));
-        } catch {
+            return (users || []).map(u => ({
+                ...u,
+                company: u.company_code ? {
+                    name: companyMap[u.company_code]?.name || null,
+                    status: companyMap[u.company_code]?.status,
+                    deleted: companyMap[u.company_code]?.deleted
+                } : null
+            }));
+        } catch (err) {
+            console.error('Error fetching users:', err);
             return [];
         }
     };
@@ -1013,8 +1025,10 @@ export const AuthProvider = ({ children }) => {
 
     const markMessagesAsRead = async (senderId) => {
         if (!user) return;
+        console.log('[Chat Debug] markMessagesAsRead called with senderId:', senderId);
         try {
-            const { error } = await supabase.from('messages').update({ is_read: true }).eq('sender_id', senderId).eq('receiver_id', user.id).eq('is_read', false);
+            const { data, error, count } = await supabase.from('messages').update({ is_read: true }).eq('sender_id', senderId).eq('receiver_id', user.id).eq('is_read', false).select();
+            console.log('[Chat Debug] markMessagesAsRead result:', { updated: data?.length || 0, error });
             if (error) throw error;
             // Immediately update unread count after marking as read
             await fetchUnreadCount();
