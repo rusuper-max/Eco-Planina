@@ -26,6 +26,12 @@ export const AuthProvider = ({ children }) => {
 
     // Initialize auth state from Supabase Auth session
     useEffect(() => {
+        // Safety timeout - never show loading for more than 10 seconds
+        const safetyTimeout = setTimeout(() => {
+            console.warn('Auth init safety timeout triggered');
+            setIsLoading(false);
+        }, 10000);
+
         const initAuth = async () => {
             try {
                 // Get current session
@@ -53,6 +59,7 @@ export const AuthProvider = ({ children }) => {
             } catch (error) {
                 console.error('Auth init error:', error);
             } finally {
+                clearTimeout(safetyTimeout);
                 setIsLoading(false);
             }
         };
@@ -80,20 +87,41 @@ export const AuthProvider = ({ children }) => {
         // Handle tab visibility change - refresh session when user returns to tab
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
+                // Safety: always ensure loading is false after max 5 seconds
+                const safetyTimeout = setTimeout(() => {
+                    setIsLoading(false);
+                }, 5000);
+
                 try {
                     const { data: { session }, error } = await supabase.auth.getSession();
+                    clearTimeout(safetyTimeout);
+
                     if (error) {
                         console.error('Session refresh error:', error);
+                        setIsLoading(false);
                         return;
                     }
-                    // If we have a session but no user loaded, reload profile
-                    if (session?.user && !user) {
-                        setIsLoading(true);
-                        await loadUserProfile(session.user);
+
+                    // If no session, ensure we're not loading
+                    if (!session?.user) {
                         setIsLoading(false);
+                        return;
+                    }
+
+                    // Session exists - user should already be loaded from initAuth
+                    // Only reload if user state is somehow lost
+                    if (!user) {
+                        setIsLoading(true);
+                        try {
+                            await loadUserProfile(session.user);
+                        } finally {
+                            setIsLoading(false);
+                        }
                     }
                 } catch (err) {
+                    clearTimeout(safetyTimeout);
                     console.error('Visibility change error:', err);
+                    setIsLoading(false);
                 }
             }
         };
