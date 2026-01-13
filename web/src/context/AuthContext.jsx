@@ -127,6 +127,9 @@ export const AuthProvider = ({ children }) => {
             setCompanyCode(isAdminRole ? null : companyData?.code || userData.company_code);
             setCompanyName(isAdminRole ? null : companyData?.name || 'Nepoznato');
 
+            // Return user data for immediate use (before state updates propagate)
+            return userObj;
+
         } catch (error) {
             console.error('Load profile error:', error);
             throw error;
@@ -246,24 +249,13 @@ export const AuthProvider = ({ children }) => {
             });
 
             if (error) {
-                // Check if user exists in old system (migration)
-                const { data: legacyUser } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('phone', phone)
-                    .is('auth_id', null)
-                    .single();
-
-                if (legacyUser) {
-                    throw new Error('Vaš nalog treba migraciju. Molimo kontaktirajte podršku ili koristite "Zaboravljena lozinka".');
-                }
                 throw new Error('Pogrešan broj telefona ili lozinka');
             }
 
-            // loadUserProfile will be called by onAuthStateChange
-            await loadUserProfile(data.user);
+            // Load user profile and get the role immediately
+            const userProfile = await loadUserProfile(data.user);
 
-            return { success: true, role: user?.role };
+            return { success: true, role: userProfile?.role };
         } catch (error) {
             throw error;
         } finally {
