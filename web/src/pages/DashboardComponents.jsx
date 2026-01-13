@@ -3972,7 +3972,11 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
             const openChat = async () => {
                 await loadMessages(selectedChat.partnerId);
                 await markMessagesAsRead(selectedChat.partnerId);
-                // Refresh conversations to update unread badges - must await to ensure UI updates
+                // Optimistically clear unread badge for this conversation immediately
+                setConversations(prev => prev.map(c =>
+                    c.partnerId === selectedChat.partnerId ? { ...c, unread: 0 } : c
+                ));
+                // Then refresh from server to ensure sync
                 await loadConversations();
             };
             openChat();
@@ -3997,9 +4001,13 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                         if (prev.some(m => m.id === newMsg.id)) return prev;
                         return [...prev, newMsg];
                     });
-                    // Mark as read if received
+                    // Mark as read if received and optimistically clear badge
                     if (type === 'received' && isFromPartner) {
                         await markMessagesAsRead(selectedChat.partnerId);
+                        // Optimistically clear unread badge
+                        setConversations(prev => prev.map(c =>
+                            c.partnerId === selectedChat.partnerId ? { ...c, unread: 0 } : c
+                        ));
                     }
                 }
             }

@@ -469,6 +469,10 @@ export default function DriverDashboard() {
                 // Mark as read if we're in this chat and received a message
                 if (type === 'received') {
                     await markMessagesAsRead(selectedChat.id);
+                    // Optimistically clear unread badge
+                    setConversations(prev => prev.map(c =>
+                        c.partnerId === selectedChat.id ? { ...c, unread: 0 } : c
+                    ));
                 }
             }
             await loadConversations();
@@ -533,7 +537,11 @@ export default function DriverDashboard() {
         const msgs = await fetchMessages(partner.id);
         setChatMessages(msgs);
         await markMessagesAsRead(partner.id);
-        // Refresh conversations to update unread badges - must await to ensure UI updates
+        // Optimistically clear unread badge for this conversation immediately
+        setConversations(prev => prev.map(c =>
+            c.partnerId === partner.id ? { ...c, unread: 0 } : c
+        ));
+        // Then refresh from server to ensure sync
         await loadConversations();
         setLoadingMessages(false);
         setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
