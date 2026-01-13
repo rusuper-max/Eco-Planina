@@ -763,10 +763,9 @@ export const AuthProvider = ({ children }) => {
             const companyCodes = [...new Set((users || []).filter(u => u.company_code).map(u => u.company_code))];
             let companyMap = {};
             if (companyCodes.length) {
-                // Fetch companies one by one - use .select() without .single() to avoid 406 errors
-                // when company doesn't exist or is deleted
+                // Fetch companies one by one - use select('*') to get all available columns
                 const companyPromises = companyCodes.map(code =>
-                    supabase.from('companies').select('code, name, status, deleted_at').eq('code', code).limit(1)
+                    supabase.from('companies').select('*').eq('code', code).limit(1)
                 );
                 const results = await Promise.all(companyPromises);
                 results.forEach(({ data: companies }) => {
