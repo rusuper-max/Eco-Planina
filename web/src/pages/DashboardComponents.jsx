@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -32,9 +34,9 @@ export const urgencyIcons = { '24h': createIcon('red'), '48h': createIcon('orang
 export const URGENCY_COLORS = { '24h': '#EF4444', '48h': '#F59E0B', '72h': '#10B981' };
 export const WASTE_ICONS_MAP = { cardboard: '📦', glass: '🍾', plastic: '♻️', trash: '🗑️' };
 
-export const createCustomIcon = (urgency, wasteType, isClient = false) => {
+export const createCustomIcon = (urgency, iconEmoji, isClient = false) => {
     const color = isClient ? '#3B82F6' : (URGENCY_COLORS[urgency] || '#10B981');
-    const icon = WASTE_ICONS_MAP[wasteType] || (isClient ? '🏢' : '📦');
+    const icon = iconEmoji || (isClient ? '🏢' : '📦');
     const badge = isClient ? '' : urgency;
 
     return L.divIcon({
@@ -139,6 +141,33 @@ export const CountdownTimer = ({ createdAt, urgency }) => {
     return <span className={`text-sm font-mono font-bold ${rem.color}`}>⏱ {rem.text}</span>;
 };
 
+// Fill level colors based on capacity (50%=green, 75%=orange, 100%=red, null/undefined=blue)
+export const getFillLevelColor = (fillLevel) => {
+    if (fillLevel === null || fillLevel === undefined || fillLevel === '') {
+        return { bg: 'bg-blue-500', text: 'text-blue-600', hex: '#3B82F6' };
+    }
+    const level = parseInt(fillLevel);
+    if (level >= 100) return { bg: 'bg-red-500', text: 'text-red-600', hex: '#EF4444' };
+    if (level >= 75) return { bg: 'bg-amber-500', text: 'text-amber-600', hex: '#F59E0B' };
+    return { bg: 'bg-emerald-500', text: 'text-emerald-600', hex: '#10B981' };
+};
+
+// Fill level bar component with proper coloring
+export const FillLevelBar = ({ fillLevel, showLabel = true }) => {
+    const colors = getFillLevelColor(fillLevel);
+    const displayLevel = fillLevel !== null && fillLevel !== undefined && fillLevel !== '' ? fillLevel : 0;
+    const labelText = fillLevel !== null && fillLevel !== undefined && fillLevel !== '' ? `${fillLevel}%` : '-';
+
+    return (
+        <div className="flex items-center gap-2">
+            <div className="w-12 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${colors.bg}`} style={{ width: `${displayLevel}%` }} />
+            </div>
+            {showLabel && <span className={`text-xs font-medium ${colors.text}`}>{labelText}</span>}
+        </div>
+    );
+};
+
 export const WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
     { id: 'plastic', label: 'Plastika', icon: '♻️' },
@@ -158,18 +187,48 @@ export const uploadImage = async (file, folder = 'uploads', bucket = 'receipts')
 // Image upload component
 export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koristi svoju sliku", bucket = 'receipts' }) => {
     const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const resetInput = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+            fileInputRef.current.type = 'text';
+            fileInputRef.current.type = 'file';
+        }
+    };
 
     const handleFileChange = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = e.target.files;
+        console.log('Files in input:', files?.length, 'files');
+
+        const file = files?.[0];
+        if (!file) {
+            console.log('No file selected');
+            return;
+        }
+
+        // Debug: log file info
+        console.log('=== FILE INFO ===');
+        console.log('Name:', file.name);
+        console.log('Size:', file.size, 'bytes');
+        console.log('Size in MB:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+        console.log('Type:', file.type);
+        console.log('Last modified:', new Date(file.lastModified).toISOString());
+        console.log('=================');
+
         if (!file.type.startsWith('image/')) {
             alert('Molimo izaberite sliku');
+            resetInput();
             return;
         }
-        if (file.size > 2 * 1024 * 1024) {
-            alert('Slika mora biti manja od 2MB');
+
+        const sizeMB = file.size / 1024 / 1024;
+        if (sizeMB > 2) {
+            alert(`Slika "${file.name}" je prevelika: ${sizeMB.toFixed(2)}MB (max 2MB)`);
+            resetInput();
             return;
         }
+
         setUploading(true);
         try {
             const url = await uploadImage(file, 'uploads', bucket);
@@ -178,6 +237,7 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
             alert('Greška pri uploadu: ' + err.message);
         } finally {
             setUploading(false);
+            resetInput();
         }
     };
 
@@ -207,7 +267,7 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
                             </>
                         )}
                     </div>
-                    <input type="file" accept="image/png, image/jpeg, image/webp" onChange={handleFileChange} className="hidden" disabled={uploading} />
+                    <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" disabled={uploading} />
                 </label>
             )}
         </div>
@@ -230,27 +290,42 @@ export const StatCard = memo(({ label, value, icon, onClick }) => (
     </div>
 ));
 
-export const SidebarItem = memo(({ icon: Icon, label, active, onClick, badge }) => (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${active ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>
-        <Icon size={20} />
-        <span className="flex-1 text-left">{label}</span>
-        {badge > 0 && <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${active ? 'bg-white text-emerald-600' : 'bg-red-500 text-white'}`}>{badge}</span>}
-    </button>
-));
+export const SidebarItem = memo(({ icon: Icon, label, active, onClick, badge, isLink, href }) => {
+    const baseClasses = `w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${active ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`;
+
+    if (isLink && href) {
+        return (
+            <a href={href} className={baseClasses}>
+                <Icon size={20} />
+                <span className="flex-1 text-left">{label}</span>
+                {badge > 0 && <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${active ? 'bg-white text-emerald-600' : 'bg-red-500 text-white'}`}>{badge}</span>}
+            </a>
+        );
+    }
+
+    return (
+        <button onClick={onClick} className={baseClasses}>
+            <Icon size={20} />
+            <span className="flex-1 text-left">{label}</span>
+            {badge > 0 && <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${active ? 'bg-white text-emerald-600' : 'bg-red-500 text-white'}`}>{badge}</span>}
+        </button>
+    );
+});
 
 export const Modal = ({ open, onClose, title, children }) => {
     if (!open) return null;
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto z-[101]">
-                <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center z-[102]">
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto">
+                <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
                     <h2 className="text-lg font-bold">{title}</h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X size={20} /></button>
                 </div>
                 <div className="p-6">{children}</div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 
@@ -424,13 +499,19 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
     );
 };
 
-// Client History View - Shows past processed requests with pagination
+// Client History View - Shows past processed requests with pagination and search
 export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortBy, setSortBy] = useState('processed_at'); // processed_at, created_at, type
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
     const itemsPerPage = 10;
+
+    // Reset to page 1 when search changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery]);
 
     if (loading) {
         return (
@@ -451,7 +532,22 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
         );
     }
 
-    const sorted = [...history].sort((a, b) => {
+    // Filter by search query
+    const filtered = searchQuery.trim()
+        ? history.filter(r => {
+            const query = searchQuery.toLowerCase();
+            return (
+                (r.waste_label || '').toLowerCase().includes(query) ||
+                (r.waste_type || '').toLowerCase().includes(query) ||
+                (r.note || '').toLowerCase().includes(query) ||
+                (r.processing_note || '').toLowerCase().includes(query) ||
+                new Date(r.processed_at).toLocaleDateString('sr-RS').includes(query) ||
+                new Date(r.created_at).toLocaleDateString('sr-RS').includes(query)
+            );
+        })
+        : history;
+
+    const sorted = [...filtered].sort((a, b) => {
         let cmp = 0;
         if (sortBy === 'processed_at') cmp = new Date(b.processed_at) - new Date(a.processed_at);
         else if (sortBy === 'created_at') cmp = new Date(b.created_at) - new Date(a.created_at);
@@ -470,19 +566,39 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
     return (
         <div className="space-y-4">
             <div className="bg-white rounded-2xl border overflow-hidden">
-                <div className="p-4 border-b bg-slate-50 flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="font-bold text-lg">Istorija zahteva ({history.length})</h2>
-                    <div className="flex gap-2">
-                        {[{ key: 'processed_at', label: 'Datum obrade' }, { key: 'created_at', label: 'Datum zahteva' }, { key: 'type', label: 'Tip' }].map(s => (
+                <div className="p-4 border-b bg-slate-50 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <h2 className="font-bold text-lg">Istorija zahteva ({filtered.length}{searchQuery && ` od ${history.length}`})</h2>
+                        <div className="flex gap-2">
+                            {[{ key: 'processed_at', label: 'Datum obrade' }, { key: 'created_at', label: 'Datum zahteva' }, { key: 'type', label: 'Tip' }].map(s => (
+                                <button
+                                    key={s.key}
+                                    onClick={() => toggleSort(s.key)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${sortBy === s.key ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                    {s.label}
+                                    {sortBy === s.key && (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="relative">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Pretraži po tipu, datumu, napomeni..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                        {searchQuery && (
                             <button
-                                key={s.key}
-                                onClick={() => toggleSort(s.key)}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1 ${sortBy === s.key ? 'bg-emerald-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                             >
-                                {s.label}
-                                {sortBy === s.key && (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                                <X size={16} />
                             </button>
-                        ))}
+                        )}
                     </div>
                 </div>
                 <div className="divide-y">
@@ -587,31 +703,74 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
 
             {/* Pagination */}
             {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 bg-white rounded-2xl border p-4">
                     <button
                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                         disabled={currentPage === 1}
-                        className="px-4 py-2 rounded-xl border bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 rounded-xl border bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
-                        ← Prethodna
+                        <ChevronDown size={16} className="rotate-90" /> Prethodna
                     </button>
-                    <div className="flex gap-1">
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                            <button
-                                key={page}
-                                onClick={() => setCurrentPage(page)}
-                                className={`w-10 h-10 rounded-xl font-medium transition-colors ${currentPage === page ? 'bg-emerald-600 text-white' : 'bg-white border text-slate-600 hover:bg-slate-50'}`}
-                            >
-                                {page}
-                            </button>
-                        ))}
+                    <div className="flex items-center gap-1">
+                        {/* Smart pagination: show limited pages with ellipsis */}
+                        {(() => {
+                            const pages = [];
+                            const showPages = 5; // Max pages to show
+                            let start = Math.max(1, currentPage - Math.floor(showPages / 2));
+                            let end = Math.min(totalPages, start + showPages - 1);
+                            if (end - start + 1 < showPages) {
+                                start = Math.max(1, end - showPages + 1);
+                            }
+
+                            if (start > 1) {
+                                pages.push(
+                                    <button key={1} onClick={() => setCurrentPage(1)} className="w-10 h-10 rounded-xl font-medium bg-white border text-slate-600 hover:bg-slate-50">1</button>
+                                );
+                                if (start > 2) pages.push(<span key="start-dots" className="px-1 text-slate-400">...</span>);
+                            }
+
+                            for (let i = start; i <= end; i++) {
+                                pages.push(
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i)}
+                                        className={`w-10 h-10 rounded-xl font-medium transition-colors ${currentPage === i ? 'bg-emerald-600 text-white' : 'bg-white border text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        {i}
+                                    </button>
+                                );
+                            }
+
+                            if (end < totalPages) {
+                                if (end < totalPages - 1) pages.push(<span key="end-dots" className="px-1 text-slate-400">...</span>);
+                                pages.push(
+                                    <button key={totalPages} onClick={() => setCurrentPage(totalPages)} className="w-10 h-10 rounded-xl font-medium bg-white border text-slate-600 hover:bg-slate-50">{totalPages}</button>
+                                );
+                            }
+
+                            return pages;
+                        })()}
                     </div>
                     <button
                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                         disabled={currentPage === totalPages}
-                        className="px-4 py-2 rounded-xl border bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 rounded-xl border bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
-                        Sledeća →
+                        Sledeća <ChevronDown size={16} className="-rotate-90" />
+                    </button>
+                    <span className="text-sm text-slate-500 ml-2">
+                        Stranica {currentPage} od {totalPages}
+                    </span>
+                </div>
+            )}
+
+            {/* No results message */}
+            {filtered.length === 0 && searchQuery && (
+                <div className="bg-white rounded-2xl border p-8 text-center">
+                    <Search size={40} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-slate-600 font-medium">Nema rezultata za "{searchQuery}"</p>
+                    <button onClick={() => setSearchQuery('')} className="mt-3 text-emerald-600 hover:underline text-sm">
+                        Obriši pretragu
                     </button>
                 </div>
             )}
@@ -798,10 +957,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                         <span className="hidden sm:inline ml-1">{req.waste_label}</span>
                                     </td>
                                     <td className="hidden md:table-cell px-4 py-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-12 h-2 bg-slate-200 rounded-full"><div className={`h-full rounded-full ${currentUrg === '24h' ? 'bg-red-500' : currentUrg === '48h' ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${req.fill_level}%` }} /></div>
-                                            <span className="text-xs">{req.fill_level}%</span>
-                                        </div>
+                                        <FillLevelBar fillLevel={req.fill_level} />
                                     </td>
                                     <td className="px-3 md:px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span></td>
                                     <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
@@ -1215,7 +1371,7 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
                                                 return <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg} ${remaining.color}`}>{remaining.text}</span></td>;
                                             })()}
                                             {fields.date && <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString('sr-RS')}</td>}
-                                            {fields.fillLevel && <td className="px-4 py-3 text-slate-600">{item.fill_level}%</td>}
+                                            {fields.fillLevel && <td className="px-4 py-3"><FillLevelBar fillLevel={item.fill_level} /></td>}
                                             {fields.note && <td className="px-4 py-3 text-slate-600 max-w-32 truncate">{item.note || '-'}</td>}
                                         </>
                                     )}
@@ -1766,9 +1922,16 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
     const [sortBy, setSortBy] = useState('name'); // name, phone, pib
     const [sortDir, setSortDir] = useState('asc');
 
+    // Filter equipment to only include items that still exist
     const getClientEquipment = (client) => {
-        if (!client.equipment_types || client.equipment_types.length === 0) return null;
-        return client.equipment_types;
+        if (!client.equipment_types || client.equipment_types.length === 0) return [];
+        // Filter out equipment IDs that no longer exist
+        const existingEquipmentIds = new Set(equipment.map(eq => eq.id));
+        return client.equipment_types.filter(eqId => existingEquipmentIds.has(eqId));
+    };
+
+    const getClientEquipmentCount = (client) => {
+        return getClientEquipment(client).length;
     };
 
     // Filter and sort clients
@@ -1911,7 +2074,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                         {c.pib && <div className="lg:hidden text-xs text-blue-600 mt-0.5">PIB: {c.pib}</div>}
                                         {/* Show equipment on mobile */}
                                         <div className="md:hidden text-xs text-slate-500 mt-0.5">
-                                            {clientEquipment ? (
+                                            {clientEquipment.length > 0 ? (
                                                 <span className="text-emerald-600">{clientEquipment.length} oprema</span>
                                             ) : (
                                                 <span className="text-slate-400">Bez opreme</span>
@@ -1929,13 +2092,13 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                     <td className="hidden md:table-cell px-4 py-3">
                                         <button
                                             onClick={() => onEditEquipment(c)}
-                                            className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${clientEquipment
+                                            className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${clientEquipment.length > 0
                                                 ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
                                                 : 'text-slate-500 bg-slate-100 hover:bg-slate-200'
                                                 }`}
                                         >
                                             <Box size={12} />
-                                            <span>{clientEquipment ? `${clientEquipment.length} dodeljeno` : 'Dodeli'}</span>
+                                            <span>{clientEquipment.length > 0 ? `${clientEquipment.length} dodeljeno` : 'Dodeli'}</span>
                                         </button>
                                     </td>
                                     <td className="px-3 md:px-4 py-3">
@@ -2484,28 +2647,31 @@ export const LocationPicker = ({ initialPosition, onSave, onCancel, clientName }
 // Component to auto-fit map bounds to markers - only on initial load or when marker count changes
 export const FitBounds = ({ positions }) => {
     const map = useMap();
-    const [hasFitted, setHasFitted] = useState(false);
-    const prevLengthRef = useRef(positions?.length || 0);
+    const initialFitDone = useRef(false);
 
     useEffect(() => {
-        const currentLength = positions?.length || 0;
-        // Only fit bounds on initial load or when number of markers changes
-        if (positions && currentLength > 0 && (!hasFitted || currentLength !== prevLengthRef.current)) {
+        // Only fit bounds once on initial load when we have positions
+        if (!initialFitDone.current && positions && positions.length > 0) {
             setTimeout(() => {
                 const bounds = L.latLngBounds(positions);
                 map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
-                setHasFitted(true);
-                prevLengthRef.current = currentLength;
+                initialFitDone.current = true;
             }, 100);
         }
-    }, [map, positions, hasFitted]);
+    }, [map, positions]);
 
     return null;
 };
 
-export const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
+export const MapView = ({ requests, clients, type, onClientLocationEdit, wasteTypes = WASTE_TYPES }) => {
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // all, 24h, 48h, 72h
     const items = type === 'requests' ? requests : clients;
+
+    // Helper to get waste type icon from wasteTypes array
+    const getWasteIcon = (wasteTypeId) => {
+        const wt = wasteTypes.find(w => w.id === wasteTypeId);
+        return wt?.icon || '📦';
+    };
 
     // Add current urgency to each request based on remaining time
     const itemsWithCurrentUrgency = useMemo(() => {
@@ -2611,29 +2777,75 @@ export const MapView = ({ requests, clients, type, onClientLocationEdit }) => {
             <MapContainer center={[44.8, 20.45]} zoom={11} style={{ height: type === 'requests' ? 'calc(100% - 52px)' : '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FitBounds positions={allPositions} />
-                {markers.map(({ item, position, index, hasCoords }) => (
-                    <Marker
-                        key={item.id || `marker-${index}`}
-                        position={position}
-                        icon={createCustomIcon(item.currentUrgency || item.urgency, item.waste_type, type === 'clients')}
-                        opacity={hasCoords ? 1 : 0.7}
-                    >
-                        <Popup>
-                            <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
-                            <p className="text-sm">{type === 'requests' ? item.waste_label : item.phone}</p>
-                            <p className="text-xs text-gray-500">{type === 'requests' ? item.client_address : item.address}</p>
-                            {!hasCoords && <p className="text-xs text-orange-500 mt-1">⚠️ Lokacija nije podešena</p>}
-                            {type === 'clients' && onClientLocationEdit && (
-                                <button
-                                    onClick={() => onClientLocationEdit(item)}
-                                    className="mt-2 px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700"
-                                >
-                                    Uredi lokaciju
-                                </button>
-                            )}
-                        </Popup>
-                    </Marker>
-                ))}
+                <MarkerClusterGroup
+                    chunkedLoading
+                    maxClusterRadius={50}
+                    spiderfyOnMaxZoom={true}
+                    showCoverageOnHover={false}
+                    iconCreateFunction={(cluster) => {
+                        const count = cluster.getChildCount();
+                        const childMarkers = cluster.getAllChildMarkers();
+                        // Check if any child is urgent (24h)
+                        const hasUrgent = childMarkers.some(m => m.options.urgencyLevel === '24h');
+                        const hasMedium = childMarkers.some(m => m.options.urgencyLevel === '48h');
+                        const color = hasUrgent ? '#EF4444' : hasMedium ? '#F59E0B' : '#10B981';
+                        return L.divIcon({
+                            html: `<div style="background-color: ${color}; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${count}</div>`,
+                            className: 'custom-cluster-icon',
+                            iconSize: L.point(40, 40, true),
+                        });
+                    }}
+                >
+                    {markers.map(({ item, position, index, hasCoords }) => (
+                        <Marker
+                            key={item.id || `marker-${index}`}
+                            position={position}
+                            icon={createCustomIcon(item.currentUrgency || item.urgency, type === 'requests' ? getWasteIcon(item.waste_type) : '🏢', type === 'clients')}
+                            opacity={hasCoords ? 1 : 0.7}
+                            urgencyLevel={item.currentUrgency || item.urgency}
+                        >
+                            <Popup>
+                                <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
+                                <p className="text-sm">{type === 'requests' ? item.waste_label : item.phone}</p>
+                                <p className="text-xs text-gray-500">{type === 'requests' ? item.client_address : item.address}</p>
+                                {type === 'requests' && item.currentUrgency && (
+                                    <p className={`text-xs font-semibold mt-1 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                        ⏱ {item.currentUrgency === '24h' ? 'Hitno' : item.currentUrgency === '48h' ? 'Srednje' : 'Normalno'}
+                                    </p>
+                                )}
+                                {!hasCoords && <p className="text-xs text-orange-500 mt-1">⚠️ Lokacija nije podešena</p>}
+                                {hasCoords && type === 'requests' && (
+                                    <div className="flex gap-1 mt-2">
+                                        <a
+                                            href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                        >
+                                            Google Maps
+                                        </a>
+                                        <a
+                                            href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
+                                        >
+                                            Waze
+                                        </a>
+                                    </div>
+                                )}
+                                {type === 'clients' && onClientLocationEdit && (
+                                    <button
+                                        onClick={() => onClientLocationEdit(item)}
+                                        className="mt-2 px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700"
+                                    >
+                                        Uredi lokaciju
+                                    </button>
+                                )}
+                            </Popup>
+                        </Marker>
+                    ))}
+                </MarkerClusterGroup>
             </MapContainer>
         </div>
     );
@@ -2650,7 +2862,10 @@ export const RequestDetailsModal = ({ request, onClose }) => {
                     <span className="text-4xl">{WASTE_TYPES.find(w => w.id === request.waste_type)?.icon}</span>
                     <div>
                         <h3 className="font-bold text-lg">{request.waste_label}</h3>
-                        <p className="text-sm text-slate-500">Popunjenost: {request.fill_level}%</p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-sm text-slate-500">Popunjenost:</span>
+                            <FillLevelBar fillLevel={request.fill_level} />
+                        </div>
                     </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -2721,6 +2936,7 @@ export const ProcessRequestModal = ({ request, onProcess, onClose }) => {
         setProcessing(true);
         try {
             const weightData = weight ? { weight: parseFloat(weight), weight_unit: weightUnit } : null;
+            console.log('ProcessRequestModal - weight:', weight, 'weightUnit:', weightUnit, 'weightData:', weightData);
             await onProcess(request, proofFile, note, weightData);
             onClose();
         } catch (err) {
@@ -4269,29 +4485,37 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
             .sort((a, b) => b.weight - a.weight);
     };
 
-    // Get requests by date (for chart)
+    // Get requests by date (for chart) - sorted chronologically (oldest to newest)
     const getRequestsByDate = () => {
         const byDate = {};
         filteredRequests.forEach(r => {
-            const date = new Date(r.processed_at).toLocaleDateString('sr-RS');
-            byDate[date] = (byDate[date] || 0) + 1;
+            const dateObj = new Date(r.processed_at);
+            const dateKey = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD for sorting
+            const dateLabel = dateObj.toLocaleDateString('sr-RS', { day: 'numeric', month: 'numeric' });
+            if (!byDate[dateKey]) byDate[dateKey] = { date: dateLabel, count: 0 };
+            byDate[dateKey].count++;
         });
         return Object.entries(byDate)
-            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => a[0].localeCompare(b[0])) // Sort by YYYY-MM-DD
+            .map(([, data]) => data)
             .slice(-14); // Last 14 data points
     };
 
-    // Get weight by date
+    // Get weight by date - sorted chronologically (oldest to newest)
     const getWeightByDate = () => {
         const byDate = {};
         filteredRequests.forEach(r => {
             if (!r.weight) return;
-            const date = new Date(r.processed_at).toLocaleDateString('sr-RS');
+            const dateObj = new Date(r.processed_at);
+            const dateKey = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD for sorting
+            const dateLabel = dateObj.toLocaleDateString('sr-RS', { day: 'numeric', month: 'numeric' });
             const weightInKg = r.weight_unit === 't' ? r.weight * 1000 : r.weight;
-            byDate[date] = (byDate[date] || 0) + weightInKg;
+            if (!byDate[dateKey]) byDate[dateKey] = { date: dateLabel, weight: 0 };
+            byDate[dateKey].weight += weightInKg;
         });
         return Object.entries(byDate)
-            .map(([date, weight]) => ({ date, weight }))
+            .sort((a, b) => a[0].localeCompare(b[0])) // Sort by YYYY-MM-DD
+            .map(([, data]) => data)
             .slice(-14);
     };
 

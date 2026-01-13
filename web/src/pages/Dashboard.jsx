@@ -24,10 +24,11 @@ import {
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage
 } from './DashboardComponents';
+import DriverManagement from './DriverManagement';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes } = useAuth();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -210,6 +211,7 @@ export default function Dashboard() {
             const result = await impersonateUser(userId);
             // Navigate based on role
             if (result.role === 'manager') navigate('/manager');
+            else if (result.role === 'driver') navigate('/driver');
             else if (result.role === 'client') navigate('/client');
             else navigate('/admin');
             window.location.reload();
@@ -227,7 +229,15 @@ export default function Dashboard() {
         const client = clients.find(c => c.id === clientId);
         setEquipment(prev => prev.map(eq => eq.id === eqId ? { ...eq, assigned_to: clientId, assigned_to_name: client?.name } : eq));
     };
-    const handleDeleteEquipment = (id) => { if (window.confirm('Obrisati opremu?')) setEquipment(prev => prev.filter(eq => eq.id !== id)); };
+    const handleDeleteEquipment = (id) => {
+        const eq = equipment.find(e => e.id === id);
+        const confirmMessage = eq?.assigned_to
+            ? `Ova oprema je dodeljena klijentu "${eq.assigned_to_name || 'Nepoznat'}". Da li ste sigurni da želite da je obrišete?`
+            : 'Obrisati opremu?';
+        if (window.confirm(confirmMessage)) {
+            setEquipment(prev => prev.filter(e => e.id !== id));
+        }
+    };
     const handleEditEquipment = (updated) => {
         setEquipment(prev => prev.map(eq => eq.id === updated.id ? updated : eq));
     };
@@ -302,9 +312,10 @@ export default function Dashboard() {
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
+            { id: 'drivers', icon: Users, label: 'Vozači' },
             { id: 'history', icon: History, label: 'Istorija' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika' },
-            { id: 'clients', icon: Users, label: 'Klijenti' },
+            { id: 'clients', icon: Building2, label: 'Klijenti' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null },
             { id: 'print', icon: Printer, label: 'Štampaj/Export' },
             { id: 'equipment', icon: Box, label: 'Oprema' },
@@ -494,7 +505,17 @@ export default function Dashboard() {
         }
         if (userRole === 'manager') {
             if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} />;
-            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onDelete={async (id) => {
+            if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
+            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onEdit={async (id, updates) => {
+                try {
+                    await updateProcessedRequest(id, updates);
+                    // Refresh the list
+                    const updated = await fetchProcessedRequests();
+                    setProcessedRequests(updated);
+                } catch (err) {
+                    alert('Greška pri ažuriranju: ' + err.message);
+                }
+            }} onDelete={async (id) => {
                 const previous = processedRequests;
                 setProcessedRequests(prev => prev.filter(r => r.id !== id)); // Optimistic
                 try { await deleteProcessedRequest(id); }
@@ -505,7 +526,7 @@ export default function Dashboard() {
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
-            if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} /></div>;
+            if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} wasteTypes={wasteTypes} /></div>;
             // Sort by remaining time (most urgent first) for dashboard preview
             const sortedByUrgency = [...pending].sort((a, b) => {
                 const remA = getRemainingTime(a.created_at, a.urgency);
@@ -531,7 +552,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0"><Mountain size={20} /></div><div className="flex flex-col leading-tight"><span className="font-bold text-lg text-white">EcoMountain</span><span className="font-bold text-sm text-emerald-400">Tracking</span></div></div>
                         <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24} /></button>
                     </div>
-                    <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} onClick={() => { setActiveTab(m.id); setSidebarOpen(false); }} />)}</nav>
+                    <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} isLink={m.isLink} href={m.href} onClick={() => { if (!m.isLink) { setActiveTab(m.id); setSidebarOpen(false); } }} />)}</nav>
                     <div className="p-4 border-t border-slate-700"><SidebarItem icon={LogOut} label="Odjavi se" onClick={handleLogout} /></div>
                 </div>
             </aside>
@@ -587,7 +608,7 @@ export default function Dashboard() {
                                 {showChatDropdown && (
                                     <>
                                         <div className="fixed inset-0 z-40" onClick={() => setShowChatDropdown(false)} />
-                                        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                                        <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-auto sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden max-w-[calc(100vw-2rem)]">
                                             <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                                                 <h3 className="font-bold text-slate-800">Poruke</h3>
                                                 <button
@@ -638,7 +659,7 @@ export default function Dashboard() {
                             {showNotifications && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                                    <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-auto sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden max-w-[calc(100vw-2rem)]">
                                         <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
                                             <h3 className="font-bold text-slate-800">{language === 'sr' ? 'Obaveštenja' : 'Notifications'}</h3>
                                             {notifications.length > 0 && <button onClick={clearAllNotifications} className="text-xs text-emerald-600 hover:text-emerald-700">{language === 'sr' ? 'Obriši sve' : 'Clear all'}</button>}
@@ -689,7 +710,7 @@ export default function Dashboard() {
                             {showProfileMenu && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileMenu(false)} />
-                                    <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 py-2">
+                                    <div className="fixed sm:absolute right-4 sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 py-2">
                                         <div className="px-4 py-3 border-b border-slate-100">
                                             <p className="font-bold text-slate-800">{user?.name}</p>
                                             <p className="text-xs text-slate-500">{user?.phone}</p>
@@ -738,7 +759,7 @@ export default function Dashboard() {
                 </header>
                 <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative z-10">
                     <div className="max-w-7xl mx-auto">
-                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : 'Master kodovi'}</h1></div>
+                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : 'Master kodovi'}</h1></div>
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>

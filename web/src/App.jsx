@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
+import DriverDashboard from './pages/DriverDashboard';
 import './index.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -30,6 +31,7 @@ function AppRoutes() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/manager" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/driver" element={<ProtectedRoute><DriverDashboard /></ProtectedRoute>} />
       <Route path="/client" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

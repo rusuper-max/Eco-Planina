@@ -1,0 +1,502 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import {
+    MapPin, LogOut, Truck, Clock, Navigation, CheckCircle2,
+    AlertCircle, Phone, RefreshCw, List, Map as MapIcon, User
+} from 'lucide-react';
+
+// Import shared utilities
+import {
+    createCustomIcon, getRemainingTime, getCurrentUrgency,
+    WASTE_TYPES, CountdownTimer, FitBounds, FillLevelBar
+} from './DashboardComponents';
+
+// Fix Leaflet icons
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+export default function DriverDashboard() {
+    const navigate = useNavigate();
+    const { user, logout, companyCode, companyName, pickupRequests, markRequestAsProcessed, fetchCompanyWasteTypes } = useAuth();
+    const [view, setView] = useState('map'); // 'map' or 'list'
+    const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
+    const [processing, setProcessing] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [assignments, setAssignments] = useState([]);
+    const [myUserId, setMyUserId] = useState(null);
+
+    // Check if user is a driver
+    const isDriver = user?.role === 'driver';
+
+    // Get current user's ID from users table
+    useEffect(() => {
+        const fetchMyUserId = async () => {
+            const { data: authUser } = await supabase.auth.getUser();
+            if (authUser?.user?.id) {
+                const { data } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('auth_id', authUser.user.id)
+                    .single();
+                if (data) setMyUserId(data.id);
+            }
+        };
+        fetchMyUserId();
+    }, []);
+
+    // Fetch driver's assignments
+    useEffect(() => {
+        if (myUserId && isDriver) {
+            fetchMyAssignments();
+        } else if (!isDriver) {
+            // If not a driver (manager viewing), show all
+            setLoading(false);
+        }
+    }, [myUserId, isDriver]);
+
+    const fetchMyAssignments = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select('request_id')
+                .eq('driver_id', myUserId)
+                .in('status', ['assigned', 'in_progress'])
+                .is('deleted_at', null);
+
+            if (error) throw error;
+            setAssignments(data || []);
+        } catch (err) {
+            console.error('Error fetching assignments:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Load waste types
+    useEffect(() => {
+        fetchCompanyWasteTypes().then(types => {
+            if (types && types.length > 0) setWasteTypes(types);
+        });
+    }, []);
+
+    // Get assigned request IDs
+    const assignedRequestIds = useMemo(() => {
+        return new Set(assignments.map(a => a.request_id));
+    }, [assignments]);
+
+    // Get pending requests - filtered by assignments for drivers
+    const pendingRequests = useMemo(() => {
+        if (!pickupRequests) return [];
+
+        let requests = pickupRequests.filter(r => r.status === 'pending');
+
+        // If user is a driver, only show assigned requests
+        if (isDriver && assignedRequestIds.size > 0) {
+            requests = requests.filter(r => assignedRequestIds.has(r.id));
+        } else if (isDriver && assignedRequestIds.size === 0 && !loading) {
+            // Driver with no assignments
+            return [];
+        }
+
+        return requests
+            .map(r => ({
+                ...r,
+                currentUrgency: getCurrentUrgency(r.created_at, r.urgency),
+                remainingTime: getRemainingTime(r.created_at, r.urgency)
+            }))
+            .sort((a, b) => a.remainingTime.ms - b.remainingTime.ms);
+    }, [pickupRequests, isDriver, assignedRequestIds, loading]);
+
+    // Get waste icon
+    const getWasteIcon = (wasteTypeId) => {
+        const wt = wasteTypes.find(w => w.id === wasteTypeId);
+        return wt?.icon || '📦';
+    };
+
+    // Handle quick complete
+    const handleQuickComplete = async (request) => {
+        if (processing) return;
+        if (!window.confirm(`Označiti "${request.waste_label}" kao preuzeto?`)) return;
+
+        setProcessing(true);
+        try {
+            await markRequestAsProcessed(request, null, 'Preuzeto via vozački portal');
+
+            // Update assignment status if driver
+            if (isDriver) {
+                await supabase
+                    .from('driver_assignments')
+                    .update({ status: 'completed', completed_at: new Date().toISOString() })
+                    .eq('request_id', request.id)
+                    .eq('driver_id', myUserId);
+
+                // Refresh assignments
+                await fetchMyAssignments();
+            }
+        } catch (err) {
+            alert('Greška: ' + err.message);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Prepare markers
+    const markers = useMemo(() => {
+        return pendingRequests
+            .filter(r => r.latitude && r.longitude)
+            .map(r => ({
+                item: r,
+                position: [parseFloat(r.latitude), parseFloat(r.longitude)],
+                hasCoords: true
+            }));
+    }, [pendingRequests]);
+
+    const allPositions = useMemo(() => markers.map(m => m.position), [markers]);
+
+    // Stats
+    const urgentCount = pendingRequests.filter(r => r.currentUrgency === '24h').length;
+    const mediumCount = pendingRequests.filter(r => r.currentUrgency === '48h').length;
+    const normalCount = pendingRequests.filter(r => r.currentUrgency === '72h').length;
+
+    const handleLogout = () => {
+        if (window.confirm('Odjaviti se?')) {
+            logout();
+            navigate('/');
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+                <RefreshCw className="animate-spin text-emerald-600" size={32} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-slate-100 flex flex-col">
+            {/* Header */}
+            <header className="h-16 bg-slate-800 text-white flex items-center justify-between px-4 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
+                            <Truck size={18} />
+                        </div>
+                        <div className="hidden sm:block">
+                            <p className="font-bold text-sm">Vozački Portal</p>
+                            <p className="text-xs text-slate-400">{companyName || 'EcoMountain'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {/* User info */}
+                    <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-700 rounded-lg">
+                        <User size={16} className="text-slate-400" />
+                        <span className="text-sm">{user?.name}</span>
+                        {isDriver && <span className="text-xs text-emerald-400">(Vozač)</span>}
+                    </div>
+                    {/* View Toggle */}
+                    <div className="flex bg-slate-700 rounded-lg p-1">
+                        <button
+                            onClick={() => setView('map')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${view === 'map' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'}`}
+                        >
+                            <MapIcon size={16} /> Mapa
+                        </button>
+                        <button
+                            onClick={() => setView('list')}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${view === 'list' ? 'bg-emerald-600 text-white' : 'text-slate-300 hover:text-white'}`}
+                        >
+                            <List size={16} /> Lista
+                        </button>
+                    </div>
+                    <button
+                        onClick={handleLogout}
+                        className="p-2 hover:bg-slate-700 rounded-lg"
+                        title="Odjavi se"
+                    >
+                        <LogOut size={20} />
+                    </button>
+                </div>
+            </header>
+
+            {/* Stats Bar */}
+            <div className="bg-white border-b px-4 py-3 flex items-center gap-4 overflow-x-auto shrink-0">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
+                    <Truck size={16} className="text-slate-600" />
+                    <span className="font-bold">{pendingRequests.length}</span>
+                    <span className="text-sm text-slate-500">{isDriver ? 'dodeljeno' : 'ukupno'}</span>
+                </div>
+                {urgentCount > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 rounded-lg">
+                        <AlertCircle size={16} className="text-red-600" />
+                        <span className="font-bold text-red-700">{urgentCount}</span>
+                        <span className="text-sm text-red-600">hitno</span>
+                    </div>
+                )}
+                {mediumCount > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-lg">
+                        <Clock size={16} className="text-amber-600" />
+                        <span className="font-bold text-amber-700">{mediumCount}</span>
+                        <span className="text-sm text-amber-600">srednje</span>
+                    </div>
+                )}
+                {normalCount > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 rounded-lg">
+                        <CheckCircle2 size={16} className="text-emerald-600" />
+                        <span className="font-bold text-emerald-700">{normalCount}</span>
+                        <span className="text-sm text-emerald-600">normalno</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* Map View */}
+                {view === 'map' && (
+                    <div className="flex-1 relative">
+                        {pendingRequests.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4">
+                                <Truck size={64} className="mb-4 opacity-50" />
+                                <p className="text-xl font-medium text-center">
+                                    {isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
+                                </p>
+                                <p className="text-sm mt-2 text-center">
+                                    {isDriver
+                                        ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
+                                        : 'Trenutno nema zahteva za prikaz'
+                                    }
+                                </p>
+                            </div>
+                        ) : (
+                            <MapContainer
+                                center={[44.8, 20.45]}
+                                zoom={11}
+                                style={{ height: '100%', width: '100%' }}
+                                zoomControl={false}
+                            >
+                                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                                {allPositions.length > 0 && <FitBounds positions={allPositions} />}
+                                <MarkerClusterGroup
+                                    chunkedLoading
+                                    maxClusterRadius={50}
+                                    spiderfyOnMaxZoom={true}
+                                    showCoverageOnHover={false}
+                                    iconCreateFunction={(cluster) => {
+                                        const count = cluster.getChildCount();
+                                        const childMarkers = cluster.getAllChildMarkers();
+                                        const hasUrgent = childMarkers.some(m => m.options.urgencyLevel === '24h');
+                                        const hasMedium = childMarkers.some(m => m.options.urgencyLevel === '48h');
+                                        const color = hasUrgent ? '#EF4444' : hasMedium ? '#F59E0B' : '#10B981';
+                                        return L.divIcon({
+                                            html: `<div style="background-color: ${color}; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${count}</div>`,
+                                            className: 'custom-cluster-icon',
+                                            iconSize: L.point(40, 40, true),
+                                        });
+                                    }}
+                                >
+                                    {markers.map(({ item, position }) => (
+                                        <Marker
+                                            key={item.id}
+                                            position={position}
+                                            icon={createCustomIcon(item.currentUrgency, getWasteIcon(item.waste_type), false)}
+                                            urgencyLevel={item.currentUrgency}
+                                        >
+                                            <Popup>
+                                                <div className="min-w-[220px]">
+                                                    <p className="font-bold text-lg">{item.client_name}</p>
+                                                    <p className="text-sm text-slate-600">{item.waste_label}</p>
+                                                    <p className="text-xs text-slate-500 mt-1">{item.client_address}</p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className="text-xs text-slate-500">Popunjenost:</span>
+                                                        <FillLevelBar fillLevel={item.fill_level} />
+                                                    </div>
+                                                    <div className={`text-sm font-bold mt-2 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                        <CountdownTimer createdAt={item.created_at} urgency={item.urgency} />
+                                                    </div>
+                                                    <div className="flex gap-2 mt-3">
+                                                        <a
+                                                            href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 text-center font-medium"
+                                                        >
+                                                            Google Maps
+                                                        </a>
+                                                        <a
+                                                            href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-1 px-3 py-2 bg-cyan-600 text-white text-xs rounded-lg hover:bg-cyan-700 text-center font-medium"
+                                                        >
+                                                            Waze
+                                                        </a>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleQuickComplete(item)}
+                                                        disabled={processing}
+                                                        className="w-full mt-2 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                                                    >
+                                                        <CheckCircle2 size={16} />
+                                                        Označi kao preuzeto
+                                                    </button>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                    ))}
+                                </MarkerClusterGroup>
+                            </MapContainer>
+                        )}
+
+                        {/* Floating list of requests without location */}
+                        {pendingRequests.filter(r => !r.latitude || !r.longitude).length > 0 && (
+                            <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-white rounded-xl shadow-lg border max-h-48 overflow-y-auto">
+                                <div className="p-3 border-b bg-amber-50">
+                                    <p className="text-sm font-medium text-amber-800 flex items-center gap-2">
+                                        <AlertCircle size={16} />
+                                        Zahtevi bez lokacije ({pendingRequests.filter(r => !r.latitude || !r.longitude).length})
+                                    </p>
+                                </div>
+                                <div className="divide-y">
+                                    {pendingRequests.filter(r => !r.latitude || !r.longitude).map(r => (
+                                        <div key={r.id} className="p-3 hover:bg-slate-50">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="font-medium text-sm">{r.client_name}</p>
+                                                    <p className="text-xs text-slate-500">{r.waste_label}</p>
+                                                </div>
+                                                <CountdownTimer createdAt={r.created_at} urgency={r.urgency} />
+                                            </div>
+                                            {r.client_phone && (
+                                                <a href={`tel:${r.client_phone}`} className="mt-2 flex items-center gap-1 text-xs text-blue-600">
+                                                    <Phone size={12} /> {r.client_phone}
+                                                </a>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* List View */}
+                {view === 'list' && (
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {pendingRequests.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                <Truck size={64} className="mb-4 opacity-50" />
+                                <p className="text-xl font-medium">
+                                    {isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
+                                </p>
+                                <p className="text-sm mt-2">
+                                    {isDriver
+                                        ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
+                                        : 'Svi zahtevi su obrađeni'
+                                    }
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3 max-w-2xl mx-auto">
+                                {pendingRequests.map(request => (
+                                    <div
+                                        key={request.id}
+                                        className={`bg-white rounded-xl border-l-4 shadow-sm overflow-hidden ${
+                                            request.currentUrgency === '24h' ? 'border-l-red-500' :
+                                            request.currentUrgency === '48h' ? 'border-l-amber-500' : 'border-l-emerald-500'
+                                        }`}
+                                    >
+                                        <div className="p-4">
+                                            <div className="flex items-start justify-between mb-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
+                                                        {getWasteIcon(request.waste_type)}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-slate-800">{request.client_name}</h3>
+                                                        <p className="text-sm text-slate-500">{request.waste_label}</p>
+                                                    </div>
+                                                </div>
+                                                <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                                                    request.currentUrgency === '24h' ? 'bg-red-100 text-red-700' :
+                                                    request.currentUrgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                                }`}>
+                                                    <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="text-xs text-slate-500">Popunjenost:</span>
+                                                <FillLevelBar fillLevel={request.fill_level} />
+                                            </div>
+
+                                            {request.client_address && (
+                                                <p className="text-sm text-slate-600 mb-3 flex items-start gap-2">
+                                                    <MapPin size={16} className="shrink-0 mt-0.5 text-slate-400" />
+                                                    {request.client_address}
+                                                </p>
+                                            )}
+
+                                            <div className="flex gap-2">
+                                                {request.latitude && request.longitude ? (
+                                                    <>
+                                                        <a
+                                                            href={`https://www.google.com/maps/dir/?api=1&destination=${request.latitude},${request.longitude}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 text-center font-medium flex items-center justify-center gap-2"
+                                                        >
+                                                            <Navigation size={16} /> Google Maps
+                                                        </a>
+                                                        <a
+                                                            href={`https://waze.com/ul?ll=${request.latitude},${request.longitude}&navigate=yes`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-1 px-4 py-2.5 bg-cyan-600 text-white text-sm rounded-xl hover:bg-cyan-700 text-center font-medium flex items-center justify-center gap-2"
+                                                        >
+                                                            <Navigation size={16} /> Waze
+                                                        </a>
+                                                    </>
+                                                ) : (
+                                                    <div className="flex-1 px-4 py-2.5 bg-amber-100 text-amber-700 text-sm rounded-xl text-center font-medium flex items-center justify-center gap-2">
+                                                        <AlertCircle size={16} /> Lokacija nije podešena
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={() => handleQuickComplete(request)}
+                                                    disabled={processing}
+                                                    className="px-4 py-2.5 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                                >
+                                                    <CheckCircle2 size={16} />
+                                                </button>
+                                            </div>
+
+                                            {request.client_phone && (
+                                                <a
+                                                    href={`tel:${request.client_phone}`}
+                                                    className="mt-3 flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                                                >
+                                                    <Phone size={16} /> Pozovi: {request.client_phone}
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}

@@ -1,0 +1,557 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
+import {
+    Truck, Users, MapPin, Phone, CheckCircle2, Clock, AlertCircle,
+    ChevronDown, ChevronUp, Search, Filter, X, Plus, Trash2, Navigation,
+    RefreshCw, User
+} from 'lucide-react';
+import {
+    Modal, CountdownTimer, FillLevelBar, getCurrentUrgency, getRemainingTime, WASTE_TYPES
+} from './DashboardComponents';
+
+// Driver Card Component
+const DriverCard = ({ driver, isSelected, onSelect, assignedCount }) => (
+    <div
+        onClick={() => onSelect(driver)}
+        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+            isSelected
+                ? 'border-emerald-500 bg-emerald-50'
+                : 'border-slate-200 hover:border-slate-300 bg-white'
+        }`}
+    >
+        <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+            }`}>
+                {driver.name?.charAt(0)?.toUpperCase() || 'V'}
+            </div>
+            <div className="flex-1">
+                <h3 className="font-semibold text-slate-800">{driver.name}</h3>
+                <p className="text-sm text-slate-500 flex items-center gap-1">
+                    <Phone size={12} /> {driver.phone}
+                </p>
+            </div>
+            {assignedCount > 0 && (
+                <div className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium">
+                    {assignedCount} zahteva
+                </div>
+            )}
+        </div>
+    </div>
+);
+
+// Request Row with Checkbox
+const RequestRow = ({ request, isSelected, onToggle, wasteTypes }) => {
+    const currentUrgency = getCurrentUrgency(request.created_at, request.urgency);
+    const remaining = getRemainingTime(request.created_at, request.urgency);
+    const wasteIcon = wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦';
+
+    return (
+        <tr
+            className={`hover:bg-slate-50 cursor-pointer transition-colors ${isSelected ? 'bg-emerald-50' : ''}`}
+            onClick={() => onToggle(request.id)}
+        >
+            <td className="px-4 py-3">
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onToggle(request.id)}
+                    className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    onClick={(e) => e.stopPropagation()}
+                />
+            </td>
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <span className="text-xl">{wasteIcon}</span>
+                    <div>
+                        <p className="font-medium text-slate-800">{request.client_name}</p>
+                        <p className="text-sm text-slate-500">{request.waste_label}</p>
+                    </div>
+                </div>
+            </td>
+            <td className="px-4 py-3">
+                <FillLevelBar fillLevel={request.fill_level} />
+            </td>
+            <td className="px-4 py-3">
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg} ${remaining.color}`}>
+                    {remaining.text}
+                </span>
+            </td>
+            <td className="px-4 py-3 text-sm text-slate-500 max-w-[200px] truncate">
+                {request.client_address || '-'}
+            </td>
+            <td className="px-4 py-3">
+                {request.latitude && request.longitude ? (
+                    <span className="text-emerald-600 text-sm flex items-center gap-1">
+                        <MapPin size={14} /> Da
+                    </span>
+                ) : (
+                    <span className="text-amber-600 text-sm flex items-center gap-1">
+                        <AlertCircle size={14} /> Ne
+                    </span>
+                )}
+            </td>
+        </tr>
+    );
+};
+
+// Main Component
+export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
+    const { companyCode, pickupRequests } = useAuth();
+    const [drivers, setDrivers] = useState([]);
+    const [assignments, setAssignments] = useState([]);
+    const [selectedDriver, setSelectedDriver] = useState(null);
+    const [selectedRequests, setSelectedRequests] = useState(new Set());
+    const [loading, setLoading] = useState(true);
+    const [assigning, setAssigning] = useState(false);
+    const [search, setSearch] = useState('');
+    const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(true);
+    const [showAddDriverModal, setShowAddDriverModal] = useState(false);
+
+    // Fetch drivers and assignments
+    useEffect(() => {
+        if (companyCode) {
+            fetchDrivers();
+            fetchAssignments();
+        }
+    }, [companyCode]);
+
+    const fetchDrivers = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('id, name, phone')
+                .eq('company_code', companyCode)
+                .eq('role', 'driver')
+                .is('deleted_at', null)
+                .order('name');
+
+            if (error) throw error;
+            setDrivers(data || []);
+        } catch (err) {
+            console.error('Error fetching drivers:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchAssignments = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select('*')
+                .eq('company_code', companyCode)
+                .in('status', ['assigned', 'in_progress'])
+                .is('deleted_at', null);
+
+            if (error) throw error;
+            setAssignments(data || []);
+        } catch (err) {
+            console.error('Error fetching assignments:', err);
+        }
+    };
+
+    // Get pending requests
+    const pendingRequests = useMemo(() => {
+        if (!pickupRequests) return [];
+        return pickupRequests
+            .filter(r => r.status === 'pending')
+            .map(r => ({
+                ...r,
+                currentUrgency: getCurrentUrgency(r.created_at, r.urgency)
+            }))
+            .sort((a, b) => {
+                const remA = getRemainingTime(a.created_at, a.urgency);
+                const remB = getRemainingTime(b.created_at, b.urgency);
+                return remA.ms - remB.ms;
+            });
+    }, [pickupRequests]);
+
+    // Get assigned request IDs
+    const assignedRequestIds = useMemo(() => {
+        return new Set(assignments.map(a => a.request_id));
+    }, [assignments]);
+
+    // Filter requests
+    const filteredRequests = useMemo(() => {
+        let filtered = pendingRequests;
+
+        if (showOnlyUnassigned) {
+            filtered = filtered.filter(r => !assignedRequestIds.has(r.id));
+        }
+
+        if (search) {
+            const searchLower = search.toLowerCase();
+            filtered = filtered.filter(r =>
+                r.client_name?.toLowerCase().includes(searchLower) ||
+                r.waste_label?.toLowerCase().includes(searchLower) ||
+                r.client_address?.toLowerCase().includes(searchLower)
+            );
+        }
+
+        return filtered;
+    }, [pendingRequests, showOnlyUnassigned, assignedRequestIds, search]);
+
+    // Get assignments for a driver
+    const getDriverAssignments = (driverId) => {
+        return assignments.filter(a => a.driver_id === driverId);
+    };
+
+    // Toggle request selection
+    const toggleRequest = (requestId) => {
+        setSelectedRequests(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(requestId)) {
+                newSet.delete(requestId);
+            } else {
+                newSet.add(requestId);
+            }
+            return newSet;
+        });
+    };
+
+    // Select all visible requests
+    const selectAllVisible = () => {
+        if (selectedRequests.size === filteredRequests.length) {
+            setSelectedRequests(new Set());
+        } else {
+            setSelectedRequests(new Set(filteredRequests.map(r => r.id)));
+        }
+    };
+
+    // Assign selected requests to driver
+    const handleAssign = async () => {
+        if (!selectedDriver || selectedRequests.size === 0) return;
+
+        setAssigning(true);
+        try {
+            const { data: userData } = await supabase
+                .from('users')
+                .select('id')
+                .eq('auth_id', (await supabase.auth.getUser()).data.user?.id)
+                .single();
+
+            const assignmentsToInsert = Array.from(selectedRequests).map(requestId => ({
+                driver_id: selectedDriver.id,
+                request_id: requestId,
+                company_code: companyCode,
+                assigned_by: userData?.id,
+                status: 'assigned'
+            }));
+
+            const { error } = await supabase
+                .from('driver_assignments')
+                .insert(assignmentsToInsert);
+
+            if (error) throw error;
+
+            // Refresh data
+            await fetchAssignments();
+            setSelectedRequests(new Set());
+            alert(`${assignmentsToInsert.length} zahteva dodeljeno vozaču ${selectedDriver.name}`);
+        } catch (err) {
+            console.error('Error assigning requests:', err);
+            alert('Greška pri dodeljivanju: ' + err.message);
+        } finally {
+            setAssigning(false);
+        }
+    };
+
+    // Unassign request from driver
+    const handleUnassign = async (assignmentId) => {
+        if (!window.confirm('Ukloniti dodelu?')) return;
+
+        try {
+            const { error } = await supabase
+                .from('driver_assignments')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', assignmentId);
+
+            if (error) throw error;
+            await fetchAssignments();
+        } catch (err) {
+            alert('Greška: ' + err.message);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <RefreshCw className="animate-spin text-emerald-600" size={32} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800">Upravljanje vozačima</h2>
+                    <p className="text-sm text-slate-500">
+                        {drivers.length} vozača | {pendingRequests.length} zahteva na čekanju |
+                        {pendingRequests.length - assignedRequestIds.size} nedodeljeno
+                    </p>
+                </div>
+                <button
+                    onClick={() => setShowAddDriverModal(true)}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2"
+                >
+                    <Plus size={18} /> Dodaj vozača
+                </button>
+            </div>
+
+            {/* Drivers List */}
+            <div className="bg-white rounded-2xl border p-6">
+                <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                    <Users size={20} className="text-emerald-600" />
+                    Vozači ({drivers.length})
+                </h3>
+
+                {drivers.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                        <Truck size={48} className="mx-auto mb-3 opacity-50" />
+                        <p>Nema registrovanih vozača</p>
+                        <p className="text-sm mt-1">Vozači se registruju sa ECO kodom vaše firme</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {drivers.map(driver => (
+                            <DriverCard
+                                key={driver.id}
+                                driver={driver}
+                                isSelected={selectedDriver?.id === driver.id}
+                                onSelect={setSelectedDriver}
+                                assignedCount={getDriverAssignments(driver.id).length}
+                            />
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* Selected Driver's Assignments */}
+            {selectedDriver && getDriverAssignments(selectedDriver.id).length > 0 && (
+                <div className="bg-white rounded-2xl border p-6">
+                    <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                        <Truck size={20} className="text-blue-600" />
+                        Dodeljeni zahtevi za {selectedDriver.name}
+                    </h3>
+                    <div className="space-y-2">
+                        {getDriverAssignments(selectedDriver.id).map(assignment => {
+                            const request = pendingRequests.find(r => r.id === assignment.request_id);
+                            if (!request) return null;
+
+                            return (
+                                <div key={assignment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">{wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}</span>
+                                        <div>
+                                            <p className="font-medium">{request.client_name}</p>
+                                            <p className="text-sm text-slate-500">{request.waste_label}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                        <button
+                                            onClick={() => handleUnassign(assignment.id)}
+                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                            title="Ukloni dodelu"
+                                        >
+                                            <X size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Requests Table */}
+            <div className="bg-white rounded-2xl border overflow-hidden">
+                <div className="p-4 border-b flex flex-col gap-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                            <Clock size={20} className="text-amber-600" />
+                            Zahtevi za dodelu
+                            {search && (
+                                <span className="text-sm font-normal text-slate-500">
+                                    (prikazano {filteredRequests.length} od {pendingRequests.filter(r => showOnlyUnassigned ? !assignedRequestIds.has(r.id) : true).length})
+                                </span>
+                            )}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="relative">
+                                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Pretraži klijenta, vrstu..."
+                                    className="pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none w-56"
+                                />
+                                {search && (
+                                    <button
+                                        onClick={() => setSearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                )}
+                            </div>
+                            <label className="flex items-center gap-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={showOnlyUnassigned}
+                                    onChange={(e) => setShowOnlyUnassigned(e.target.checked)}
+                                    className="rounded border-slate-300 text-emerald-600"
+                                />
+                                Samo nedodeljene
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Quick select filtered results */}
+                    {selectedDriver && filteredRequests.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={selectAllVisible}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                    selectedRequests.size === filteredRequests.length
+                                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                }`}
+                            >
+                                {selectedRequests.size === filteredRequests.length
+                                    ? `Odštikliraj sve (${filteredRequests.length})`
+                                    : `Štikliraj sve prikazane (${filteredRequests.length})`
+                                }
+                            </button>
+                            {search && filteredRequests.length > 0 && selectedRequests.size !== filteredRequests.length && (
+                                <span className="text-xs text-slate-500">
+                                    Pretraga: "{search}"
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Action Bar */}
+                {selectedDriver && selectedRequests.size > 0 && (
+                    <div className="px-4 py-3 bg-emerald-50 border-b flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-emerald-700">
+                            <strong>{selectedRequests.size}</strong> zahteva odabrano za <strong>{selectedDriver.name}</strong>
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setSelectedRequests(new Set())}
+                                className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+                            >
+                                Poništi
+                            </button>
+                            <button
+                                onClick={handleAssign}
+                                disabled={assigning}
+                                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {assigning ? <RefreshCw size={16} className="animate-spin" /> : <Truck size={16} />}
+                                Dodeli vozaču
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {!selectedDriver && filteredRequests.length > 0 && (
+                    <div className="px-4 py-3 bg-amber-50 border-b">
+                        <p className="text-sm text-amber-700">
+                            Odaberite vozača iznad da biste dodelili zahteve
+                        </p>
+                    </div>
+                )}
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead className="bg-slate-50 border-b">
+                            <tr>
+                                <th className="px-4 py-3 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRequests.size === filteredRequests.length && filteredRequests.length > 0}
+                                        onChange={selectAllVisible}
+                                        className="w-5 h-5 rounded border-slate-300 text-emerald-600"
+                                        disabled={!selectedDriver}
+                                    />
+                                </th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Klijent / Vrsta</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">%</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Preostalo</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Adresa</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Lokacija</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {filteredRequests.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                                        <CheckCircle2 size={32} className="mx-auto mb-2 opacity-50" />
+                                        <p>Nema zahteva za prikaz</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredRequests.map(request => (
+                                    <RequestRow
+                                        key={request.id}
+                                        request={request}
+                                        isSelected={selectedRequests.has(request.id)}
+                                        onToggle={selectedDriver ? toggleRequest : () => {}}
+                                        wasteTypes={wasteTypes}
+                                    />
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Add Driver Modal */}
+            <Modal
+                open={showAddDriverModal}
+                onClose={() => setShowAddDriverModal(false)}
+                title="Dodavanje vozača"
+            >
+                <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-xl">
+                        <p className="text-sm text-blue-800">
+                            <strong>Kako dodati vozača:</strong>
+                        </p>
+                        <ol className="list-decimal list-inside text-sm text-blue-700 mt-2 space-y-1">
+                            <li>Vozač preuzima aplikaciju ili pristupa web verziji</li>
+                            <li>Pri registraciji bira ulogu <strong>"Vozač"</strong></li>
+                            <li>Unosi vaš ECO kod firme: <code className="bg-blue-100 px-2 py-0.5 rounded font-mono">{companyCode}</code></li>
+                            <li>Nakon registracije, vozač će se pojaviti ovde</li>
+                        </ol>
+                    </div>
+                    <div className="flex justify-center gap-2">
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(companyCode);
+                                alert('ECO kod kopiran!');
+                            }}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
+                        >
+                            Kopiraj ECO kod
+                        </button>
+                        <button
+                            onClick={() => setShowAddDriverModal(false)}
+                            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200"
+                        >
+                            Zatvori
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
+    );
+}

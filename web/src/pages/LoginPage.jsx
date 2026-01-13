@@ -36,6 +36,7 @@ export default function LoginPage() {
             if (result.success) {
                 if (result.role === 'developer' || result.role === 'admin') navigate('/admin');
                 else if (result.role === 'manager') navigate('/manager');
+                else if (result.role === 'driver') navigate('/driver');
                 else navigate('/client');
             }
         } catch (err) {
