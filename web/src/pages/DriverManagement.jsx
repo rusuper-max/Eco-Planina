@@ -4,7 +4,7 @@ import { supabase } from '../config/supabase';
 import {
     Truck, Users, MapPin, Phone, CheckCircle2, Clock, AlertCircle,
     ChevronDown, ChevronUp, Search, Filter, X, Plus, Trash2, Navigation,
-    RefreshCw, User
+    RefreshCw, User, Package, PackageCheck, CircleDot
 } from 'lucide-react';
 import {
     Modal, CountdownTimer, FillLevelBar, getCurrentUrgency, getRemainingTime, WASTE_TYPES
@@ -41,11 +41,63 @@ const DriverCard = ({ driver, isSelected, onSelect, assignedCount }) => (
     </div>
 );
 
+// Status Badge Component
+const StatusBadge = ({ status, driverName }) => {
+    const configs = {
+        'not_assigned': {
+            label: 'Nije dodeljeno',
+            bg: 'bg-slate-100',
+            color: 'text-slate-600',
+            icon: CircleDot
+        },
+        'assigned': {
+            label: 'Čeka preuzimanje',
+            bg: 'bg-blue-100',
+            color: 'text-blue-700',
+            icon: Clock
+        },
+        'in_progress': {
+            label: 'U toku',
+            bg: 'bg-blue-100',
+            color: 'text-blue-700',
+            icon: Truck
+        },
+        'picked_up': {
+            label: 'Preuzeto',
+            bg: 'bg-amber-100',
+            color: 'text-amber-700',
+            icon: Package
+        },
+        'delivered': {
+            label: 'Dostavljeno',
+            bg: 'bg-emerald-100',
+            color: 'text-emerald-700',
+            icon: PackageCheck
+        }
+    };
+
+    const config = configs[status] || configs['not_assigned'];
+    const Icon = config.icon;
+
+    return (
+        <div className="flex flex-col gap-0.5">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>
+                <Icon size={12} />
+                {config.label}
+            </span>
+            {driverName && status !== 'not_assigned' && (
+                <span className="text-xs text-slate-400 pl-1">{driverName}</span>
+            )}
+        </div>
+    );
+};
+
 // Request Row with Checkbox - always enabled
-const RequestRow = ({ request, isSelected, onToggle, wasteTypes }) => {
+const RequestRow = ({ request, isSelected, onToggle, wasteTypes, assignment, driverName }) => {
     const currentUrgency = getCurrentUrgency(request.created_at, request.urgency);
     const remaining = getRemainingTime(request.created_at, request.urgency);
     const wasteIcon = wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦';
+    const status = assignment?.status || 'not_assigned';
 
     return (
         <tr
@@ -69,6 +121,9 @@ const RequestRow = ({ request, isSelected, onToggle, wasteTypes }) => {
                         <p className="text-sm text-slate-500">{request.waste_label}</p>
                     </div>
                 </div>
+            </td>
+            <td className="px-4 py-3">
+                <StatusBadge status={status} driverName={driverName} />
             </td>
             <td className="px-4 py-3">
                 <FillLevelBar fillLevel={request.fill_level} />
@@ -201,9 +256,9 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
         try {
             const { data, error } = await supabase
                 .from('driver_assignments')
-                .select('*')
+                .select('*, driver:driver_id(id, name)')
                 .eq('company_code', companyCode)
-                .in('status', ['assigned', 'in_progress'])
+                .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
                 .is('deleted_at', null);
 
             if (error) throw error;
@@ -413,6 +468,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
+                                        <StatusBadge status={assignment.status} />
                                         <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
                                         <button
                                             onClick={() => handleUnassign(assignment.id)}
@@ -573,6 +629,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                     />
                                 </th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Klijent / Vrsta</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Status</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">%</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Preostalo</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Adresa</th>
@@ -582,21 +639,27 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                         <tbody className="divide-y">
                             {filteredRequests.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
                                         <CheckCircle2 size={32} className="mx-auto mb-2 opacity-50" />
                                         <p>Nema zahteva za prikaz</p>
                                     </td>
                                 </tr>
                             ) : (
-                                filteredRequests.map(request => (
-                                    <RequestRow
-                                        key={request.id}
-                                        request={request}
-                                        isSelected={selectedRequests.has(request.id)}
-                                        onToggle={toggleRequest}
-                                        wasteTypes={wasteTypes}
-                                    />
-                                ))
+                                filteredRequests.map(request => {
+                                    const assignment = assignments.find(a => a.request_id === request.id);
+                                    const driverName = assignment?.driver?.name;
+                                    return (
+                                        <RequestRow
+                                            key={request.id}
+                                            request={request}
+                                            isSelected={selectedRequests.has(request.id)}
+                                            onToggle={toggleRequest}
+                                            wasteTypes={wasteTypes}
+                                            assignment={assignment}
+                                            driverName={driverName}
+                                        />
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
