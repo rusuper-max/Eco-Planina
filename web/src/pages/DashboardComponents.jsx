@@ -3969,8 +3969,13 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
 
     useEffect(() => {
         if (selectedChat) {
-            loadMessages(selectedChat.partnerId);
-            markMessagesAsRead(selectedChat.partnerId);
+            const openChat = async () => {
+                await loadMessages(selectedChat.partnerId);
+                await markMessagesAsRead(selectedChat.partnerId);
+                // Refresh conversations to update unread badges
+                loadConversations();
+            };
+            openChat();
         }
     }, [selectedChat]);
 
@@ -3981,7 +3986,7 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
     // Real-time subscription for new messages (replaces polling)
     useEffect(() => {
         if (!subscribeToMessages) return;
-        const unsubscribe = subscribeToMessages((newMsg, type) => {
+        const unsubscribe = subscribeToMessages(async (newMsg, type) => {
             // Check if this message belongs to current chat
             if (selectedChat) {
                 const isFromPartner = newMsg.sender_id === selectedChat.partnerId;
@@ -3994,7 +3999,7 @@ export const ChatInterface = ({ user, fetchMessages, sendMessage, markMessagesAs
                     });
                     // Mark as read if received
                     if (type === 'received' && isFromPartner) {
-                        markMessagesAsRead(selectedChat.partnerId);
+                        await markMessagesAsRead(selectedChat.partnerId);
                     }
                 }
             }
