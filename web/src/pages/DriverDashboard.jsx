@@ -9,7 +9,8 @@ import 'leaflet/dist/leaflet.css';
 import {
     MapPin, LogOut, Truck, Clock, Navigation, CheckCircle2,
     AlertCircle, Phone, RefreshCw, List, Map as MapIcon, User,
-    MessageCircle, History, Send, ArrowLeft, Check, CheckCheck
+    MessageCircle, History, Send, ArrowLeft, Check, CheckCheck,
+    Package, PackageCheck, Filter, Users, Plus
 } from 'lucide-react';
 
 // Import shared utilities
@@ -29,8 +30,9 @@ L.Icon.Default.mergeOptions({
 export default function DriverDashboard() {
     const navigate = useNavigate();
     const {
-        user, logout, companyCode, companyName, pickupRequests, markRequestAsProcessed, fetchCompanyWasteTypes,
-        fetchMessages, sendMessage, markMessagesAsRead, getConversations, subscribeToMessages, unreadCount
+        user, logout, companyCode, companyName, pickupRequests, fetchCompanyWasteTypes,
+        fetchMessages, sendMessage, markMessagesAsRead, getConversations, subscribeToMessages, unreadCount,
+        fetchCompanyMembers
     } = useAuth();
     const [view, setView] = useState('map'); // 'map', 'list', 'messages', 'history'
     const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
@@ -38,7 +40,8 @@ export default function DriverDashboard() {
     const [loading, setLoading] = useState(true);
     const [assignments, setAssignments] = useState([]);
     const [myUserId, setMyUserId] = useState(null);
-    const [todayCompleted, setTodayCompleted] = useState(0);
+    const [todayStats, setTodayStats] = useState({ picked: 0, delivered: 0 });
+    const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', '24h', '48h', '72h'
 
     // Messages state
     const [conversations, setConversations] = useState([]);
@@ -47,6 +50,8 @@ export default function DriverDashboard() {
     const [newMessage, setNewMessage] = useState('');
     const [sendingMessage, setSendingMessage] = useState(false);
     const [loadingMessages, setLoadingMessages] = useState(false);
+    const [showNewChatModal, setShowNewChatModal] = useState(false);
+    const [companyMembers, setCompanyMembers] = useState([]);
     const messagesEndRef = useRef(null);
 
     // History state
@@ -76,7 +81,7 @@ export default function DriverDashboard() {
     useEffect(() => {
         if (myUserId && isDriver) {
             fetchMyAssignments();
-            fetchTodayCompleted();
+            fetchTodayStats();
         } else if (!isDriver) {
             setLoading(false);
         }
@@ -84,11 +89,12 @@ export default function DriverDashboard() {
 
     const fetchMyAssignments = async () => {
         try {
+            // Fetch assignments with full request data stored in the assignment
             const { data, error } = await supabase
                 .from('driver_assignments')
-                .select('request_id')
+                .select('*')
                 .eq('driver_id', myUserId)
-                .in('status', ['assigned', 'in_progress'])
+                .in('status', ['assigned', 'in_progress', 'picked_up'])
                 .is('deleted_at', null);
 
             if (error) throw error;
@@ -100,21 +106,32 @@ export default function DriverDashboard() {
         }
     };
 
-    const fetchTodayCompleted = async () => {
+    const fetchTodayStats = async () => {
         try {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            const { count, error } = await supabase
-                .from('driver_assignments')
-                .select('*', { count: 'exact', head: true })
-                .eq('driver_id', myUserId)
-                .eq('status', 'completed')
-                .gte('completed_at', today.toISOString());
+            const [pickedResult, deliveredResult] = await Promise.all([
+                supabase
+                    .from('driver_assignments')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('driver_id', myUserId)
+                    .in('status', ['picked_up', 'delivered'])
+                    .gte('picked_up_at', today.toISOString()),
+                supabase
+                    .from('driver_assignments')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('driver_id', myUserId)
+                    .eq('status', 'delivered')
+                    .gte('delivered_at', today.toISOString())
+            ]);
 
-            if (!error) setTodayCompleted(count || 0);
+            setTodayStats({
+                picked: pickedResult.count || 0,
+                delivered: deliveredResult.count || 0
+            });
         } catch (err) {
-            console.error('Error fetching today completed:', err);
+            console.error('Error fetching today stats:', err);
         }
     };
 
@@ -141,6 +158,7 @@ export default function DriverDashboard() {
     useEffect(() => {
         if (view === 'messages') {
             loadConversations();
+            loadCompanyMembers();
         }
     }, [view]);
 
@@ -156,21 +174,23 @@ export default function DriverDashboard() {
         setConversations(convos);
     };
 
+    const loadCompanyMembers = async () => {
+        const members = await fetchCompanyMembers();
+        // Filter out self and only show managers and clients
+        setCompanyMembers(members.filter(m => m.id !== user?.id && ['manager', 'client', 'admin', 'developer'].includes(m.role)));
+    };
+
     const loadHistory = async () => {
         setLoadingHistory(true);
         try {
+            // Get delivered assignments - data is stored in the assignment itself
             const { data, error } = await supabase
                 .from('driver_assignments')
-                .select(`
-                    *,
-                    pickup_requests:request_id (
-                        client_name, client_address, waste_type, waste_label
-                    )
-                `)
+                .select('*')
                 .eq('driver_id', myUserId)
-                .eq('status', 'completed')
+                .eq('status', 'delivered')
                 .is('deleted_at', null)
-                .order('completed_at', { ascending: false })
+                .order('delivered_at', { ascending: false })
                 .limit(50);
 
             if (error) throw error;
@@ -184,6 +204,7 @@ export default function DriverDashboard() {
 
     const openChat = async (partner) => {
         setSelectedChat(partner);
+        setShowNewChatModal(false);
         setLoadingMessages(true);
         const msgs = await fetchMessages(partner.id);
         setChatMessages(msgs);
@@ -228,14 +249,25 @@ export default function DriverDashboard() {
             return [];
         }
 
-        return requests
-            .map(r => ({
+        // Add assignment status to each request
+        requests = requests.map(r => {
+            const assignment = assignments.find(a => a.request_id === r.id);
+            return {
                 ...r,
                 currentUrgency: getCurrentUrgency(r.created_at, r.urgency),
-                remainingTime: getRemainingTime(r.created_at, r.urgency)
-            }))
-            .sort((a, b) => a.remainingTime.ms - b.remainingTime.ms);
-    }, [pickupRequests, isDriver, assignedRequestIds, loading]);
+                remainingTime: getRemainingTime(r.created_at, r.urgency),
+                assignmentStatus: assignment?.status || 'assigned',
+                assignmentId: assignment?.id
+            };
+        });
+
+        // Apply urgency filter
+        if (urgencyFilter !== 'all') {
+            requests = requests.filter(r => r.currentUrgency === urgencyFilter);
+        }
+
+        return requests.sort((a, b) => a.remainingTime.ms - b.remainingTime.ms);
+    }, [pickupRequests, isDriver, assignedRequestIds, loading, assignments, urgencyFilter]);
 
     // Get waste icon
     const getWasteIcon = (wasteTypeId) => {
@@ -243,27 +275,60 @@ export default function DriverDashboard() {
         return wt?.icon || '📦';
     };
 
-    // Handle quick complete
-    const handleQuickComplete = async (request) => {
+    // Handle pickup (Step 1: Preuzeto od klijenta)
+    const handlePickup = async (request) => {
         if (processing) return;
-        if (!window.confirm(`Označiti "${request.waste_label}" kao preuzeto?`)) return;
+        if (!window.confirm(`Označiti "${request.waste_label}" kao PREUZETO od klijenta?`)) return;
 
         setProcessing(true);
         try {
-            await markRequestAsProcessed(request, null, 'Preuzeto via vozački portal');
+            // Update assignment status to picked_up and store request data
+            const { error } = await supabase
+                .from('driver_assignments')
+                .update({
+                    status: 'picked_up',
+                    picked_up_at: new Date().toISOString(),
+                    // Store request data for history
+                    client_name: request.client_name,
+                    client_address: request.client_address,
+                    waste_type: request.waste_type,
+                    waste_label: request.waste_label,
+                    latitude: request.latitude,
+                    longitude: request.longitude
+                })
+                .eq('id', request.assignmentId);
 
-            // Update assignment status if driver
-            if (isDriver) {
-                await supabase
-                    .from('driver_assignments')
-                    .update({ status: 'completed', completed_at: new Date().toISOString() })
-                    .eq('request_id', request.id)
-                    .eq('driver_id', myUserId);
+            if (error) throw error;
 
-                // Refresh assignments and stats
-                await fetchMyAssignments();
-                await fetchTodayCompleted();
-            }
+            await fetchMyAssignments();
+            await fetchTodayStats();
+        } catch (err) {
+            alert('Greška: ' + err.message);
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handle delivery (Step 2: Dostavljeno/Ispražnjeno)
+    const handleDelivery = async (request) => {
+        if (processing) return;
+        if (!window.confirm(`Označiti "${request.waste_label}" kao DOSTAVLJENO/ISPRAŽNJENO?`)) return;
+
+        setProcessing(true);
+        try {
+            // Update assignment status to delivered
+            const { error } = await supabase
+                .from('driver_assignments')
+                .update({
+                    status: 'delivered',
+                    delivered_at: new Date().toISOString()
+                })
+                .eq('id', request.assignmentId);
+
+            if (error) throw error;
+
+            await fetchMyAssignments();
+            await fetchTodayStats();
         } catch (err) {
             alert('Greška: ' + err.message);
         } finally {
@@ -284,20 +349,33 @@ export default function DriverDashboard() {
 
     const allPositions = useMemo(() => markers.map(m => m.position), [markers]);
 
-    // Stats
-    const urgentCount = pendingRequests.filter(r => r.currentUrgency === '24h').length;
-    const mediumCount = pendingRequests.filter(r => r.currentUrgency === '48h').length;
-    const normalCount = pendingRequests.filter(r => r.currentUrgency === '72h').length;
+    // Stats - counts before filter applied
+    const allRequests = useMemo(() => {
+        if (!pickupRequests) return [];
+        let requests = pickupRequests.filter(r => r.status === 'pending');
+        if (isDriver && assignedRequestIds.size > 0) {
+            requests = requests.filter(r => assignedRequestIds.has(r.id));
+        }
+        return requests.map(r => ({
+            ...r,
+            currentUrgency: getCurrentUrgency(r.created_at, r.urgency)
+        }));
+    }, [pickupRequests, isDriver, assignedRequestIds]);
 
-    const handleLogout = () => {
+    const urgentCount = allRequests.filter(r => r.currentUrgency === '24h').length;
+    const mediumCount = allRequests.filter(r => r.currentUrgency === '48h').length;
+    const normalCount = allRequests.filter(r => r.currentUrgency === '72h').length;
+
+    const handleLogout = async () => {
         if (window.confirm('Odjaviti se?')) {
-            logout();
+            await logout();
             navigate('/');
         }
     };
 
     // Format time ago
     const formatTimeAgo = (dateString) => {
+        if (!dateString) return '';
         const date = new Date(dateString);
         const now = new Date();
         const diffMs = now - date;
@@ -310,6 +388,17 @@ export default function DriverDashboard() {
         if (diffHours < 24) return `${diffHours}h`;
         if (diffDays < 7) return `${diffDays}d`;
         return date.toLocaleDateString('sr-RS');
+    };
+
+    // Get role label
+    const getRoleLabel = (role) => {
+        switch (role) {
+            case 'manager': return 'Menadžer';
+            case 'client': return 'Klijent';
+            case 'admin': return 'Admin';
+            case 'developer': return 'Developer';
+            default: return role;
+        }
     };
 
     if (loading) {
@@ -336,11 +425,17 @@ export default function DriverDashboard() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {/* Today completed badge */}
-                    {isDriver && todayCompleted > 0 && (
-                        <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/20 rounded-lg">
-                            <CheckCircle2 size={14} className="text-emerald-400" />
-                            <span className="text-xs text-emerald-300">Danas: <strong>{todayCompleted}</strong></span>
+                    {/* Today stats badge */}
+                    {isDriver && (todayStats.picked > 0 || todayStats.delivered > 0) && (
+                        <div className="hidden md:flex items-center gap-3 px-3 py-1.5 bg-slate-700 rounded-lg">
+                            <div className="flex items-center gap-1.5">
+                                <Package size={14} className="text-amber-400" />
+                                <span className="text-xs text-amber-300">{todayStats.picked}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <PackageCheck size={14} className="text-emerald-400" />
+                                <span className="text-xs text-emerald-300">{todayStats.delivered}</span>
+                            </div>
                         </div>
                     )}
                     {/* User info */}
@@ -392,32 +487,69 @@ export default function DriverDashboard() {
 
             {/* Stats Bar - only for map/list views */}
             {(view === 'map' || view === 'list') && (
-                <div className="bg-white border-b px-4 py-3 flex items-center gap-4 overflow-x-auto shrink-0">
+                <div className="bg-white border-b px-4 py-3 flex items-center gap-2 overflow-x-auto shrink-0">
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg">
                         <Truck size={16} className="text-slate-600" />
-                        <span className="font-bold">{pendingRequests.length}</span>
-                        <span className="text-sm text-slate-500">{isDriver ? 'dodeljeno' : 'ukupno'}</span>
+                        <span className="font-bold">{allRequests.length}</span>
+                        <span className="text-sm text-slate-500 hidden sm:inline">{isDriver ? 'dodeljeno' : 'ukupno'}</span>
                     </div>
-                    {urgentCount > 0 && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 rounded-lg">
-                            <AlertCircle size={16} className="text-red-600" />
-                            <span className="font-bold text-red-700">{urgentCount}</span>
-                            <span className="text-sm text-red-600">hitno</span>
-                        </div>
-                    )}
-                    {mediumCount > 0 && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 rounded-lg">
-                            <Clock size={16} className="text-amber-600" />
-                            <span className="font-bold text-amber-700">{mediumCount}</span>
-                            <span className="text-sm text-amber-600">srednje</span>
-                        </div>
-                    )}
-                    {normalCount > 0 && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-100 rounded-lg">
-                            <CheckCircle2 size={16} className="text-emerald-600" />
-                            <span className="font-bold text-emerald-700">{normalCount}</span>
-                            <span className="text-sm text-emerald-600">normalno</span>
-                        </div>
+
+                    {/* Clickable urgency filters */}
+                    <button
+                        onClick={() => setUrgencyFilter(urgencyFilter === '24h' ? 'all' : '24h')}
+                        disabled={urgentCount === 0}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                            urgencyFilter === '24h'
+                                ? 'bg-red-600 text-white ring-2 ring-red-300'
+                                : urgentCount > 0
+                                    ? 'bg-red-100 hover:bg-red-200 cursor-pointer'
+                                    : 'bg-red-50 opacity-50 cursor-not-allowed'
+                        }`}
+                    >
+                        <AlertCircle size={16} className={urgencyFilter === '24h' ? 'text-white' : 'text-red-600'} />
+                        <span className={`font-bold ${urgencyFilter === '24h' ? 'text-white' : 'text-red-700'}`}>{urgentCount}</span>
+                        <span className={`text-sm hidden sm:inline ${urgencyFilter === '24h' ? 'text-red-100' : 'text-red-600'}`}>hitno</span>
+                    </button>
+
+                    <button
+                        onClick={() => setUrgencyFilter(urgencyFilter === '48h' ? 'all' : '48h')}
+                        disabled={mediumCount === 0}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                            urgencyFilter === '48h'
+                                ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+                                : mediumCount > 0
+                                    ? 'bg-amber-100 hover:bg-amber-200 cursor-pointer'
+                                    : 'bg-amber-50 opacity-50 cursor-not-allowed'
+                        }`}
+                    >
+                        <Clock size={16} className={urgencyFilter === '48h' ? 'text-white' : 'text-amber-600'} />
+                        <span className={`font-bold ${urgencyFilter === '48h' ? 'text-white' : 'text-amber-700'}`}>{mediumCount}</span>
+                        <span className={`text-sm hidden sm:inline ${urgencyFilter === '48h' ? 'text-amber-100' : 'text-amber-600'}`}>srednje</span>
+                    </button>
+
+                    <button
+                        onClick={() => setUrgencyFilter(urgencyFilter === '72h' ? 'all' : '72h')}
+                        disabled={normalCount === 0}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+                            urgencyFilter === '72h'
+                                ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
+                                : normalCount > 0
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 cursor-pointer'
+                                    : 'bg-emerald-50 opacity-50 cursor-not-allowed'
+                        }`}
+                    >
+                        <CheckCircle2 size={16} className={urgencyFilter === '72h' ? 'text-white' : 'text-emerald-600'} />
+                        <span className={`font-bold ${urgencyFilter === '72h' ? 'text-white' : 'text-emerald-700'}`}>{normalCount}</span>
+                        <span className={`text-sm hidden sm:inline ${urgencyFilter === '72h' ? 'text-emerald-100' : 'text-emerald-600'}`}>normalno</span>
+                    </button>
+
+                    {urgencyFilter !== 'all' && (
+                        <button
+                            onClick={() => setUrgencyFilter('all')}
+                            className="ml-2 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 rounded-lg text-sm text-slate-600 flex items-center gap-1"
+                        >
+                            <Filter size={14} /> Pokaži sve
+                        </button>
                     )}
                 </div>
             )}
@@ -431,12 +563,14 @@ export default function DriverDashboard() {
                             <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4">
                                 <Truck size={64} className="mb-4 opacity-50" />
                                 <p className="text-xl font-medium text-center">
-                                    {isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
+                                    {urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
                                 </p>
                                 <p className="text-sm mt-2 text-center">
-                                    {isDriver
-                                        ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
-                                        : 'Trenutno nema zahteva za prikaz'
+                                    {urgencyFilter !== 'all'
+                                        ? 'Promenite filter ili prikažite sve zahteve'
+                                        : isDriver
+                                            ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
+                                            : 'Trenutno nema zahteva za prikaz'
                                     }
                                 </p>
                             </div>
@@ -471,12 +605,19 @@ export default function DriverDashboard() {
                                         <Marker
                                             key={item.id}
                                             position={position}
-                                            icon={createCustomIcon(item.currentUrgency, getWasteIcon(item.waste_type), false)}
+                                            icon={createCustomIcon(item.currentUrgency, getWasteIcon(item.waste_type), item.assignmentStatus === 'picked_up')}
                                             urgencyLevel={item.currentUrgency}
                                         >
                                             <Popup>
                                                 <div className="min-w-[220px]">
-                                                    <p className="font-bold text-lg">{item.client_name}</p>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <p className="font-bold text-lg">{item.client_name}</p>
+                                                        {item.assignmentStatus === 'picked_up' && (
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                                                Preuzeto
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-sm text-slate-600">{item.waste_label}</p>
                                                     <p className="text-xs text-slate-500 mt-1">{item.client_address}</p>
                                                     <div className="flex items-center gap-2 mt-2">
@@ -504,14 +645,25 @@ export default function DriverDashboard() {
                                                             Waze
                                                         </a>
                                                     </div>
-                                                    <button
-                                                        onClick={() => handleQuickComplete(item)}
-                                                        disabled={processing}
-                                                        className="w-full mt-2 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
-                                                    >
-                                                        <CheckCircle2 size={16} />
-                                                        Označi kao preuzeto
-                                                    </button>
+                                                    {item.assignmentStatus === 'picked_up' ? (
+                                                        <button
+                                                            onClick={() => handleDelivery(item)}
+                                                            disabled={processing}
+                                                            className="w-full mt-2 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                                                        >
+                                                            <PackageCheck size={16} />
+                                                            Dostavljeno
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handlePickup(item)}
+                                                            disabled={processing}
+                                                            className="w-full mt-2 px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                                                        >
+                                                            <Package size={16} />
+                                                            Preuzeto od klijenta
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </Popup>
                                         </Marker>
@@ -539,11 +691,6 @@ export default function DriverDashboard() {
                                                 </div>
                                                 <CountdownTimer createdAt={r.created_at} urgency={r.urgency} />
                                             </div>
-                                            {r.client_phone && (
-                                                <a href={`tel:${r.client_phone}`} className="mt-2 flex items-center gap-1 text-xs text-blue-600">
-                                                    <Phone size={12} /> {r.client_phone}
-                                                </a>
-                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -559,13 +706,7 @@ export default function DriverDashboard() {
                             <div className="flex flex-col items-center justify-center h-full text-slate-400">
                                 <Truck size={64} className="mb-4 opacity-50" />
                                 <p className="text-xl font-medium">
-                                    {isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
-                                </p>
-                                <p className="text-sm mt-2">
-                                    {isDriver
-                                        ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
-                                        : 'Svi zahtevi su obrađeni'
-                                    }
+                                    {urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
                                 </p>
                             </div>
                         ) : (
@@ -574,6 +715,7 @@ export default function DriverDashboard() {
                                     <div
                                         key={request.id}
                                         className={`bg-white rounded-xl border-l-4 shadow-sm overflow-hidden ${
+                                            request.assignmentStatus === 'picked_up' ? 'border-l-amber-500' :
                                             request.currentUrgency === '24h' ? 'border-l-red-500' :
                                             request.currentUrgency === '48h' ? 'border-l-amber-500' : 'border-l-emerald-500'
                                         }`}
@@ -589,11 +731,18 @@ export default function DriverDashboard() {
                                                         <p className="text-sm text-slate-500">{request.waste_label}</p>
                                                     </div>
                                                 </div>
-                                                <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
-                                                    request.currentUrgency === '24h' ? 'bg-red-100 text-red-700' :
-                                                    request.currentUrgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                                }`}>
-                                                    <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                                <div className="flex flex-col items-end gap-1">
+                                                    {request.assignmentStatus === 'picked_up' && (
+                                                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                                            Preuzeto
+                                                        </span>
+                                                    )}
+                                                    <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
+                                                        request.currentUrgency === '24h' ? 'bg-red-100 text-red-700' :
+                                                        request.currentUrgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                                    }`}>
+                                                        <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -618,7 +767,7 @@ export default function DriverDashboard() {
                                                             rel="noopener noreferrer"
                                                             className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 text-center font-medium flex items-center justify-center gap-2"
                                                         >
-                                                            <Navigation size={16} /> Google Maps
+                                                            <Navigation size={16} /> Google
                                                         </a>
                                                         <a
                                                             href={`https://waze.com/ul?ll=${request.latitude},${request.longitude}&navigate=yes`}
@@ -631,26 +780,29 @@ export default function DriverDashboard() {
                                                     </>
                                                 ) : (
                                                     <div className="flex-1 px-4 py-2.5 bg-amber-100 text-amber-700 text-sm rounded-xl text-center font-medium flex items-center justify-center gap-2">
-                                                        <AlertCircle size={16} /> Lokacija nije podešena
+                                                        <AlertCircle size={16} /> Nema lokacije
                                                     </div>
                                                 )}
-                                                <button
-                                                    onClick={() => handleQuickComplete(request)}
-                                                    disabled={processing}
-                                                    className="px-4 py-2.5 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center gap-2"
-                                                >
-                                                    <CheckCircle2 size={16} />
-                                                </button>
+                                                {request.assignmentStatus === 'picked_up' ? (
+                                                    <button
+                                                        onClick={() => handleDelivery(request)}
+                                                        disabled={processing}
+                                                        className="px-4 py-2.5 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                                    >
+                                                        <PackageCheck size={16} />
+                                                        <span className="hidden sm:inline">Dostavljeno</span>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => handlePickup(request)}
+                                                        disabled={processing}
+                                                        className="px-4 py-2.5 bg-amber-600 text-white text-sm rounded-xl hover:bg-amber-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                                    >
+                                                        <Package size={16} />
+                                                        <span className="hidden sm:inline">Preuzeto</span>
+                                                    </button>
+                                                )}
                                             </div>
-
-                                            {request.client_phone && (
-                                                <a
-                                                    href={`tel:${request.client_phone}`}
-                                                    className="mt-3 flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                                                >
-                                                    <Phone size={16} /> Pozovi: {request.client_phone}
-                                                </a>
-                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -665,14 +817,28 @@ export default function DriverDashboard() {
                         {!selectedChat ? (
                             // Conversations list
                             <div className="flex-1 overflow-y-auto">
-                                <div className="p-4 border-b bg-slate-50">
-                                    <h2 className="font-bold text-slate-800">Poruke</h2>
-                                    <p className="text-sm text-slate-500">Razgovori sa menadžerima i adminima</p>
+                                <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
+                                    <div>
+                                        <h2 className="font-bold text-slate-800">Poruke</h2>
+                                        <p className="text-sm text-slate-500">Razgovori sa menadžerima i klijentima</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowNewChatModal(true)}
+                                        className="px-3 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 text-sm"
+                                    >
+                                        <Plus size={16} /> Nova poruka
+                                    </button>
                                 </div>
                                 {conversations.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-64 text-slate-400">
                                         <MessageCircle size={48} className="mb-3 opacity-50" />
                                         <p className="text-sm">Nemate poruka</p>
+                                        <button
+                                            onClick={() => setShowNewChatModal(true)}
+                                            className="mt-3 text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                                        >
+                                            Započni razgovor
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="divide-y">
@@ -687,7 +853,10 @@ export default function DriverDashboard() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center justify-between">
-                                                        <p className="font-medium text-slate-800 truncate">{conv.partner.name}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-medium text-slate-800 truncate">{conv.partner.name}</p>
+                                                            <span className="text-xs text-slate-400">({getRoleLabel(conv.partner.role)})</span>
+                                                        </div>
                                                         <span className="text-xs text-slate-400">{formatTimeAgo(conv.lastMessageAt)}</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -719,7 +888,7 @@ export default function DriverDashboard() {
                                     </div>
                                     <div>
                                         <p className="font-medium text-slate-800">{selectedChat.name}</p>
-                                        <p className="text-xs text-slate-500 capitalize">{selectedChat.role}</p>
+                                        <p className="text-xs text-slate-500">{getRoleLabel(selectedChat.role)}</p>
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -777,6 +946,49 @@ export default function DriverDashboard() {
                                 </form>
                             </>
                         )}
+
+                        {/* New Chat Modal */}
+                        {showNewChatModal && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
+                                    <div className="p-4 border-b flex items-center justify-between">
+                                        <h3 className="font-bold text-slate-800">Nova poruka</h3>
+                                        <button
+                                            onClick={() => setShowNewChatModal(false)}
+                                            className="p-2 hover:bg-slate-100 rounded-lg"
+                                        >
+                                            <ArrowLeft size={20} />
+                                        </button>
+                                    </div>
+                                    <div className="overflow-y-auto max-h-96">
+                                        {companyMembers.length === 0 ? (
+                                            <div className="p-8 text-center text-slate-400">
+                                                <Users size={32} className="mx-auto mb-2 opacity-50" />
+                                                <p className="text-sm">Nema dostupnih korisnika</p>
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y">
+                                                {companyMembers.map(member => (
+                                                    <button
+                                                        key={member.id}
+                                                        onClick={() => openChat(member)}
+                                                        className="w-full p-4 hover:bg-slate-50 text-left flex items-center gap-3"
+                                                    >
+                                                        <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
+                                                            <User size={20} className="text-slate-500" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-slate-800">{member.name}</p>
+                                                            <p className="text-xs text-slate-500">{getRoleLabel(member.role)}</p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -784,8 +996,8 @@ export default function DriverDashboard() {
                 {view === 'history' && (
                     <div className="flex-1 overflow-y-auto">
                         <div className="p-4 border-b bg-white sticky top-0">
-                            <h2 className="font-bold text-slate-800">Istorija preuzimanja</h2>
-                            <p className="text-sm text-slate-500">Poslednjih 50 završenih zahteva</p>
+                            <h2 className="font-bold text-slate-800">Istorija dostava</h2>
+                            <p className="text-sm text-slate-500">Poslednjih 50 dostavljenih zahteva</p>
                         </div>
                         {loadingHistory ? (
                             <div className="flex items-center justify-center h-64">
@@ -794,7 +1006,7 @@ export default function DriverDashboard() {
                         ) : historyRequests.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
                                 <History size={48} className="mb-3 opacity-50" />
-                                <p className="text-lg font-medium">Nema završenih zahteva</p>
+                                <p className="text-lg font-medium">Nema završenih dostava</p>
                                 <p className="text-sm">Vaša istorija će se pojaviti ovde</p>
                             </div>
                         ) : (
@@ -804,32 +1016,36 @@ export default function DriverDashboard() {
                                         <div className="flex items-start justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                                                    <CheckCircle2 size={20} className="text-emerald-600" />
+                                                    <PackageCheck size={20} className="text-emerald-600" />
                                                 </div>
                                                 <div>
                                                     <p className="font-medium text-slate-800">
-                                                        {item.pickup_requests?.client_name || 'Nepoznat klijent'}
+                                                        {item.client_name || 'Nepoznat klijent'}
                                                     </p>
                                                     <p className="text-sm text-slate-500">
-                                                        {item.pickup_requests?.waste_label || 'Nepoznata vrsta'}
+                                                        {item.waste_label || 'Nepoznata vrsta'}
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-xs text-slate-400">
-                                                    {new Date(item.completed_at).toLocaleDateString('sr-RS')}
+                                                    {item.delivered_at ? new Date(item.delivered_at).toLocaleDateString('sr-RS') : '-'}
                                                 </p>
                                                 <p className="text-xs text-slate-400">
-                                                    {new Date(item.completed_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}
+                                                    {item.delivered_at ? new Date(item.delivered_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) : ''}
                                                 </p>
                                             </div>
                                         </div>
-                                        {item.pickup_requests?.client_address && (
+                                        {item.client_address && (
                                             <p className="mt-2 text-sm text-slate-500 flex items-center gap-2">
                                                 <MapPin size={14} className="text-slate-400" />
-                                                {item.pickup_requests.client_address}
+                                                {item.client_address}
                                             </p>
                                         )}
+                                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                                            <Package size={12} />
+                                            Preuzeto: {item.picked_up_at ? formatTimeAgo(item.picked_up_at) : '-'}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
