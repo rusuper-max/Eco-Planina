@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import DriverDashboard from './pages/DriverDashboard';
+import Debug from './pages/Debug';
 import './index.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -30,6 +31,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/debug" element={<Debug />} />
       <Route path="/admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/manager" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/driver" element={<ProtectedRoute><DriverDashboard /></ProtectedRoute>} />
@@ -40,6 +42,17 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Debug page outside of AuthProvider to bypass auth loading
+  if (window.location.pathname === '/debug') {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/debug" element={<Debug />} />
+        </Routes>
+      </BrowserRouter>
+    );
+  }
+
   return (
     <BrowserRouter>
       <AuthProvider>

@@ -24,113 +24,91 @@ export const AuthProvider = ({ children }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [originalUser, setOriginalUser] = useState(null);
 
-    // Track user in ref to avoid dependency issues
-    const userRef = useRef(user);
-    useEffect(() => {
-        userRef.current = user;
-    }, [user]);
-
-    // Track if profile loading is in progress to prevent duplicate calls
-    const loadingProfileRef = useRef(false);
-
-    // Initialize auth state from Supabase Auth session (runs only once)
-    useEffect(() => {
-        // Safety timeout - never show loading for more than 8 seconds
-        const safetyTimeout = setTimeout(() => {
-            console.warn('Auth init safety timeout triggered');
-            loadingProfileRef.current = false;
-            setIsLoading(false);
-        }, 8000);
-
-        const initAuth = async () => {
-            try {
-                // Get current session
-                const { data: { session } } = await supabase.auth.getSession();
-
-                if (session?.user) {
-                    loadingProfileRef.current = true;
-                    await loadUserProfile(session.user);
-                    loadingProfileRef.current = false;
-                } else {
-                    // Check for legacy session (migration period)
-                    const legacySession = localStorage.getItem('eco_session');
-                    if (legacySession) {
-                        const legacy = JSON.parse(legacySession);
-                        // Try to migrate or use legacy
-                        setUser(legacy.user);
-                        setCompanyCode(legacy.companyCode?.trim() || null);
-                        setCompanyName(legacy.companyName);
-                    }
+    // Clear corrupted Supabase storage (fixes Chrome-specific issues)
+    const clearSupabaseStorage = () => {
+        console.log('[Auth] Clearing corrupted storage...');
+        try {
+            // Clear Supabase-related localStorage keys
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('sb-') || key.includes('supabase'))) {
+                    keysToRemove.push(key);
                 }
-
-                // Check for impersonation
-                const savedOriginalUser = localStorage.getItem('eco_original_user');
-                if (savedOriginalUser) {
-                    setOriginalUser(JSON.parse(savedOriginalUser));
-                }
-            } catch (error) {
-                console.error('Auth init error:', error);
-                loadingProfileRef.current = false;
-            } finally {
-                clearTimeout(safetyTimeout);
-                setIsLoading(false);
             }
-        };
+            keysToRemove.forEach(key => localStorage.removeItem(key));
 
-        initAuth();
+            // Also try to clear IndexedDB for supabase
+            if (window.indexedDB) {
+                indexedDB.deleteDatabase('supabase-auth-token');
+            }
+            console.log('[Auth] Storage cleared');
+        } catch (e) {
+            console.error('[Auth] Error clearing storage:', e);
+        }
+    };
 
-        // Listen for auth state changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth state change:', event);
+    // Initialize auth on mount - with storage recovery for Chrome
+    useEffect(() => {
+        let cancelled = false;
+        let timeoutHit = false;
 
-            if (event === 'SIGNED_IN' && session?.user) {
-                // Skip if user is already loaded OR profile loading is in progress
-                if (userRef.current || loadingProfileRef.current) {
-                    console.log('User already loaded or loading in progress, skipping');
+        // Force finish after 3 seconds - if timeout hits, clear storage
+        const timeout = setTimeout(() => {
+            console.log('[Auth] Force timeout - clearing storage');
+            timeoutHit = true;
+            clearSupabaseStorage();
+            if (!cancelled) setIsLoading(false);
+        }, 3000);
+
+        (async () => {
+            try {
+                console.log('[Auth] Starting init...');
+
+                // Race between getSession and a shorter timeout
+                const sessionPromise = supabase.auth.getSession();
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Session timeout')), 2500)
+                );
+
+                let data;
+                try {
+                    const result = await Promise.race([sessionPromise, timeoutPromise]);
+                    data = result.data;
+                } catch (raceError) {
+                    console.log('[Auth] Session fetch slow, clearing storage');
+                    clearSupabaseStorage();
+                    if (!cancelled) setIsLoading(false);
                     return;
                 }
-                loadingProfileRef.current = true;
-                setIsLoading(true);
-                try {
-                    await loadUserProfile(session.user);
-                } finally {
-                    loadingProfileRef.current = false;
+
+                console.log('[Auth] Got session:', !!data?.session);
+
+                if (cancelled || timeoutHit) return;
+
+                if (data?.session?.user) {
+                    await loadUserProfile(data.session.user);
+                }
+
+                // Check impersonation
+                const imp = localStorage.getItem('eco_original_user');
+                if (imp && !cancelled) setOriginalUser(JSON.parse(imp));
+
+            } catch (e) {
+                console.error('[Auth] Init error:', e);
+                // On any error, clear storage to recover
+                clearSupabaseStorage();
+            } finally {
+                clearTimeout(timeout);
+                if (!cancelled && !timeoutHit) {
+                    console.log('[Auth] Init complete');
                     setIsLoading(false);
                 }
-            } else if (event === 'SIGNED_OUT') {
-                clearSession();
-                setIsLoading(false);
-            } else if (event === 'TOKEN_REFRESHED') {
-                // Token refreshed, no action needed
             }
-        });
+        })();
 
-        // Handle tab visibility change - silently check session validity
-        // DO NOT set isLoading here - it causes infinite loading on tab return
-        const handleVisibilityChange = async () => {
-            if (document.visibilityState === 'visible' && userRef.current) {
-                // User exists, just silently verify session is still valid
-                try {
-                    const { data: { session } } = await supabase.auth.getSession();
-
-                    // If session expired while away, clear local state
-                    if (!session?.user) {
-                        console.log('Session expired while tab was hidden');
-                        clearSession();
-                    }
-                } catch (err) {
-                    console.error('Visibility change session check error:', err);
-                }
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            subscription.unsubscribe();
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []); // Empty dependency - runs only on mount
+        return () => { cancelled = true; clearTimeout(timeout); };
+    }, []);
 
     // Load user profile from public.users table
     const loadUserProfile = async (authUserData) => {
