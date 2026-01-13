@@ -43,6 +43,17 @@ export default function DriverDashboard() {
     const [todayStats, setTodayStats] = useState({ picked: 0, delivered: 0 });
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', '24h', '48h', '72h'
 
+    // Safety timeout - never show loading for more than 8 seconds
+    useEffect(() => {
+        const safetyTimeout = setTimeout(() => {
+            if (loading) {
+                console.warn('Driver dashboard safety timeout triggered');
+                setLoading(false);
+            }
+        }, 8000);
+        return () => clearTimeout(safetyTimeout);
+    }, []);
+
     // Messages state
     const [conversations, setConversations] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
@@ -64,14 +75,29 @@ export default function DriverDashboard() {
     // Get current user's ID from users table
     useEffect(() => {
         const fetchMyUserId = async () => {
-            const { data: authUser } = await supabase.auth.getUser();
-            if (authUser?.user?.id) {
-                const { data } = await supabase
-                    .from('users')
-                    .select('id')
-                    .eq('auth_id', authUser.user.id)
-                    .single();
-                if (data) setMyUserId(data.id);
+            try {
+                const { data: authUser } = await supabase.auth.getUser();
+                if (authUser?.user?.id) {
+                    const { data } = await supabase
+                        .from('users')
+                        .select('id')
+                        .eq('auth_id', authUser.user.id)
+                        .single();
+                    if (data) {
+                        setMyUserId(data.id);
+                    } else {
+                        // User not found in users table
+                        console.error('User ID not found in users table');
+                        setLoading(false);
+                    }
+                } else {
+                    // No auth user
+                    console.error('No authenticated user');
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Error fetching user ID:', err);
+                setLoading(false);
             }
         };
         fetchMyUserId();
