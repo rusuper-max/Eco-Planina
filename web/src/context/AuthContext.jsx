@@ -695,7 +695,7 @@ export const AuthProvider = ({ children }) => {
             let isUnique = false;
             while (!isUnique) {
                 code = 'MC-' + Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-                const { data: existing } = await supabase.from('master_codes').select('id').eq('code', code).single();
+                const { data: existing } = await supabase.from('master_codes').select('id').eq('code', code).maybeSingle();
                 if (!existing) isUnique = true;
             }
             const { data, error } = await supabase.from('master_codes').insert([{ code, status: 'available', created_by: user.id }]).select().single();
