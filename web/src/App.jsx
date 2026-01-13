@@ -1,5 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { Toaster } from 'react-hot-toast';
+import {
+  AuthProvider,
+  DataProvider,
+  ChatProvider,
+  CompanyProvider,
+  AdminProvider,
+  useAuthOnly as useAuth
+} from './context';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
@@ -19,6 +27,7 @@ const PublicRoute = ({ children }) => {
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full"></div></div>;
   if (user) {
     if (user.role === 'developer' || user.role === 'admin') return <Navigate to="/admin" replace />;
+    else if (user.role === 'company_admin') return <Navigate to="/company-admin" replace />;
     else if (user.role === 'manager') return <Navigate to="/manager" replace />;
     else if (user.role === 'driver') return <Navigate to="/driver" replace />;
     else return <Navigate to="/client" replace />;
@@ -33,6 +42,7 @@ function AppRoutes() {
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/debug" element={<Debug />} />
       <Route path="/admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/company-admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/manager" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/driver" element={<ProtectedRoute><DriverDashboard /></ProtectedRoute>} />
       <Route path="/client" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -56,7 +66,32 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <DataProvider>
+          <ChatProvider>
+            <CompanyProvider>
+              <AdminProvider>
+                <AppRoutes />
+                <Toaster
+                  position="top-center"
+                  toastOptions={{
+                    duration: 3000,
+                    style: {
+                      background: '#1e293b',
+                      color: '#f1f5f9',
+                    },
+                    success: {
+                      iconTheme: { primary: '#10b981', secondary: '#f1f5f9' },
+                    },
+                    error: {
+                      iconTheme: { primary: '#ef4444', secondary: '#f1f5f9' },
+                      duration: 4000,
+                    },
+                  }}
+                />
+              </AdminProvider>
+            </CompanyProvider>
+          </ChatProvider>
+        </DataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -17,8 +17,9 @@ interface RegisterRequest {
   latitude?: number
   longitude?: number
   companyCode?: string
-  role: 'client' | 'manager' | 'driver'
-  joinExisting?: boolean
+  role: 'client' | 'manager' | 'driver' | 'company_admin'
+  // Note: joinExisting removed - manager must always join existing company
+  // company_admin is the only role that can create new company with Master Code
 }
 
 serve(async (req) => {
@@ -34,7 +35,7 @@ serve(async (req) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    const { name, phone, password, address, latitude, longitude, companyCode, role, joinExisting }: RegisterRequest = await req.json()
+    const { name, phone, password, address, latitude, longitude, companyCode, role }: RegisterRequest = await req.json()
 
     // Validate input
     if (!name || !phone || !password || !role) {
@@ -62,6 +63,8 @@ serve(async (req) => {
 
     let finalCompanyCode: string | null = null
     let companyName: string | null = null
+    let isOwner = false
+    let assignedRole = role
 
     // Handle role-specific logic
     if (role === 'client' || role === 'driver') {
@@ -83,80 +86,80 @@ serve(async (req) => {
       companyName = company.name
 
     } else if (role === 'manager') {
-      if (joinExisting) {
-        // Join existing company
-        if (!companyCode) throw new Error('Kod firme je obavezan')
+      // Manager MUST join existing company (no Master Code option)
+      if (!companyCode) throw new Error('Kod firme je obavezan')
 
-        const { data: company, error: companyError } = await supabaseAdmin
-          .from('companies')
-          .select('*')
-          .eq('code', companyCode.toUpperCase())
-          .is('deleted_at', null)
-          .single()
+      const { data: company, error: companyError } = await supabaseAdmin
+        .from('companies')
+        .select('*')
+        .eq('code', companyCode.toUpperCase())
+        .is('deleted_at', null)
+        .single()
 
-        if (companyError || !company) {
-          throw new Error('Nevažeći kod firme')
-        }
-
-        finalCompanyCode = company.code
-        companyName = company.name
-
-      } else {
-        // Create new company with master code
-        if (!companyCode) throw new Error('Master kod je obavezan')
-
-        const { data: masterCode, error: mcError } = await supabaseAdmin
-          .from('master_codes')
-          .select('*')
-          .eq('code', companyCode.toUpperCase())
-          .eq('status', 'available')
-          .single()
-
-        if (mcError || !masterCode) {
-          throw new Error('Nevažeći ili već iskorišćeni Master Code')
-        }
-
-        // Generate unique company code
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-        let newCompanyCode: string
-        let isUnique = false
-
-        while (!isUnique) {
-          newCompanyCode = 'ECO-' + Array.from({ length: 4 }, () =>
-            chars[Math.floor(Math.random() * chars.length)]
-          ).join('')
-
-          const { data: existing } = await supabaseAdmin
-            .from('companies')
-            .select('id')
-            .eq('code', newCompanyCode)
-            .single()
-
-          if (!existing) isUnique = true
-        }
-
-        // Create company
-        const { data: newCompany, error: createError } = await supabaseAdmin
-          .from('companies')
-          .insert({
-            code: newCompanyCode!,
-            name: name + ' Firma',
-            master_code_id: masterCode.id
-          })
-          .select()
-          .single()
-
-        if (createError) throw createError
-
-        finalCompanyCode = newCompanyCode!
-        companyName = newCompany.name
-
-        // Mark master code as used (will update with company ID after user creation)
-        await supabaseAdmin
-          .from('master_codes')
-          .update({ status: 'used', used_by_company: newCompany.id })
-          .eq('id', masterCode.id)
+      if (companyError || !company) {
+        throw new Error('Nevažeći kod firme')
       }
+
+      finalCompanyCode = company.code
+      companyName = company.name
+
+    } else if (role === 'company_admin') {
+      // Company Admin creates new company with Master Code
+      if (!companyCode) throw new Error('Master kod je obavezan')
+
+      const { data: masterCode, error: mcError } = await supabaseAdmin
+        .from('master_codes')
+        .select('*')
+        .eq('code', companyCode.toUpperCase())
+        .eq('status', 'available')
+        .single()
+
+      if (mcError || !masterCode) {
+        throw new Error('Nevažeći ili već iskorišćeni Master Code')
+      }
+
+      // Generate unique company code
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+      let newCompanyCode: string
+      let isUnique = false
+
+      while (!isUnique) {
+        newCompanyCode = 'ECO-' + Array.from({ length: 4 }, () =>
+          chars[Math.floor(Math.random() * chars.length)]
+        ).join('')
+
+        const { data: existing } = await supabaseAdmin
+          .from('companies')
+          .select('id')
+          .eq('code', newCompanyCode)
+          .single()
+
+        if (!existing) isUnique = true
+      }
+
+      // Create company
+      const { data: newCompany, error: createError } = await supabaseAdmin
+        .from('companies')
+        .insert({
+          code: newCompanyCode!,
+          name: name + ' Firma',
+          master_code_id: masterCode.id
+        })
+        .select()
+        .single()
+
+      if (createError) throw createError
+
+      finalCompanyCode = newCompanyCode!
+      companyName = newCompany.name
+      isOwner = true
+      assignedRole = 'company_admin'
+
+      // Mark master code as used
+      await supabaseAdmin
+        .from('master_codes')
+        .update({ status: 'used', used_by_company: newCompany.id })
+        .eq('id', masterCode.id)
     }
 
     // Create Supabase Auth user (handles password hashing automatically)
@@ -186,8 +189,9 @@ serve(async (req) => {
         address: address || null,
         latitude: latitude || null,
         longitude: longitude || null,
-        role: role,
-        company_code: finalCompanyCode
+        role: assignedRole,
+        company_code: finalCompanyCode,
+        is_owner: isOwner
       })
       .select()
       .single()
@@ -199,8 +203,8 @@ serve(async (req) => {
       throw new Error('Greška pri kreiranju profila')
     }
 
-    // If manager created new company, update manager_id
-    if (role === 'manager' && !joinExisting && finalCompanyCode) {
+    // If company_admin created new company, update manager_id
+    if (role === 'company_admin' && finalCompanyCode) {
       await supabaseAdmin
         .from('companies')
         .update({ manager_id: userData.id })

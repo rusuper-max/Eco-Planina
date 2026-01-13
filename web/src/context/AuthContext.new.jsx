@@ -16,8 +16,6 @@ export const AuthProvider = ({ children }) => {
     const [authUser, setAuthUser] = useState(null); // Supabase Auth user
     const [companyCode, setCompanyCode] = useState(null);
     const [companyName, setCompanyName] = useState(null);
-    const [regionId, setRegionId] = useState(null);
-    const [regionName, setRegionName] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [originalUser, setOriginalUser] = useState(null);
 
@@ -167,19 +165,6 @@ export const AuthProvider = ({ children }) => {
             }
 
             const isAdminRole = userData.role === 'developer' || userData.role === 'admin';
-
-            // Load region data if user has region_id
-            let regionData = null;
-            if (userData.region_id) {
-                const { data: region } = await supabase
-                    .from('regions')
-                    .select('id, name')
-                    .eq('id', userData.region_id)
-                    .is('deleted_at', null)
-                    .single();
-                regionData = region;
-            }
-
             const userObj = {
                 id: userData.id,
                 name: userData.name,
@@ -187,16 +172,12 @@ export const AuthProvider = ({ children }) => {
                 address: userData.address,
                 phone: userData.phone,
                 latitude: userData.latitude,
-                longitude: userData.longitude,
-                is_owner: userData.is_owner || false,
-                region_id: userData.region_id || null
+                longitude: userData.longitude
             };
 
             setUser(userObj);
             setCompanyCode(isAdminRole ? null : companyData?.code || userData.company_code);
             setCompanyName(isAdminRole ? null : companyData?.name || 'Nepoznato');
-            setRegionId(regionData?.id || null);
-            setRegionName(regionData?.name || null);
 
             // Return user data for immediate use (before state updates propagate)
             return userObj;
@@ -255,7 +236,7 @@ export const AuthProvider = ({ children }) => {
         });
     };
 
-    const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role }) => {
+    const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role, joinExisting }) => {
         setIsLoading(true);
         try {
             // Use same URL and key as supabase client
@@ -277,7 +258,8 @@ export const AuthProvider = ({ children }) => {
                     latitude,
                     longitude,
                     companyCode: inputCode,
-                    role
+                    role,
+                    joinExisting
                 })
             });
 
@@ -414,15 +396,12 @@ export const AuthProvider = ({ children }) => {
 
     const isAdmin = () => user?.role === 'developer' || user?.role === 'admin';
     const isDeveloper = () => user?.role === 'developer';
-    const isCompanyAdmin = () => user?.role === 'company_admin' || user?.is_owner === true;
 
     const value = {
         user,
         authUser,
         companyCode,
         companyName,
-        regionId,
-        regionName,
         isLoading,
         originalUser,
         setUser,
@@ -438,7 +417,6 @@ export const AuthProvider = ({ children }) => {
         changeUserRole,
         isAdmin,
         isDeveloper,
-        isCompanyAdmin,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

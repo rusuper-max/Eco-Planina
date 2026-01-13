@@ -1,0 +1,345 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download } from 'lucide-react';
+import { Modal, EmptyState } from '../common';
+import { EditProcessedRequestModal } from './EditProcessedRequestModal';
+
+const DEFAULT_WASTE_TYPES = [
+    { id: 'cardboard', label: 'Karton', icon: '📦' },
+    { id: 'plastic', label: 'Plastika', icon: '♻️' },
+    { id: 'glass', label: 'Staklo', icon: '🍾' },
+];
+
+/**
+ * History Table (Processed/Rejected Requests)
+ */
+export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterType, setFilterType] = useState('all');
+    const [sortBy, setSortBy] = useState('processed_at');
+    const [sortDir, setSortDir] = useState('desc');
+    const [viewingProof, setViewingProof] = useState(null);
+    const [editingRequest, setEditingRequest] = useState(null);
+    const [deletingRequest, setDeletingRequest] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
+
+    // Filter requests
+    let filtered = requests.filter(req => {
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            const matchesName = req.client_name?.toLowerCase().includes(query);
+            const matchesType = req.waste_label?.toLowerCase().includes(query);
+            if (!matchesName && !matchesType) return false;
+        }
+        if (filterType !== 'all' && req.waste_type !== filterType) return false;
+        return true;
+    });
+
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+        let comparison = 0;
+        switch (sortBy) {
+            case 'processed_at':
+                comparison = new Date(a.processed_at) - new Date(b.processed_at);
+                break;
+            case 'created_at':
+                comparison = new Date(a.created_at) - new Date(b.created_at);
+                break;
+            case 'client':
+                comparison = (a.client_name || '').localeCompare(b.client_name || '');
+                break;
+            default:
+                comparison = 0;
+        }
+        return sortDir === 'asc' ? comparison : -comparison;
+    });
+
+    const handleSort = (column) => {
+        if (sortBy === column) {
+            setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(column);
+            setSortDir('desc');
+        }
+    };
+
+    const SortIcon = ({ column }) => {
+        if (sortBy !== column) return <ArrowUpDown size={14} className="text-slate-300" />;
+        return sortDir === 'asc' ? <ArrowUp size={14} className="text-emerald-600" /> : <ArrowDown size={14} className="text-emerald-600" />;
+    };
+
+    const formatDateTime = (date) => {
+        if (!date) return '-';
+        const d = new Date(date);
+        return `${d.toLocaleDateString('sr-RS')} ${d.toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
+    return (
+        <div className="space-y-4">
+            {/* Search and Filters */}
+            <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 md:max-w-xs">
+                    <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-500" />
+                    <input
+                        type="text"
+                        placeholder="Pretraži..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none text-sm placeholder:text-slate-400"
+                    />
+                </div>
+                <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
+                >
+                    <option value="all">Sve vrste</option>
+                    {wasteTypes.map(w => <option key={w.id} value={w.id}>{w.icon} {w.label}</option>)}
+                </select>
+            </div>
+
+            {/* Results count */}
+            <div className="text-sm text-slate-500">
+                Prikazano {filtered.length} od {requests.length} zahteva
+                {(searchQuery || filterType !== 'all') && (
+                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
+                        Obriši filtere
+                    </button>
+                )}
+            </div>
+
+            {/* Table */}
+            <div className="bg-white rounded-2xl border overflow-hidden">
+                <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-500 border-b">
+                        <tr>
+                            <th className="px-3 md:px-4 py-3 text-left">
+                                <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Klijent <SortIcon column="client" />
+                                </button>
+                            </th>
+                            <th className="px-3 md:px-4 py-3 text-left">Tip</th>
+                            <th className="hidden md:table-cell px-4 py-3 text-left">
+                                <button onClick={() => handleSort('created_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Podneto <SortIcon column="created_at" />
+                                </button>
+                            </th>
+                            <th className="px-3 md:px-4 py-3 text-left">
+                                <button onClick={() => handleSort('processed_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                    Obrađeno <SortIcon column="processed_at" />
+                                </button>
+                            </th>
+                            <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
+                            <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
+                            <th className="px-2 py-3 text-center w-20">Akcije</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {filtered.length === 0 ? (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                        ) : filtered.map((req, idx) => (
+                            <tr key={req.id || idx} className="hover:bg-slate-50">
+                                <td className="px-3 md:px-4 py-3">
+                                    <div className="font-medium text-sm">{req.client_name}</div>
+                                    <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
+                                </td>
+                                <td className="px-3 md:px-4 py-3">
+                                    <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
+                                    <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                </td>
+                                <td className="hidden md:table-cell px-4 py-3">
+                                    <div className="flex items-center gap-2 text-slate-600">
+                                        <Calendar size={14} />
+                                        <span>{formatDateTime(req.created_at)}</span>
+                                    </div>
+                                </td>
+                                <td className="px-3 md:px-4 py-3">
+                                    <div className="flex items-center gap-2 text-emerald-600">
+                                        <CheckCircle2 size={14} />
+                                        <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
+                                    </div>
+                                </td>
+                                <td className="hidden sm:table-cell px-4 py-3 text-center">
+                                    {req.weight ? (
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                            {req.weight} {req.weight_unit || 'kg'}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-300 text-xs">-</span>
+                                    )}
+                                </td>
+                                <td className="hidden xs:table-cell px-2 py-3">
+                                    <div className="flex items-center justify-center">
+                                        {req.proof_image_url ? (
+                                            <button
+                                                onClick={() => setViewingProof(req)}
+                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                title="Pogledaj dokaz"
+                                            >
+                                                <Image size={18} />
+                                            </button>
+                                        ) : (
+                                            <span className="text-slate-300"><Image size={18} /></span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="px-2 py-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                        {/* On very small screens, show proof button in actions if dokaz column is hidden */}
+                                        <button
+                                            onClick={() => req.proof_image_url && setViewingProof(req)}
+                                            className={`xs:hidden p-1.5 rounded-lg ${req.proof_image_url ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-default'}`}
+                                            title={req.proof_image_url ? "Pogledaj dokaz" : "Nema dokaza"}
+                                        >
+                                            <Image size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => setEditingRequest(req)}
+                                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
+                                            title="Dopuni podatke"
+                                        >
+                                            <Edit3 size={18} />
+                                        </button>
+                                        {onDelete && (
+                                            <button
+                                                onClick={() => setDeletingRequest(req)}
+                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Obriši iz istorije"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Proof Image/PDF Modal */}
+            {viewingProof && (
+                <Modal open={!!viewingProof} onClose={() => setViewingProof(null)} title="Dokaz o izvršenoj usluzi">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                            <span className="text-2xl">{wasteTypes.find(w => w.id === viewingProof.waste_type)?.icon}</span>
+                            <div>
+                                <p className="font-medium">{viewingProof.client_name}</p>
+                                <p className="text-xs text-slate-500">{viewingProof.waste_label}</p>
+                            </div>
+                        </div>
+
+                        {/* Check if PDF or Image */}
+                        {viewingProof.proof_image_url?.toLowerCase().endsWith('.pdf') ? (
+                            <div className="border rounded-xl overflow-hidden">
+                                <iframe
+                                    src={viewingProof.proof_image_url}
+                                    className="w-full h-96"
+                                    title="PDF Dokaz"
+                                />
+                            </div>
+                        ) : (
+                            <img
+                                src={viewingProof.proof_image_url}
+                                alt="Dokaz o izvršenoj usluzi"
+                                className="w-full rounded-xl"
+                            />
+                        )}
+
+                        {viewingProof.processing_note && (
+                            <div className="p-3 bg-amber-50 rounded-xl">
+                                <p className="text-xs text-amber-600 mb-1">Napomena pri obradi</p>
+                                <p className="text-sm">{viewingProof.processing_note}</p>
+                            </div>
+                        )}
+
+                        <p className="text-xs text-slate-500 text-center">
+                            Obrađeno: {formatDateTime(viewingProof.processed_at)}
+                        </p>
+
+                        {/* Download button */}
+                        <a
+                            href={viewingProof.proof_image_url}
+                            download={`dokaz_${viewingProof.id || Date.now()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors"
+                        >
+                            <Download size={18} />
+                            Preuzmi dokaz
+                        </a>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Edit Processed Request Modal */}
+            {editingRequest && (
+                <EditProcessedRequestModal
+                    request={editingRequest}
+                    wasteTypes={wasteTypes}
+                    onSave={async (updates) => {
+                        if (onEdit) {
+                            await onEdit(editingRequest.id, updates);
+                        }
+                        setEditingRequest(null);
+                    }}
+                    onClose={() => setEditingRequest(null)}
+                />
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingRequest && (
+                <Modal open={!!deletingRequest} onClose={() => setDeletingRequest(null)} title="Obriši iz istorije">
+                    <div className="space-y-4">
+                        <div className="p-4 bg-red-50 rounded-xl border border-red-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center text-red-600">
+                                    <AlertTriangle size={20} />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-red-800">Obriši zahtev?</p>
+                                    <p className="text-sm text-red-600">Ova akcija se ne može poništiti.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl">
+                            <p className="text-sm text-slate-500">Klijent</p>
+                            <p className="font-medium">{deletingRequest.client_name}</p>
+                            <p className="text-xs text-slate-400 mt-1">{deletingRequest.waste_label} • {formatDateTime(deletingRequest.processed_at)}</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeletingRequest(null)}
+                                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium"
+                            >
+                                Odustani
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    setIsDeleting(true);
+                                    try {
+                                        await onDelete(deletingRequest.id);
+                                        setDeletingRequest(null);
+                                    } catch (err) {
+                                        toast.error('Greška: ' + err.message);
+                                    } finally {
+                                        setIsDeleting(false);
+                                    }
+                                }}
+                                disabled={isDeleting}
+                                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                Obriši
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+export default HistoryTable;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+import { useAuth } from '../context';
 import { supabase } from '../config/supabase';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
@@ -407,10 +408,10 @@ export default function DriverDashboard() {
 
     const fetchMyAssignments = async () => {
         try {
-            // Fetch assignments with full request data stored in the assignment
+            // Fetch assignments with full request data and manager info
             const { data, error } = await supabase
                 .from('driver_assignments')
-                .select('*')
+                .select('*, assigned_by_user:assigned_by(id, name, phone)')
                 .eq('driver_id', myUserId)
                 .in('status', ['assigned', 'in_progress', 'picked_up'])
                 .is('deleted_at', null);
@@ -559,7 +560,7 @@ export default function DriverDashboard() {
             setChatMessages(msgs);
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
         } catch (err) {
-            alert('Greška pri slanju poruke');
+            toast.error('Greška pri slanju poruke');
         } finally {
             setSendingMessage(false);
         }
@@ -583,7 +584,7 @@ export default function DriverDashboard() {
             return [];
         }
 
-        // Add assignment status to each request
+        // Add assignment status and manager info to each request
         requests = requests.map(r => {
             const assignment = assignments.find(a => a.request_id === r.id);
             return {
@@ -591,7 +592,9 @@ export default function DriverDashboard() {
                 currentUrgency: getCurrentUrgency(r.created_at, r.urgency),
                 remainingTime: getRemainingTime(r.created_at, r.urgency),
                 assignmentStatus: assignment?.status || 'assigned',
-                assignmentId: assignment?.id
+                assignmentId: assignment?.id,
+                assignedByName: assignment?.assigned_by_user?.name,
+                assignedByPhone: assignment?.assigned_by_user?.phone
             };
         });
 
@@ -637,7 +640,7 @@ export default function DriverDashboard() {
             await fetchMyAssignments();
             await fetchTodayStats();
         } catch (err) {
-            alert('Greška: ' + err.message);
+            toast.error('Greška: ' + err.message);
         } finally {
             setProcessing(false);
         }
@@ -664,7 +667,7 @@ export default function DriverDashboard() {
             await fetchMyAssignments();
             await fetchTodayStats();
         } catch (err) {
-            alert('Greška: ' + err.message);
+            toast.error('Greška: ' + err.message);
         } finally {
             setProcessing(false);
         }
@@ -1096,6 +1099,24 @@ export default function DriverDashboard() {
                                                     <MapPin size={16} className="shrink-0 mt-0.5 text-slate-400" />
                                                     {request.client_address}
                                                 </p>
+                                            )}
+
+                                            {/* Manager who assigned this request */}
+                                            {request.assignedByName && (
+                                                <div className="mb-3 p-2 bg-slate-50 rounded-lg flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                                                        <User size={14} className="text-slate-400" />
+                                                        <span>Dodelio: <strong>{request.assignedByName}</strong></span>
+                                                    </div>
+                                                    {request.assignedByPhone && (
+                                                        <a
+                                                            href={`tel:${request.assignedByPhone}`}
+                                                            className="flex items-center gap-1 text-emerald-600 text-sm font-medium hover:text-emerald-700"
+                                                        >
+                                                            <Phone size={14} /> Pozovi
+                                                        </a>
+                                                    )}
+                                                </div>
                                             )}
 
                                             <div className="flex gap-2">

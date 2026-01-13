@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
+import { useAuth } from '../context';
 import { supabase } from '../config/supabase';
 import {
-    Truck, Users, MapPin, Phone, CheckCircle2, Clock, AlertCircle,
-    ChevronDown, ChevronUp, Search, Filter, X, Plus, Trash2, Navigation,
+    Users, Truck, Plus, X, Search, Clock, Phone, AlertCircle, MapPin, CheckCircle2, ChevronDown, ChevronUp,
     RefreshCw, User, Package, PackageCheck, CircleDot, ArrowLeftRight
 } from 'lucide-react';
 import {
@@ -14,16 +14,14 @@ import {
 const DriverCard = ({ driver, isSelected, onSelect, assignedCount }) => (
     <div
         onClick={() => onSelect(driver)}
-        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-            isSelected
-                ? 'border-emerald-500 bg-emerald-50'
-                : 'border-slate-200 hover:border-slate-300 bg-white'
-        }`}
+        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected
+            ? 'border-emerald-500 bg-emerald-50'
+            : 'border-slate-200 hover:border-slate-300 bg-white'
+            }`}
     >
         <div className="flex items-center gap-3">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
-                isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`}>
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
                 {driver.name?.charAt(0)?.toUpperCase() || 'V'}
             </div>
             <div className="flex-1">
@@ -189,13 +187,11 @@ const DriverSelectDropdown = ({ drivers, selectedDriver, onSelect, isOpen, onTog
                                 onSelect(driver);
                                 onToggle(false);
                             }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left ${
-                                selectedDriver?.id === driver.id ? 'bg-emerald-50' : ''
-                            }`}
+                            className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left ${selectedDriver?.id === driver.id ? 'bg-emerald-50' : ''
+                                }`}
                         >
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                                selectedDriver?.id === driver.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${selectedDriver?.id === driver.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                                }`}>
                                 {driver.name?.charAt(0)?.toUpperCase() || 'V'}
                             </div>
                             <div>
@@ -229,6 +225,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
     const [showChangeDriverModal, setShowChangeDriverModal] = useState(false);
     const [assignmentToChange, setAssignmentToChange] = useState(null);
     const [changingDriver, setChangingDriver] = useState(false);
+    const [assignmentsExpanded, setAssignmentsExpanded] = useState(false);
     const driverDropdownButtonRef = useRef(null);
 
     // Fetch drivers and assignments
@@ -348,33 +345,26 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
 
         setAssigning(true);
         try {
-            const { data: userData } = await supabase
-                .from('users')
-                .select('id')
-                .eq('auth_id', (await supabase.auth.getUser()).data.user?.id)
-                .single();
+            const requestIds = Array.from(selectedRequests);
 
-            const assignmentsToInsert = Array.from(selectedRequests).map(requestId => ({
-                driver_id: selectedDriver.id,
-                request_id: requestId,
-                company_code: companyCode,
-                assigned_by: userData?.id,
-                status: 'assigned'
-            }));
-
-            const { error } = await supabase
-                .from('driver_assignments')
-                .insert(assignmentsToInsert);
+            const { data, error } = await supabase.rpc('assign_requests_to_driver', {
+                p_request_ids: requestIds,
+                p_driver_id: selectedDriver.id,
+                p_company_code: companyCode
+            });
 
             if (error) throw error;
+            if (data === false) {
+                throw new Error('Nemate dozvolu za ovu akciju');
+            }
 
             // Refresh data
             await fetchAssignments();
             setSelectedRequests(new Set());
-            alert(`${assignmentsToInsert.length} zahteva dodeljeno vozaču ${selectedDriver.name}`);
+            toast.success(`${requestIds.length} zahteva dodeljeno vozaču ${selectedDriver.name}`);
         } catch (err) {
             console.error('Error assigning requests:', err);
-            alert('Greška pri dodeljivanju: ' + err.message);
+            toast.error('Greška pri dodeljivanju: ' + err.message);
         } finally {
             setAssigning(false);
         }
@@ -393,7 +383,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
             if (error) throw error;
             await fetchAssignments();
         } catch (err) {
-            alert('Greška: ' + err.message);
+            toast.error('Greška: ' + err.message);
         }
     };
 
@@ -427,9 +417,9 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
             setAssignmentToChange(null);
 
             const newDriver = drivers.find(d => d.id === newDriverId);
-            alert(`Zahtev preusmeren na vozača: ${newDriver?.name || 'Nepoznato'}`);
+            toast.success(`Zahtev preusmeren na vozača: ${newDriver?.name || 'Nepoznato'}`);
         } catch (err) {
-            alert('Greška pri promeni vozača: ' + err.message);
+            toast.error('Greška pri promeni vozača: ' + err.message);
         } finally {
             setChangingDriver(false);
         }
@@ -492,47 +482,56 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
 
             {/* Selected Driver's Assignments */}
             {selectedDriver && getDriverAssignments(selectedDriver.id).length > 0 && (
-                <div className="bg-white rounded-2xl border p-6">
-                    <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                        <Truck size={20} className="text-blue-600" />
-                        Dodeljeni zahtevi za {selectedDriver.name}
-                    </h3>
-                    <div className="space-y-2">
-                        {getDriverAssignments(selectedDriver.id).map(assignment => {
-                            const request = pendingRequests.find(r => r.id === assignment.request_id);
-                            if (!request) return null;
+                <div className="bg-white rounded-2xl border overflow-hidden">
+                    <button
+                        onClick={() => setAssignmentsExpanded(!assignmentsExpanded)}
+                        className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+                    >
+                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                            <Truck size={20} className="text-blue-600" />
+                            Dodeljeni zahtevi za {selectedDriver.name}
+                            <span className="text-sm font-normal text-slate-500">({getDriverAssignments(selectedDriver.id).length})</span>
+                        </h3>
+                        {assignmentsExpanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+                    </button>
+                    {assignmentsExpanded && (
+                        <div className="p-4 pt-0 space-y-2">
+                            {getDriverAssignments(selectedDriver.id).map(assignment => {
+                                const request = pendingRequests.find(r => r.id === assignment.request_id);
+                                if (!request) return null;
 
-                            return (
-                                <div key={assignment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xl">{wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}</span>
-                                        <div>
-                                            <p className="font-medium">{request.client_name}</p>
-                                            <p className="text-sm text-slate-500">{request.waste_label}</p>
+                                return (
+                                    <div key={assignment.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl">{wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}</span>
+                                            <div>
+                                                <p className="font-medium">{request.client_name}</p>
+                                                <p className="text-sm text-slate-500">{request.waste_label}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <StatusBadge status={assignment.status} />
+                                            <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                                            <button
+                                                onClick={() => openChangeDriverModal(assignment, request)}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                title="Promeni vozača"
+                                            >
+                                                <ArrowLeftRight size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleUnassign(assignment.id)}
+                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Ukloni dodelu"
+                                            >
+                                                <X size={18} />
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <StatusBadge status={assignment.status} />
-                                        <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
-                                        <button
-                                            onClick={() => openChangeDriverModal(assignment, request)}
-                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                            title="Promeni vozača"
-                                        >
-                                            <ArrowLeftRight size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => handleUnassign(assignment.id)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                            title="Ukloni dodelu"
-                                        >
-                                            <X size={18} />
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -585,11 +584,10 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 onClick={selectAllVisible}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                    selectedRequests.size === filteredRequests.length && filteredRequests.length > 0
-                                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                }`}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${selectedRequests.size === filteredRequests.length && filteredRequests.length > 0
+                                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    }`}
                             >
                                 {selectedRequests.size === filteredRequests.length && filteredRequests.length > 0
                                     ? `Odštikliraj sve (${filteredRequests.length})`
@@ -625,11 +623,10 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                 <button
                                     ref={driverDropdownButtonRef}
                                     onClick={() => setShowDriverDropdown(!showDriverDropdown)}
-                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
-                                        selectedDriver
-                                            ? 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
-                                            : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                                    }`}
+                                    className={`px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${selectedDriver
+                                        ? 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                                        : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                                        }`}
                                 >
                                     <User size={16} />
                                     {selectedDriver ? selectedDriver.name : 'Odaberi vozača'}
@@ -739,7 +736,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                         <button
                             onClick={() => {
                                 navigator.clipboard.writeText(companyCode);
-                                alert('ECO kod kopiran!');
+                                toast.success('ECO kod kopiran!');
                             }}
                             className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700"
                         >

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context';
 import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown, Search, Truck } from 'lucide-react';
 
 const COUNTRY_CODES = [
@@ -17,7 +17,6 @@ export default function RegisterPage() {
     const { register } = useAuth();
     const [step, setStep] = useState(1);
     const [role, setRole] = useState(null);
-    const [joinExisting, setJoinExisting] = useState(false);
     const [countryCode, setCountryCode] = useState('+381');
     const [showCountryDropdown, setShowCountryDropdown] = useState(false);
     const [formData, setFormData] = useState({ name: '', phone: '', password: '', address: '', companyCode: '', latitude: null, longitude: null });
@@ -110,8 +109,7 @@ export default function RegisterPage() {
                 latitude: formData.latitude,
                 longitude: formData.longitude,
                 companyCode: formData.companyCode,
-                role,
-                joinExisting
+                role
             });
             navigate('/', { state: { registered: true } });
         } catch (err) {
@@ -159,7 +157,7 @@ export default function RegisterPage() {
                     {step > 1 && (
                         <button
                             type="button"
-                            onClick={() => step === 3 ? setStep(2) : step === 2 && role === 'manager' ? setStep(1) : setStep(1)}
+                            onClick={() => step === 3 ? (role === 'company_admin' ? setStep(2) : setStep(1)) : setStep(1)}
                             className="flex items-center gap-2 text-slate-500 hover:text-slate-700 mb-6 text-sm font-medium"
                         >
                             <ArrowLeft size={16} /> Nazad
@@ -181,11 +179,18 @@ export default function RegisterPage() {
                             </div>
                             <div className="grid gap-4">
                                 <RoleCard
-                                    icon={Users}
-                                    title="Klijent"
-                                    desc="Prijavljujem preuzimanje robe od moje firme"
-                                    selected={role === 'client'}
-                                    onClick={() => { setRole('client'); setStep(3); }}
+                                    icon={Building2}
+                                    title="Registruj firmu"
+                                    desc="Imam Master Code i želim da registrujem novu firmu"
+                                    selected={role === 'company_admin'}
+                                    onClick={() => { setRole('company_admin'); setStep(2); }}
+                                />
+                                <RoleCard
+                                    icon={UserCog}
+                                    title="Menadžer"
+                                    desc="Pridružujem se postojećoj firmi kao menadžer"
+                                    selected={role === 'manager'}
+                                    onClick={() => { setRole('manager'); setStep(3); }}
                                 />
                                 <RoleCard
                                     icon={Truck}
@@ -195,39 +200,39 @@ export default function RegisterPage() {
                                     onClick={() => { setRole('driver'); setStep(3); }}
                                 />
                                 <RoleCard
-                                    icon={UserCog}
-                                    title="Menadžer"
-                                    desc="Upravljam preuzimanjem robe za klijente"
-                                    selected={role === 'manager'}
-                                    onClick={() => { setRole('manager'); setStep(2); }}
+                                    icon={Users}
+                                    title="Klijent"
+                                    desc="Prijavljujem preuzimanje robe od moje firme"
+                                    selected={role === 'client'}
+                                    onClick={() => { setRole('client'); setStep(3); }}
                                 />
                             </div>
                         </div>
                     )}
 
-                    {/* Step 2: Manager Options */}
-                    {step === 2 && role === 'manager' && (
+                    {/* Step 2: Company Admin Info */}
+                    {step === 2 && role === 'company_admin' && (
                         <div className="space-y-6">
                             <div>
-                                <h2 className="text-xl font-bold text-slate-800 mb-2">Opcije za menadžera</h2>
-                                <p className="text-slate-500 text-sm">Da li se pridružujete postojećoj firmi ili kreirate novu?</p>
+                                <h2 className="text-xl font-bold text-slate-800 mb-2">Registracija firme</h2>
+                                <p className="text-slate-500 text-sm">Kao vlasnik firme, imaćete potpunu kontrolu nad vašom organizacijom.</p>
                             </div>
-                            <div className="grid gap-4">
-                                <RoleCard
-                                    icon={Building2}
-                                    title="Kreiraj novu firmu"
-                                    desc="Imam Master Code i želim da registrujem novu firmu"
-                                    selected={!joinExisting}
-                                    onClick={() => { setJoinExisting(false); setStep(3); }}
-                                />
-                                <RoleCard
-                                    icon={Users}
-                                    title="Pridruži se postojećoj"
-                                    desc="Imam ECO kod i želim da se pridružim kao menadžer"
-                                    selected={joinExisting}
-                                    onClick={() => { setJoinExisting(true); setStep(3); }}
-                                />
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                                <h3 className="font-semibold text-emerald-800 mb-2">Šta dobijate kao vlasnik firme:</h3>
+                                <ul className="text-sm text-emerald-700 space-y-1">
+                                    <li>✓ Upravljanje svim menadžerima i vozačima</li>
+                                    <li>✓ Pregled svih zahteva i statistike</li>
+                                    <li>✓ Pristup podešavanjima firme</li>
+                                    <li>✓ Kontrola nad ECO kodom za nove članove</li>
+                                </ul>
                             </div>
+                            <button
+                                type="button"
+                                onClick={() => setStep(3)}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-emerald-200 transition-all"
+                            >
+                                Nastavi sa registracijom
+                            </button>
                         </div>
                     )}
 
@@ -236,7 +241,7 @@ export default function RegisterPage() {
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
                                 <h2 className="text-xl font-bold text-slate-800 mb-2">
-                                    {role === 'client' ? 'Registracija klijenta' : role === 'driver' ? 'Registracija vozača' : joinExisting ? 'Pridruživanje firmi' : 'Kreiranje firme'}
+                                    {role === 'client' ? 'Registracija klijenta' : role === 'driver' ? 'Registracija vozača' : role === 'manager' ? 'Pridruživanje firmi' : 'Kreiranje firme'}
                                 </h2>
                                 <p className="text-slate-500 text-sm">Unesite vaše podatke za registraciju</p>
                             </div>
@@ -387,7 +392,7 @@ export default function RegisterPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    {role === 'client' || role === 'driver' ? 'ECO Kod firme' : joinExisting ? 'ECO Kod firme' : 'Master Code'}
+                                    {role === 'company_admin' ? 'Master Code' : 'ECO Kod firme'}
                                 </label>
                                 <div className="relative">
                                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -395,19 +400,19 @@ export default function RegisterPage() {
                                         type="text"
                                         value={formData.companyCode}
                                         onChange={(e) => setFormData({ ...formData, companyCode: e.target.value.toUpperCase() })}
-                                        placeholder={role === 'manager' && !joinExisting ? 'MC-XXXXXX' : 'ECO-XXXX'}
+                                        placeholder={role === 'company_admin' ? 'MC-XXXXXX' : 'ECO-XXXX'}
                                         className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all uppercase"
                                         required
                                     />
                                 </div>
                                 <p className="mt-2 text-xs text-slate-500">
-                                    {role === 'client'
-                                        ? 'Dobićete ECO kod od vašeg menadžera'
-                                        : role === 'driver'
-                                            ? 'Dobićete ECO kod od menadžera firme za koju vozite'
-                                            : joinExisting
-                                                ? 'Unesite ECO kod firme kojoj se pridružujete'
-                                                : 'Master Code dobijate od EcoMountainT administratora'}
+                                    {role === 'company_admin'
+                                        ? 'Master Code dobijate od EcoMountainT administratora'
+                                        : role === 'manager'
+                                            ? 'Unesite ECO kod firme kojoj se pridružujete'
+                                            : role === 'driver'
+                                                ? 'Dobićete ECO kod od menadžera firme za koju vozite'
+                                                : 'Dobićete ECO kod od vašeg menadžera'}
                                 </p>
                             </div>
 

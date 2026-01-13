@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import {
     // Hooks
     useState, useEffect, useCallback, useMemo, useRef,
@@ -22,7 +23,9 @@ import {
     RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
-    AnalyticsPage
+    AnalyticsPage,
+    RegionsPage,
+    CompanyStaffPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 
@@ -70,8 +73,22 @@ export default function Dashboard() {
     const [historyLoading, setHistoryLoading] = useState(false);
     const [driverAssignments, setDriverAssignments] = useState([]);
     const [companyDrivers, setCompanyDrivers] = useState([]);
+    const [companyMembers, setCompanyMembers] = useState([]);
 
-    const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role || 'client';
+    const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role === 'company_admin' ? 'company_admin' : user?.role || 'client';
+
+    // Helper za prikaz uloge na srpskom
+    const getRoleLabel = (role) => {
+        const labels = {
+            developer: 'Developer',
+            admin: 'Administrator',
+            company_admin: 'Admin firme',
+            manager: 'Menadžer',
+            driver: 'Vozač',
+            client: 'Klijent'
+        };
+        return labels[role] || 'Korisnik';
+    };
 
     // Save activeTab to localStorage
     useEffect(() => {
@@ -165,6 +182,11 @@ export default function Dashboard() {
                     // Fetch drivers for map assignment
                     await fetchCompanyDrivers();
                 }
+
+                if (userRole === 'company_admin') {
+                    setClients(await fetchCompanyClients() || []);
+                    setCompanyMembers(await fetchCompanyMembers() || []);
+                }
             }
             setInitialDataLoaded(true);
         } catch (err) { console.error(err); }
@@ -209,31 +231,22 @@ export default function Dashboard() {
     // Assign requests to driver from map
     const handleAssignDriverFromMap = async (requestIds, driverId) => {
         try {
-            const { data: userData } = await supabase
-                .from('users')
-                .select('id')
-                .eq('auth_id', (await supabase.auth.getUser()).data.user?.id)
-                .single();
-
-            const assignmentsToInsert = requestIds.map(requestId => ({
-                driver_id: driverId,
-                request_id: requestId,
-                company_code: companyCode,
-                assigned_by: userData?.id,
-                status: 'assigned'
-            }));
-
-            const { error } = await supabase
-                .from('driver_assignments')
-                .insert(assignmentsToInsert);
+            const { data, error } = await supabase.rpc('assign_requests_to_driver', {
+                p_request_ids: requestIds,
+                p_driver_id: driverId,
+                p_company_code: companyCode
+            });
 
             if (error) throw error;
+            if (data === false) {
+                throw new Error('Nemate dozvolu za ovu akciju');
+            }
 
             // Refresh assignments
             await fetchDriverAssignments();
 
             const driver = companyDrivers.find(d => d.id === driverId);
-            alert(`${requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
+            toast.success(`${requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
         } catch (err) {
             console.error('Error assigning driver:', err);
             throw err;
@@ -259,12 +272,12 @@ export default function Dashboard() {
     };
 
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
-    const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { alert(err.message); } finally { setSubmitLoading(false); } };
+    const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { toast.error(err.message); } finally { setSubmitLoading(false); } };
     const handleProcessRequest = (req) => setProcessingRequest(req);
     const handleConfirmProcess = async (req, proofImageUrl, note, weightData) => {
         await markRequestAsProcessed(req, proofImageUrl, note, weightData);
     };
-    const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { alert(err.message); } };
+    const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { toast.error(err.message); } };
     const handleDeleteClient = async (id) => {
         if (!window.confirm('Obrisati klijenta?')) return;
         const previousClients = clients;
@@ -273,28 +286,28 @@ export default function Dashboard() {
             await deleteClient?.(id);
         } catch (err) {
             setClients(previousClients); // Rollback on error
-            alert(err.message);
+            toast.error(err.message);
         }
     };
-    const handleGenerateCode = async () => { try { await generateMasterCode(); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
-    const handleCopyCode = (code) => { navigator.clipboard.writeText(code); alert('Kopirano!'); };
-    const handleDeleteCode = async (id) => { if (window.confirm('Obrisati?')) try { await deleteMasterCode(id); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
-    const handleUpdateCodePrice = async (codeId, priceData) => { try { await updateMasterCodePrice(codeId, priceData); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { alert(err.message); } };
-    const handleDeleteUser = async (id) => { if (window.confirm('Obrisati?')) try { await deleteUser(id); setUsers(await fetchAllUsers()); } catch (err) { alert(err.message); } };
+    const handleGenerateCode = async () => { try { await generateMasterCode(); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { toast.error(err.message); } };
+    const handleCopyCode = (code) => { navigator.clipboard.writeText(code); toast.success('Kopirano!'); };
+    const handleDeleteCode = async (id) => { if (window.confirm('Obrisati?')) try { await deleteMasterCode(id); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { toast.error(err.message); } };
+    const handleUpdateCodePrice = async (codeId, priceData) => { try { await updateMasterCodePrice(codeId, priceData); setMasterCodes(await fetchAllMasterCodes()); } catch (err) { toast.error(err.message); } };
+    const handleDeleteUser = async (id) => { if (window.confirm('Obrisati?')) try { await deleteUser(id); setUsers(await fetchAllUsers()); } catch (err) { toast.error(err.message); } };
     const handleImpersonateUser = async (userId) => {
         if (!window.confirm('Želite da pristupite ovom nalogu?')) return;
         try {
             const result = await impersonateUser(userId);
             // Navigate based on role
-            if (result.role === 'manager') navigate('/manager');
+            if (result.role === 'company_admin') navigate('/company-admin');
+            else if (result.role === 'manager') navigate('/manager');
             else if (result.role === 'driver') navigate('/driver');
             else if (result.role === 'client') navigate('/client');
             else navigate('/admin');
             window.location.reload();
         } catch (err) {
             // More detailed error for debugging
-            const errorDetails = `Greška: ${err.message}\n\nAko problem i dalje postoji, pokušajte da osvežite stranicu ili se odjavite pa ponovo prijavite.`;
-            alert(errorDetails);
+            toast.error(`Greška: ${err.message}. Ako problem i dalje postoji, osvežite stranicu.`);
         }
     };
     const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
@@ -332,32 +345,43 @@ export default function Dashboard() {
     const handleAddWasteType = async (newType) => {
         const updated = [...wasteTypes, newType];
         setWasteTypes(updated);
-        try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri čuvanju: ' + e.message); }
+        try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri čuvanju: ' + e.message); }
     };
     const handleDeleteWasteType = async (id) => {
         if (window.confirm('Obrisati vrstu robe?')) {
             const updated = wasteTypes.filter(wt => wt.id !== id);
             setWasteTypes(updated);
-            try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri brisanju: ' + e.message); }
+            try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri brisanju: ' + e.message); }
         }
     };
     const handleEditWasteType = async (updatedType) => {
         const updated = wasteTypes.map(wt => wt.id === updatedType.id ? updatedType : wt);
         setWasteTypes(updated);
-        try { await updateCompanyWasteTypes(updated); } catch (e) { alert('Greška pri izmeni: ' + e.message); }
+        try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri izmeni: ' + e.message); }
     };
 
-    // Client location handler
+    // Client location handler - koristi SECURITY DEFINER funkciju
     const handleSaveClientLocation = async (position) => {
         if (editingClientLocation) {
             try {
-                // Update in Supabase
-                const { error } = await supabase
-                    .from('users')
-                    .update({ latitude: position[0], longitude: position[1] })
-                    .eq('id', editingClientLocation.id);
+                // Debug: proveri auth
+                const { data: authData } = await supabase.auth.getUser();
+                console.log('DEBUG - Auth user:', authData?.user?.id);
+                console.log('DEBUG - Client ID:', editingClientLocation.id);
+                console.log('DEBUG - Position:', position);
+
+                const { data, error } = await supabase.rpc('update_client_location', {
+                    client_id: editingClientLocation.id,
+                    lat: position[0],
+                    lng: position[1]
+                });
+
+                console.log('DEBUG - RPC result:', { data, error });
 
                 if (error) throw error;
+                if (data === false) {
+                    throw new Error('Nemate dozvolu za ovu akciju');
+                }
 
                 // Update local state
                 setClients(prev => prev.map(c =>
@@ -365,9 +389,11 @@ export default function Dashboard() {
                         ? { ...c, latitude: position[0], longitude: position[1] }
                         : c
                 ));
+                toast.success('Lokacija uspešno sačuvana');
                 setEditingClientLocation(null);
             } catch (err) {
-                alert('Greška pri čuvanju lokacije: ' + err.message);
+                console.error('Error saving location:', err);
+                toast.error('Greška pri čuvanju lokacije: ' + err.message);
             }
         }
     };
@@ -389,6 +415,13 @@ export default function Dashboard() {
 
     const getMenu = () => {
         if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }, { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }];
+        if (userRole === 'company_admin') return [
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
+            { id: 'map', icon: Globe, label: 'Mapa' },
+            { id: 'staff', icon: Users, label: 'Osoblje' },
+            { id: 'regions', icon: MapPin, label: 'Filijale' },
+            { id: 'settings', icon: Settings, label: 'Podešavanja' }
+        ];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
@@ -402,6 +435,7 @@ export default function Dashboard() {
             { id: 'wastetypes', icon: Recycle, label: 'Vrste robe' },
             { id: 'map', icon: MapPin, label: 'Mapa' }
         ];
+        // Default: client menu
         return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Početna' },
             { id: 'new', icon: Plus, label: 'Novi zahtev' },
@@ -536,32 +570,55 @@ export default function Dashboard() {
                                 </button>
                             </div>
                             <div className="divide-y">
-                                {clientRequests.slice(0, 3).map(r => (
-                                    <div key={r.id} className="p-4 hover:bg-slate-50 transition-colors">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
-                                                    {WASTE_TYPES.find(w => w.id === r.waste_type)?.icon || '📦'}
+                                {clientRequests.slice(0, 3).map(r => {
+                                    const assignment = r.driver_assignment;
+                                    const hasDriver = !!assignment;
+                                    const statusLabel = assignment?.status === 'in_progress' ? 'Vozač na putu' : hasDriver ? 'Dodeljen vozač' : 'Na čekanju';
+                                    const statusColor = assignment?.status === 'in_progress' ? 'bg-amber-100 text-amber-700' : hasDriver ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';
+
+                                    return (
+                                        <div key={r.id} className="p-4 hover:bg-slate-50 transition-colors">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
+                                                        {WASTE_TYPES.find(w => w.id === r.waste_type)?.icon || '📦'}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-semibold text-slate-800">{r.waste_label}</h4>
+                                                        <p className="text-sm text-slate-500 flex items-center gap-2">
+                                                            <Calendar size={14} />
+                                                            {new Date(r.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <h4 className="font-semibold text-slate-800">{r.waste_label}</h4>
-                                                    <p className="text-sm text-slate-500 flex items-center gap-2">
-                                                        <Calendar size={14} />
-                                                        {new Date(r.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                                    </p>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                        {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
+                                                    </span>
+                                                    <span className={`px-3 py-1.5 text-xs font-medium rounded-full flex items-center gap-1 ${statusColor}`}>
+                                                        {hasDriver ? <Truck size={12} /> : <Clock size={12} />} {statusLabel}
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                    {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
-                                                </span>
-                                                <span className="px-3 py-1.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
-                                                    <Clock size={12} /> Na čekanju
-                                                </span>
-                                            </div>
+                                            {/* Show driver info when assigned */}
+                                            {hasDriver && (
+                                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2 text-sm">
+                                                        <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                                            <Users size={14} className="text-emerald-600" />
+                                                        </div>
+                                                        <span className="text-slate-600">{assignment.driver_name}</span>
+                                                    </div>
+                                                    {assignment.driver_phone && (
+                                                        <a href={`tel:${assignment.driver_phone}`} className="flex items-center gap-1 text-emerald-600 text-sm font-medium hover:text-emerald-700">
+                                                            <Phone size={14} /> Pozovi
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -593,7 +650,7 @@ export default function Dashboard() {
                     const updated = await fetchProcessedRequests();
                     setProcessedRequests(updated);
                 } catch (err) {
-                    alert('Greška pri ažuriranju: ' + err.message);
+                    toast.error('Greška pri ažuriranju: ' + err.message);
                 }
             }} onDelete={async (id) => {
                 const previous = processedRequests;
@@ -614,6 +671,117 @@ export default function Dashboard() {
                 return remA.ms - remB.ms;
             });
             return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} assignments={driverAssignments} /></div>}</div>;
+        }
+        // Company Admin - bird's eye view of company (no operations)
+        if (userRole === 'company_admin') {
+            if (activeTab === 'staff') return <CompanyStaffPage />;
+            if (activeTab === 'regions') return <RegionsPage />;
+            if (activeTab === 'map') return (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h1 className="text-2xl font-bold">Mapa zahteva</h1>
+                        <p className="text-slate-500 text-sm">{pending.length} aktivnih zahteva</p>
+                    </div>
+                    <MapView
+                        requests={pending}
+                        clients={clients}
+                        type="requests"
+                        wasteTypes={wasteTypes}
+                        drivers={[]}
+                    />
+                </div>
+            );
+            if (activeTab === 'settings') return (
+                <div className="space-y-6">
+                    <h1 className="text-2xl font-bold">Podešavanja firme</h1>
+                    <WasteTypesManagement wasteTypes={wasteTypes} onUpdate={async (types) => {
+                        await updateCompanyWasteTypes(types);
+                        setWasteTypes(types);
+                    }} />
+                    <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />
+                </div>
+            );
+            // Company Admin Dashboard - Overview stats
+            const staffCount = companyMembers?.filter(m => ['manager', 'driver'].includes(m.role)).length || 0;
+            const managerCount = companyMembers?.filter(m => m.role === 'manager').length || 0;
+            const driverCount = companyMembers?.filter(m => m.role === 'driver').length || 0;
+            return (
+                <div className="space-y-6">
+                    <h1 className="text-2xl font-bold">Pregled firme</h1>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('map')}>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                                    <Truck className="w-6 h-6 text-emerald-600" />
+                                </div>
+                                <div>
+                                    <p className="text-3xl font-bold text-slate-800">{pending.length}</p>
+                                    <p className="text-sm text-slate-500">Aktivnih zahteva</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('staff')}>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                    <Users className="w-6 h-6 text-blue-600" />
+                                </div>
+                                <div>
+                                    <p className="text-3xl font-bold text-slate-800">{staffCount}</p>
+                                    <p className="text-sm text-slate-500">{managerCount} menadž. / {driverCount} voz.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('regions')}>
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                                    <MapPin className="w-6 h-6 text-purple-600" />
+                                </div>
+                                <div>
+                                    <p className="text-3xl font-bold text-slate-800">0</p>
+                                    <p className="text-sm text-slate-500">Filijala</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-2xl border p-5">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                                    <Building2 className="w-6 h-6 text-amber-600" />
+                                </div>
+                                <div>
+                                    <p className="text-3xl font-bold text-slate-800">{clients.length}</p>
+                                    <p className="text-sm text-slate-500">Klijenata</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Quick actions */}
+                    <div className="bg-white rounded-2xl border p-6">
+                        <h2 className="font-bold mb-4">Brze akcije</h2>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <button onClick={() => setActiveTab('map')} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left transition-colors">
+                                <Globe size={20} className="mb-3 text-slate-500" />
+                                <p className="font-semibold">Pregled mape</p>
+                                <p className="text-xs text-slate-500">Svi zahtevi na mapi</p>
+                            </button>
+                            <button onClick={() => setActiveTab('staff')} className="p-4 bg-slate-50 rounded-xl hover:bg-blue-50 text-left transition-colors">
+                                <Users size={20} className="mb-3 text-slate-500" />
+                                <p className="font-semibold">Upravljaj osobljem</p>
+                                <p className="text-xs text-slate-500">Menadžeri i vozači</p>
+                            </button>
+                            <button onClick={() => setActiveTab('regions')} className="p-4 bg-slate-50 rounded-xl hover:bg-purple-50 text-left transition-colors">
+                                <MapPin size={20} className="mb-3 text-slate-500" />
+                                <p className="font-semibold">Filijale</p>
+                                <p className="text-xs text-slate-500">Upravljanje lokacijama</p>
+                            </button>
+                            <button onClick={() => setActiveTab('settings')} className="p-4 bg-slate-50 rounded-xl hover:bg-amber-50 text-left transition-colors">
+                                <Settings size={20} className="mb-3 text-slate-500" />
+                                <p className="font-semibold">Podešavanja</p>
+                                <p className="text-xs text-slate-500">Tipovi otpada, oprema</p>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;
@@ -660,7 +828,7 @@ export default function Dashboard() {
                         {/* ECO Kod firme */}
                         {userRole !== 'admin' && companyCode && (
                             <button
-                                onClick={() => { navigator.clipboard.writeText(companyCode); alert('ECO kod kopiran!'); }}
+                                onClick={() => { navigator.clipboard.writeText(companyCode); toast.success('ECO kod kopiran!'); }}
                                 className="hidden md:flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl px-4 py-2.5 transition-colors"
                             >
                                 <Building2 size={18} className="text-emerald-600" />
@@ -782,7 +950,7 @@ export default function Dashboard() {
                             >
                                 <div className="text-right hidden sm:block">
                                     <p className="text-sm font-bold">{user?.name}</p>
-                                    <p className="text-xs text-slate-500">{companyName || (userRole === 'admin' ? 'Administrator' : 'Korisnik')}</p>
+                                    <p className="text-xs text-slate-500">{getRoleLabel(user?.role)}{companyName ? ` • ${companyName}` : ''}</p>
                                 </div>
                                 <div className="w-11 h-11 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg">{user?.name?.charAt(0)}</div>
                                 <ChevronDown size={16} className="text-slate-400 hidden sm:block" />
@@ -798,7 +966,7 @@ export default function Dashboard() {
                                         {/* ECO kod za mobilne */}
                                         {userRole !== 'admin' && companyCode && (
                                             <button
-                                                onClick={() => { navigator.clipboard.writeText(companyCode); alert('ECO kod kopiran!'); setShowProfileMenu(false); }}
+                                                onClick={() => { navigator.clipboard.writeText(companyCode); toast.success('ECO kod kopiran!'); setShowProfileMenu(false); }}
                                                 className="w-full px-4 py-3 flex items-center gap-3 hover:bg-slate-50 text-left md:hidden"
                                             >
                                                 <Copy size={18} className="text-slate-400" />
@@ -978,7 +1146,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-2">
                                 <code className="flex-1 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-mono font-bold">{companyCode}</code>
                                 <button
-                                    onClick={() => { navigator.clipboard.writeText(companyCode); alert(language === 'sr' ? 'Kopirano!' : 'Copied!'); }}
+                                    onClick={() => { navigator.clipboard.writeText(companyCode); toast.success(language === 'sr' ? 'Kopirano!' : 'Copied!'); }}
                                     className="p-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl transition-colors"
                                 >
                                     <Copy size={20} />
@@ -1002,10 +1170,10 @@ export default function Dashboard() {
                                 if (editingProfile.latitude && editingProfile.longitude && (editingProfile.latitude !== user?.latitude || editingProfile.longitude !== user?.longitude || editingProfile.address !== user?.address)) {
                                     await updateLocation(editingProfile.address, editingProfile.latitude, editingProfile.longitude);
                                 }
-                                alert(language === 'sr' ? 'Podešavanja su sačuvana!' : 'Settings saved!');
+                                toast.success(language === 'sr' ? 'Podešavanja su sačuvana!' : 'Settings saved!');
                                 setShowSettings(false);
                             } catch (error) {
-                                alert(language === 'sr' ? 'Greška pri čuvanju: ' + error.message : 'Error saving: ' + error.message);
+                                toast.error(language === 'sr' ? 'Greška pri čuvanju: ' + error.message : 'Error saving: ' + error.message);
                             }
                         }}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl transition-colors"

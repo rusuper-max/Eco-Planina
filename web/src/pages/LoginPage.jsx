@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context';
 import { Mountain, Phone, Lock, Eye, EyeOff, Loader2, ChevronDown, CheckCircle } from 'lucide-react';
 
 const COUNTRY_CODES = [
