@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mountain, Phone, Lock, Eye, EyeOff, Loader2, ChevronDown } from 'lucide-react';
+import { Mountain, Phone, Lock, Eye, EyeOff, Loader2, ChevronDown, CheckCircle } from 'lucide-react';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -14,6 +14,7 @@ const COUNTRY_CODES = [
 
 export default function LoginPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { login } = useAuth();
     const [countryCode, setCountryCode] = useState('+381');
     const [phone, setPhone] = useState('');
@@ -22,6 +23,9 @@ export default function LoginPage() {
     const [showCountryDropdown, setShowCountryDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    // Check if user just registered successfully
+    const justRegistered = location.state?.registered;
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -63,6 +67,13 @@ export default function LoginPage() {
                 {/* Form Card */}
                 <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
                     <h2 className="text-xl font-bold text-slate-800 mb-6">Prijavite se</h2>
+
+                    {justRegistered && (
+                        <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm flex items-center gap-2">
+                            <CheckCircle size={18} />
+                            Registracija uspešna! Sada se možete prijaviti.
+                        </div>
+                    )}
 
                     {error && (
                         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm">

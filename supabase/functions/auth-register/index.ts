@@ -17,7 +17,7 @@ interface RegisterRequest {
   latitude?: number
   longitude?: number
   companyCode?: string
-  role: 'client' | 'manager'
+  role: 'client' | 'manager' | 'driver'
   joinExisting?: boolean
 }
 
@@ -64,8 +64,9 @@ serve(async (req) => {
     let companyName: string | null = null
 
     // Handle role-specific logic
-    if (role === 'client') {
-      if (!companyCode) throw new Error('Kod firme je obavezan za klijenta')
+    if (role === 'client' || role === 'driver') {
+      // Both clients and drivers need a valid company ECO code
+      if (!companyCode) throw new Error(role === 'driver' ? 'Kod firme je obavezan za vozača' : 'Kod firme je obavezan za klijenta')
 
       const { data: company, error: companyError } = await supabaseAdmin
         .from('companies')
