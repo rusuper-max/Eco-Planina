@@ -24,7 +24,13 @@ export const AuthProvider = ({ children }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [originalUser, setOriginalUser] = useState(null);
 
-    // Initialize auth state from Supabase Auth session
+    // Track user in ref to avoid dependency issues
+    const userRef = useRef(user);
+    useEffect(() => {
+        userRef.current = user;
+    }, [user]);
+
+    // Initialize auth state from Supabase Auth session (runs only once)
     useEffect(() => {
         // Safety timeout - never show loading for more than 10 seconds
         const safetyTimeout = setTimeout(() => {
@@ -88,13 +94,13 @@ export const AuthProvider = ({ children }) => {
         const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
                 // Safety: always ensure loading is false after max 5 seconds
-                const safetyTimeout = setTimeout(() => {
+                const visibilitySafetyTimeout = setTimeout(() => {
                     setIsLoading(false);
                 }, 5000);
 
                 try {
                     const { data: { session }, error } = await supabase.auth.getSession();
-                    clearTimeout(safetyTimeout);
+                    clearTimeout(visibilitySafetyTimeout);
 
                     if (error) {
                         console.error('Session refresh error:', error);
@@ -109,8 +115,8 @@ export const AuthProvider = ({ children }) => {
                     }
 
                     // Session exists - user should already be loaded from initAuth
-                    // Only reload if user state is somehow lost
-                    if (!user) {
+                    // Only reload if user state is somehow lost (use ref to avoid stale closure)
+                    if (!userRef.current) {
                         setIsLoading(true);
                         try {
                             await loadUserProfile(session.user);
@@ -119,7 +125,7 @@ export const AuthProvider = ({ children }) => {
                         }
                     }
                 } catch (err) {
-                    clearTimeout(safetyTimeout);
+                    clearTimeout(visibilitySafetyTimeout);
                     console.error('Visibility change error:', err);
                     setIsLoading(false);
                 }
@@ -132,7 +138,7 @@ export const AuthProvider = ({ children }) => {
             subscription.unsubscribe();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [user]);
+    }, []); // Empty dependency - runs only on mount
 
     // Load user profile from public.users table
     const loadUserProfile = async (authUserData) => {
