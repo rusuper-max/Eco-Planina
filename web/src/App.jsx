@@ -19,6 +19,7 @@ const PublicRoute = ({ children }) => {
   if (user) {
     if (user.role === 'developer' || user.role === 'admin') return <Navigate to="/admin" replace />;
     else if (user.role === 'manager') return <Navigate to="/manager" replace />;
+    else if (user.role === 'driver') return <Navigate to="/driver" replace />;
     else return <Navigate to="/client" replace />;
   }
   return children;
