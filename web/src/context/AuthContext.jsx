@@ -763,12 +763,17 @@ export const AuthProvider = ({ children }) => {
             const companyCodes = [...new Set((users || []).filter(u => u.company_code).map(u => u.company_code))];
             let companyMap = {};
             if (companyCodes.length) {
-                // Include all companies (even deleted) to show user's company name
-                const { data: companies } = await supabase.from('companies').select('code, name, status, deleted_at').in('code', companyCodes);
-                companyMap = (companies || []).reduce((acc, c) => {
-                    acc[c.code] = { name: c.name, status: c.status, deleted: !!c.deleted_at };
-                    return acc;
-                }, {});
+                // Fetch companies one by one to avoid .in() issues with 'code' column
+                // This is more reliable than batch query with string array
+                const companyPromises = companyCodes.map(code =>
+                    supabase.from('companies').select('code, name, status, deleted_at').eq('code', code).maybeSingle()
+                );
+                const results = await Promise.all(companyPromises);
+                results.forEach(({ data: company }) => {
+                    if (company) {
+                        companyMap[company.code] = { name: company.name, status: company.status, deleted: !!company.deleted_at };
+                    }
+                });
             }
             return (users || []).map(u => ({
                 ...u,
