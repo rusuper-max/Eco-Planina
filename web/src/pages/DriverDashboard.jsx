@@ -10,7 +10,8 @@ import {
     MapPin, LogOut, Truck, Clock, Navigation, CheckCircle2,
     AlertCircle, Phone, RefreshCw, List, Map as MapIcon, User,
     MessageCircle, History, Send, ArrowLeft, Check, CheckCheck,
-    Package, PackageCheck, Filter, Users, Plus
+    Package, PackageCheck, Filter, Users, Plus, ChevronDown, ChevronUp,
+    FileText, Scale, Image as ImageIcon, X
 } from 'lucide-react';
 
 // Import shared utilities
@@ -26,6 +27,309 @@ L.Icon.Default.mergeOptions({
     iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
+
+// Calculate time difference between two dates
+const getTimeDiff = (start, end) => {
+    if (!start || !end) return null;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffMs = endDate - startDate;
+
+    if (diffMs < 0) return null;
+
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins} min`;
+    if (diffHours < 24) return `${diffHours}h ${diffMins % 60}min`;
+    return `${diffDays}d ${diffHours % 24}h`;
+};
+
+// Format date/time for display
+const formatDateTime = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleString('sr-RS', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+// History Card with Timeline
+const HistoryCard = ({ item, wasteTypes }) => {
+    const [expanded, setExpanded] = useState(false);
+    const [processedData, setProcessedData] = useState(null);
+    const [loadingProcessed, setLoadingProcessed] = useState(false);
+    const [showProofModal, setShowProofModal] = useState(false);
+
+    const wasteIcon = wasteTypes?.find(w => w.id === item.waste_type)?.icon || '📦';
+
+    // Timeline steps
+    const steps = [
+        {
+            key: 'assigned',
+            label: 'Dodeljeno',
+            icon: Truck,
+            time: item.assigned_at,
+            color: 'bg-blue-500',
+            completed: !!item.assigned_at
+        },
+        {
+            key: 'picked_up',
+            label: 'Preuzeto',
+            icon: Package,
+            time: item.picked_up_at,
+            color: 'bg-amber-500',
+            completed: !!item.picked_up_at
+        },
+        {
+            key: 'delivered',
+            label: 'Dostavljeno',
+            icon: PackageCheck,
+            time: item.delivered_at,
+            color: 'bg-emerald-500',
+            completed: !!item.delivered_at
+        }
+    ];
+
+    // Load processed request data when expanded
+    const loadProcessedData = async () => {
+        if (processedData || loadingProcessed) return;
+        setLoadingProcessed(true);
+        try {
+            // Try to find processed request by request_id
+            const { data, error } = await supabase
+                .from('processed_requests')
+                .select('*')
+                .eq('request_id', item.request_id)
+                .is('deleted_at', null)
+                .single();
+
+            if (!error && data) {
+                setProcessedData(data);
+            }
+        } catch (err) {
+            console.error('Error loading processed data:', err);
+        } finally {
+            setLoadingProcessed(false);
+        }
+    };
+
+    // Load data when expanded
+    useEffect(() => {
+        if (expanded && !processedData) {
+            loadProcessedData();
+        }
+    }, [expanded]);
+
+    return (
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            {/* Header - always visible */}
+            <div
+                className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                onClick={() => setExpanded(!expanded)}
+            >
+                <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
+                            {wasteIcon}
+                        </div>
+                        <div>
+                            <p className="font-medium text-slate-800">
+                                {item.client_name || 'Nepoznat klijent'}
+                            </p>
+                            <p className="text-sm text-slate-500">
+                                {item.waste_label || 'Nepoznata vrsta'}
+                            </p>
+                            {item.client_address && (
+                                <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
+                                    <MapPin size={10} />
+                                    {item.client_address}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="text-right">
+                            <p className="text-xs font-medium text-emerald-600">
+                                {item.delivered_at ? new Date(item.delivered_at).toLocaleDateString('sr-RS') : '-'}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                                {item.delivered_at ? new Date(item.delivered_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </p>
+                        </div>
+                        {expanded ? <ChevronUp size={20} className="text-slate-400" /> : <ChevronDown size={20} className="text-slate-400" />}
+                    </div>
+                </div>
+
+                {/* Mini timeline preview (collapsed) */}
+                {!expanded && (
+                    <div className="flex items-center gap-1 mt-3">
+                        {steps.map((step, idx) => (
+                            <div key={step.key} className="flex items-center">
+                                <div className={`w-2 h-2 rounded-full ${step.completed ? step.color : 'bg-slate-200'}`} />
+                                {idx < steps.length - 1 && (
+                                    <div className={`w-8 h-0.5 ${step.completed && steps[idx + 1].completed ? 'bg-slate-300' : 'bg-slate-200'}`} />
+                                )}
+                            </div>
+                        ))}
+                        <span className="text-xs text-slate-400 ml-2">
+                            Ukupno: {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            {/* Expanded content */}
+            {expanded && (
+                <div className="px-4 pb-4 border-t bg-slate-50">
+                    {/* Timeline */}
+                    <div className="py-4">
+                        <div className="relative">
+                            {steps.map((step, idx) => {
+                                const Icon = step.icon;
+                                const nextStep = steps[idx + 1];
+                                const timeDiff = nextStep ? getTimeDiff(step.time, nextStep.time) : null;
+
+                                return (
+                                    <div key={step.key} className="flex items-start mb-0">
+                                        {/* Icon and line */}
+                                        <div className="flex flex-col items-center mr-3">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step.completed ? step.color : 'bg-slate-200'}`}>
+                                                <Icon size={16} className="text-white" />
+                                            </div>
+                                            {idx < steps.length - 1 && (
+                                                <div className="relative w-0.5 h-12 bg-slate-200 my-1">
+                                                    {step.completed && nextStep?.completed && (
+                                                        <div className="absolute inset-0 bg-slate-400" />
+                                                    )}
+                                                    {/* Time diff badge */}
+                                                    {timeDiff && (
+                                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap">
+                                                            <span className="text-[10px] text-slate-400 bg-white px-1.5 py-0.5 rounded border">
+                                                                {timeDiff}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Content */}
+                                        <div className="flex-1 pb-4">
+                                            <div className="flex items-center justify-between">
+                                                <p className={`font-medium ${step.completed ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                    {step.label}
+                                                </p>
+                                                <span className="text-xs text-slate-500">
+                                                    {formatDateTime(step.time)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+
+                            {/* Processed step (if data exists) */}
+                            {processedData && (
+                                <div className="flex items-start">
+                                    <div className="flex flex-col items-center mr-3">
+                                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-500">
+                                            <FileText size={16} className="text-white" />
+                                        </div>
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center justify-between">
+                                            <p className="font-medium text-slate-800">Obrađeno</p>
+                                            <span className="text-xs text-slate-500">
+                                                {formatDateTime(processedData.processed_at)}
+                                            </span>
+                                        </div>
+
+                                        {/* Weight and proof */}
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {processedData.weight && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                                                    <Scale size={12} />
+                                                    {processedData.weight} {processedData.weight_unit || 'kg'}
+                                                </span>
+                                            )}
+                                            {processedData.proof_url && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setShowProofModal(true); }}
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors"
+                                                >
+                                                    <ImageIcon size={12} />
+                                                    Dokaznica
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {processedData.notes && (
+                                            <p className="mt-2 text-xs text-slate-500 italic">
+                                                "{processedData.notes}"
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {loadingProcessed && (
+                                <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
+                                    <RefreshCw size={12} className="animate-spin" />
+                                    Učitavanje podataka...
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Summary footer */}
+                    <div className="pt-3 border-t border-slate-200">
+                        <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500">Ukupno vreme:</span>
+                            <span className="font-medium text-slate-700">
+                                {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Proof Modal */}
+            {showProofModal && processedData?.proof_url && (
+                <div
+                    className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+                    onClick={() => setShowProofModal(false)}
+                >
+                    <div className="relative max-w-2xl max-h-[90vh]">
+                        <button
+                            onClick={() => setShowProofModal(false)}
+                            className="absolute -top-10 right-0 text-white hover:text-slate-300"
+                        >
+                            <X size={24} />
+                        </button>
+                        <img
+                            src={processedData.proof_url}
+                            alt="Dokaznica"
+                            className="max-w-full max-h-[80vh] rounded-lg object-contain"
+                        />
+                        <div className="mt-2 text-center text-white text-sm">
+                            <p>{item.client_name} - {item.waste_label}</p>
+                            {processedData.weight && (
+                                <p className="text-emerald-400 font-medium">
+                                    {processedData.weight} {processedData.weight_unit || 'kg'}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function DriverDashboard() {
     const navigate = useNavigate();
@@ -1004,7 +1308,7 @@ export default function DriverDashboard() {
                     <div className="flex-1 overflow-y-auto">
                         <div className="p-4 border-b bg-white sticky top-0">
                             <h2 className="font-bold text-slate-800">Istorija dostava</h2>
-                            <p className="text-sm text-slate-500">Poslednjih 50 dostavljenih zahteva</p>
+                            <p className="text-sm text-slate-500">Poslednjih 50 dostavljenih zahteva - klikni za detalje</p>
                         </div>
                         {loadingHistory ? (
                             <div className="flex items-center justify-center h-64">
@@ -1019,41 +1323,7 @@ export default function DriverDashboard() {
                         ) : (
                             <div className="p-4 space-y-3 max-w-2xl mx-auto">
                                 {historyRequests.map(item => (
-                                    <div key={item.id} className="bg-white rounded-xl border shadow-sm p-4">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                                                    <PackageCheck size={20} className="text-emerald-600" />
-                                                </div>
-                                                <div>
-                                                    <p className="font-medium text-slate-800">
-                                                        {item.client_name || 'Nepoznat klijent'}
-                                                    </p>
-                                                    <p className="text-sm text-slate-500">
-                                                        {item.waste_label || 'Nepoznata vrsta'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-slate-400">
-                                                    {item.delivered_at ? new Date(item.delivered_at).toLocaleDateString('sr-RS') : '-'}
-                                                </p>
-                                                <p className="text-xs text-slate-400">
-                                                    {item.delivered_at ? new Date(item.delivered_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }) : ''}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        {item.client_address && (
-                                            <p className="mt-2 text-sm text-slate-500 flex items-center gap-2">
-                                                <MapPin size={14} className="text-slate-400" />
-                                                {item.client_address}
-                                            </p>
-                                        )}
-                                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-                                            <Package size={12} />
-                                            Preuzeto: {item.picked_up_at ? formatTimeAgo(item.picked_up_at) : '-'}
-                                        </div>
-                                    </div>
+                                    <HistoryCard key={item.id} item={item} wasteTypes={wasteTypes} />
                                 ))}
                             </div>
                         )}
