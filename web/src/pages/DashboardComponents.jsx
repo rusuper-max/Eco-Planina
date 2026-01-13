@@ -174,24 +174,96 @@ export const WASTE_TYPES = [
     { id: 'glass', label: 'Staklo', icon: '🍾' },
 ];
 
-// Request Status Badge for manager view
-export const RequestStatusBadge = ({ status, driverName }) => {
+// Request Status Badge for manager view - with clickable popup for details
+export const RequestStatusBadge = ({ status, driverName, assignment }) => {
+    const [showPopup, setShowPopup] = useState(false);
+    const popupRef = useRef(null);
+
     const configs = {
-        'not_assigned': { label: 'Nije dodeljeno', bg: 'bg-slate-100', color: 'text-slate-600', icon: '○' },
-        'assigned': { label: 'Čeka preuzimanje', bg: 'bg-blue-100', color: 'text-blue-700', icon: '⏳' },
-        'in_progress': { label: 'U toku', bg: 'bg-blue-100', color: 'text-blue-700', icon: '🚚' },
-        'picked_up': { label: 'Preuzeto', bg: 'bg-amber-100', color: 'text-amber-700', icon: '📦' },
-        'delivered': { label: 'Dostavljeno', bg: 'bg-emerald-100', color: 'text-emerald-700', icon: '✓' }
+        'not_assigned': { label: 'Nedodeljeno', shortLabel: '–', bg: 'bg-slate-100', color: 'text-slate-600', icon: '○' },
+        'assigned': { label: 'Dodeljeno', shortLabel: 'Čeka', bg: 'bg-blue-100', color: 'text-blue-700', icon: '⏳' },
+        'in_progress': { label: 'U toku', shortLabel: 'U toku', bg: 'bg-blue-100', color: 'text-blue-700', icon: '🚚' },
+        'picked_up': { label: 'Preuzeto', shortLabel: 'Preuzeto', bg: 'bg-amber-100', color: 'text-amber-700', icon: '📦' },
+        'delivered': { label: 'Dostavljeno', shortLabel: 'Dostav.', bg: 'bg-emerald-100', color: 'text-emerald-700', icon: '✓' }
     };
     const config = configs[status] || configs['not_assigned'];
+    const hasDetails = status !== 'not_assigned' && (driverName || assignment);
+
+    // Close popup when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (popupRef.current && !popupRef.current.contains(e.target)) {
+                setShowPopup(false);
+            }
+        };
+        if (showPopup) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [showPopup]);
+
+    const formatDateTime = (dateStr) => {
+        if (!dateStr) return null;
+        return new Date(dateStr).toLocaleString('sr-RS', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+    };
+
     return (
-        <div className="flex flex-col gap-0.5">
-            <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>
+        <div className="relative" ref={popupRef}>
+            <button
+                onClick={(e) => { e.stopPropagation(); if (hasDetails) setShowPopup(!showPopup); }}
+                className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full ${config.bg} ${config.color} ${hasDetails ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                title={hasDetails ? 'Klikni za detalje' : ''}
+            >
                 <span>{config.icon}</span>
-                {config.label}
-            </span>
-            {driverName && status !== 'not_assigned' && (
-                <span className="text-xs text-slate-400 pl-1 truncate max-w-[100px]">{driverName}</span>
+                <span className="hidden sm:inline">{config.shortLabel}</span>
+            </button>
+
+            {/* Details Popup */}
+            {showPopup && hasDetails && (
+                <div className="absolute z-50 left-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 p-3 text-left">
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>
+                                {config.label}
+                            </span>
+                            <button onClick={() => setShowPopup(false)} className="text-slate-400 hover:text-slate-600">
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        {driverName && (
+                            <div className="flex items-center gap-2 text-sm">
+                                <Truck size={14} className="text-slate-400" />
+                                <span className="text-slate-600">Vozač:</span>
+                                <span className="font-medium text-slate-800">{driverName}</span>
+                            </div>
+                        )}
+
+                        {assignment?.created_at && (
+                            <div className="flex items-center gap-2 text-sm">
+                                <Clock size={14} className="text-slate-400" />
+                                <span className="text-slate-600">Dodeljeno:</span>
+                                <span className="text-slate-800">{formatDateTime(assignment.created_at)}</span>
+                            </div>
+                        )}
+
+                        {assignment?.picked_up_at && (
+                            <div className="flex items-center gap-2 text-sm">
+                                <Package size={14} className="text-amber-500" />
+                                <span className="text-slate-600">Preuzeto:</span>
+                                <span className="text-slate-800">{formatDateTime(assignment.picked_up_at)}</span>
+                            </div>
+                        )}
+
+                        {assignment?.delivered_at && (
+                            <div className="flex items-center gap-2 text-sm">
+                                <CheckCircle2 size={14} className="text-emerald-500" />
+                                <span className="text-slate-600">Dostavljeno:</span>
+                                <span className="text-slate-800">{formatDateTime(assignment.delivered_at)}</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -939,7 +1011,7 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                     Tip <SortIcon column="type" />
                                 </button>
                             </th>
-                            <th className="hidden lg:table-cell px-4 py-3 text-left">Status</th>
+                            <th className="hidden lg:table-cell px-2 py-3 text-left text-xs">Status</th>
                             <th className="hidden md:table-cell px-4 py-3 text-left">
                                 <button onClick={() => handleSort('fill')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     % <SortIcon column="fill" />
@@ -983,8 +1055,8 @@ export const ManagerRequestsTable = ({ requests, onProcess, onDelete, onView, on
                                         <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
                                         <span className="hidden sm:inline ml-1">{req.waste_label}</span>
                                     </td>
-                                    <td className="hidden lg:table-cell px-4 py-3">
-                                        <RequestStatusBadge status={assignmentStatus} driverName={driverName} />
+                                    <td className="hidden lg:table-cell px-2 py-3">
+                                        <RequestStatusBadge status={assignmentStatus} driverName={driverName} assignment={assignment} />
                                     </td>
                                     <td className="hidden md:table-cell px-4 py-3">
                                         <FillLevelBar fillLevel={req.fill_level} />
