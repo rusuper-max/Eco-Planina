@@ -258,9 +258,22 @@ export const AdminProvider = ({ children }) => {
     const deleteMasterCode = async (id) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
-            await supabase.from('master_codes').delete().eq('id', id);
+            console.log('DEBUG deleteMasterCode - id:', id);
+            const { error, count } = await supabase
+                .from('master_codes')
+                .delete()
+                .eq('id', id)
+                .select();
+
+            console.log('DEBUG deleteMasterCode - error:', error, 'count:', count);
+
+            if (error) {
+                console.error('Delete master code error:', error);
+                throw new Error(error.message || 'Greška pri brisanju koda');
+            }
             return { success: true };
         } catch (error) {
+            console.error('deleteMasterCode catch:', error);
             throw error;
         }
     };

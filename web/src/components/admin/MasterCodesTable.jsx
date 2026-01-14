@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAdmin } from '../../context';
-import { Copy, Trash2, Plus, Lock, Unlock, Scale, EyeOff, Eye, Edit3, X, FileText } from 'lucide-react';
+import { Copy, Trash2, Plus, Lock, Unlock, Scale, EyeOff, Eye, Edit3, X, FileText, Loader2 } from 'lucide-react';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { EmptyState } from '../common';
 
@@ -12,10 +12,16 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
     const [editingPrice, setEditingPrice] = useState(null);
     const [priceForm, setPriceForm] = useState({ price: '', billing_type: 'one_time', currency: 'EUR' });
 
-    const handleFreeze = async (masterCodeId, currentStatus) => {
+    const handleFreeze = async (masterCodeId, companyCode, currentStatus) => {
+        if (!companyCode) {
+            alert('Ovaj master kod nema povezanu firmu');
+            return;
+        }
         setFreezing(masterCodeId);
         try {
-            await toggleCompanyStatus(masterCodeId, currentStatus);
+            // Toggle status: if frozen -> active, if used/active -> frozen
+            const newStatus = currentStatus === 'frozen' ? 'active' : 'frozen';
+            await toggleCompanyStatus(companyCode, newStatus);
             window.location.reload();
         } catch (e) { alert(e.message); }
         setFreezing(null);
@@ -165,9 +171,9 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
                                     <td className="px-4 py-4 text-right flex items-center justify-end gap-1">
                                         <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
 
-                                        {(c.status === 'used' || c.status === 'frozen') && (
+                                        {(c.status === 'used' || c.status === 'frozen') && c.companyCode && (
                                             <button
-                                                onClick={() => handleFreeze(c.id, c.status)}
+                                                onClick={() => handleFreeze(c.id, c.companyCode, c.status)}
                                                 className={`p-2 rounded-lg ${c.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
                                                 title={c.status === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
                                             >
