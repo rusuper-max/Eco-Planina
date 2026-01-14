@@ -93,15 +93,19 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
                             {codes.map(c => (
                                 <tr key={c.id} className="hover:bg-slate-50">
                                     <td className="px-4 py-4"><code className="px-3 py-1.5 bg-slate-100 rounded-lg font-mono text-xs">{c.code}</code></td>
-                                    <td className="px-4 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full ${c.status === 'used' ? 'bg-slate-100' : c.status === 'frozen' ? 'bg-red-100 text-red-700 font-bold' : 'bg-emerald-100 text-emerald-700'}`}>{c.status === 'used' ? 'Iskorišćen' : c.status === 'frozen' ? 'ZAMRZNUTO' : 'Dostupan'}</span></td>
+                                    <td className="px-4 py-4">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${c.companyStatus === 'frozen' ? 'bg-red-100 text-red-700 font-bold' : c.status === 'used' ? 'bg-slate-100' : 'bg-emerald-100 text-emerald-700'}`}>
+                                            {c.companyStatus === 'frozen' ? 'ZAMRZNUTO' : c.status === 'used' ? 'Iskorišćen' : 'Dostupan'}
+                                        </span>
+                                    </td>
                                     <td className="px-4 py-4">
                                         <div className="flex flex-col">
                                             <span className="text-slate-700 font-medium">{c.companyName || '-'}</span>
-                                            {c.status === 'frozen' && <span className="text-[10px] font-bold text-red-600">FROZEN</span>}
+                                            {c.companyStatus === 'frozen' && <span className="text-[10px] font-bold text-red-600">FROZEN</span>}
                                         </div>
                                     </td>
                                     <td className="px-4 py-4">
-                                        {c.status === 'used' || c.status === 'frozen' ? (
+                                        {c.status === 'used' ? (
                                             <div className="flex flex-col gap-0.5 text-xs">
                                                 <span className="text-blue-600">{c.userCounts?.managers || 0} menadžera</span>
                                                 <span className="text-emerald-600">{c.userCounts?.clients || 0} klijenata</span>
@@ -171,13 +175,13 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
                                     <td className="px-4 py-4 text-right flex items-center justify-end gap-1">
                                         <button onClick={() => onCopy(c.code)} className="p-2 hover:bg-slate-100 rounded-lg" title="Kopiraj"><Copy size={16} /></button>
 
-                                        {(c.status === 'used' || c.status === 'frozen') && c.companyCode && (
+                                        {c.status === 'used' && c.companyCode && (
                                             <button
-                                                onClick={() => handleFreeze(c.id, c.companyCode, c.status)}
-                                                className={`p-2 rounded-lg ${c.status === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
-                                                title={c.status === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
+                                                onClick={() => handleFreeze(c.id, c.companyCode, c.companyStatus)}
+                                                className={`p-2 rounded-lg ${c.companyStatus === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
+                                                title={c.companyStatus === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
                                             >
-                                                {freezing === c.id ? <Loader2 size={16} className="animate-spin" /> : c.status === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
+                                                {freezing === c.id ? <Loader2 size={16} className="animate-spin" /> : c.companyStatus === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
                                             </button>
                                         )}
 

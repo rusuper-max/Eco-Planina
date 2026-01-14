@@ -49,8 +49,8 @@ export const AdminProvider = ({ children }) => {
                 creatorsMap = (creators || []).reduce((acc, c) => { acc[c.id] = c.name; return acc; }, {});
             }
             if (companyIds.length) {
-                const { data: companies } = await supabase.from('companies').select('id, name, code').in('id', companyIds);
-                companiesMap = (companies || []).reduce((acc, c) => { acc[c.id] = { name: c.name, code: c.code }; return acc; }, {});
+                const { data: companies } = await supabase.from('companies').select('id, name, code, status').in('id', companyIds);
+                companiesMap = (companies || []).reduce((acc, c) => { acc[c.id] = { name: c.name, code: c.code, status: c.status }; return acc; }, {});
                 // Get user counts per company code
                 const companyCodes = companies?.map(c => c.code) || [];
                 if (companyCodes.length) {
@@ -65,13 +65,15 @@ export const AdminProvider = ({ children }) => {
                 }
             }
             return (codes || []).map(c => {
-                const companyCode = companiesMap[c.used_by_company]?.code;
+                const company = companiesMap[c.used_by_company];
+                const companyCode = company?.code;
                 const userCounts = companyCode ? userCountsMap[companyCode] : null;
                 return {
                     ...c,
                     creatorName: creatorsMap[c.created_by] || null,
-                    companyName: companiesMap[c.used_by_company]?.name || null,
+                    companyName: company?.name || null,
                     companyCode: companyCode || null,
+                    companyStatus: company?.status || null,
                     userCounts: userCounts || { managers: 0, clients: 0, drivers: 0 }
                 };
             });
