@@ -46,13 +46,36 @@ export const CompanyProvider = ({ children }) => {
     const fetchCompanyWasteTypes = async () => {
         if (!companyCode) return [];
         try {
+            // First try new waste_types table
+            const { data: tableData, error: tableError } = await supabase
+                .from('waste_types')
+                .select('id, name, icon, description, region_id, custom_image_url')
+                .eq('company_code', companyCode)
+                .is('deleted_at', null)
+                .order('name');
+
+            // If waste_types table exists and has data, use it
+            // Map 'name' to 'label' and 'custom_image_url' to 'customImage' for UI compatibility
+            if (!tableError && tableData && tableData.length > 0) {
+                return tableData.map(wt => ({
+                    ...wt,
+                    label: wt.name, // UI uses 'label', DB uses 'name'
+                    customImage: wt.custom_image_url, // UI uses 'customImage', DB uses 'custom_image_url'
+                }));
+            }
+
+            // Fallback to JSONB in companies table (legacy)
             const { data, error } = await supabase
                 .from('companies')
                 .select('waste_types')
                 .eq('code', companyCode)
                 .is('deleted_at', null)
-                .single();
-            if (error) throw error;
+                .maybeSingle(); // Use maybeSingle instead of single to avoid 406 error
+
+            if (error) {
+                console.error('Error fetching company waste types:', error);
+                return [];
+            }
             return data?.waste_types || [];
         } catch (error) {
             console.error('Error fetching waste types:', error);
@@ -60,10 +83,86 @@ export const CompanyProvider = ({ children }) => {
         }
     };
 
+    // Legacy function - updates JSONB in companies table
+    // New approach uses waste_types table with region support
     const updateCompanyWasteTypes = async (wasteTypes) => {
         if (!companyCode) throw new Error('Nema kompanije');
         try {
+            // Also update legacy JSONB for backwards compatibility
             const { error } = await supabase.from('companies').update({ waste_types: wasteTypes }).eq('code', companyCode);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // New waste_types table CRUD functions
+    const createWasteType = async (wasteTypeData) => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
+        try {
+            // UI sends 'label', DB expects 'name'; UI sends 'customImage', DB expects 'custom_image_url'
+            const insertData = {
+                company_code: companyCode,
+                name: (wasteTypeData.name || wasteTypeData.label)?.trim(),
+                icon: wasteTypeData.icon || '📦',
+                description: wasteTypeData.description?.trim() || null
+            };
+            if (wasteTypeData.region_id !== undefined) {
+                insertData.region_id = wasteTypeData.region_id;
+            }
+            if (wasteTypeData.customImage !== undefined || wasteTypeData.custom_image_url !== undefined) {
+                insertData.custom_image_url = wasteTypeData.custom_image_url || wasteTypeData.customImage || null;
+            }
+
+            let result = await supabase
+                .from('waste_types')
+                .insert([insertData])
+                .select('*')
+                .single();
+
+            if (result.error) throw result.error;
+            // Map back to UI format
+            return { ...result.data, label: result.data.name, customImage: result.data.custom_image_url };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const updateWasteType = async (wasteTypeId, wasteTypeData) => {
+        if (!wasteTypeId) throw new Error('Nedostaje ID vrste');
+        try {
+            const updates = {};
+            // UI sends 'label', DB expects 'name'; UI sends 'customImage', DB expects 'custom_image_url'
+            if (wasteTypeData.name !== undefined) updates.name = wasteTypeData.name?.trim();
+            if (wasteTypeData.label !== undefined) updates.name = wasteTypeData.label?.trim();
+            if (wasteTypeData.icon !== undefined) updates.icon = wasteTypeData.icon;
+            if (wasteTypeData.description !== undefined) updates.description = wasteTypeData.description?.trim() || null;
+            if (wasteTypeData.region_id !== undefined) updates.region_id = wasteTypeData.region_id;
+            if (wasteTypeData.customImage !== undefined) updates.custom_image_url = wasteTypeData.customImage || null;
+            if (wasteTypeData.custom_image_url !== undefined) updates.custom_image_url = wasteTypeData.custom_image_url || null;
+
+            const { data, error } = await supabase
+                .from('waste_types')
+                .update(updates)
+                .eq('id', wasteTypeId)
+                .select('*')
+                .single();
+            if (error) throw error;
+            // Map back to UI format
+            return { ...data, label: data.name, customImage: data.custom_image_url };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const deleteWasteType = async (wasteTypeId) => {
+        if (!wasteTypeId) throw new Error('Nedostaje ID vrste');
+        try {
+            const { error } = await supabase
+                .from('waste_types')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', wasteTypeId);
             if (error) throw error;
             return { success: true };
         } catch (error) {
@@ -110,7 +209,7 @@ export const CompanyProvider = ({ children }) => {
 
     const fetchCompanyDetails = async (code) => {
         try {
-            const { data, error } = await supabase.from('companies').select('*').eq('code', code).single();
+            const { data, error } = await supabase.from('companies').select('*').eq('code', code).is('deleted_at', null).maybeSingle();
             if (error) throw error;
             return data;
         } catch (error) {
@@ -123,6 +222,11 @@ export const CompanyProvider = ({ children }) => {
         updateCompanyEquipmentTypes,
         fetchCompanyWasteTypes,
         updateCompanyWasteTypes,
+        // New waste_types table functions
+        createWasteType,
+        updateWasteType,
+        deleteWasteType,
+        // Profile functions
         updateProfile,
         updateCompanyName,
         updateLocation,

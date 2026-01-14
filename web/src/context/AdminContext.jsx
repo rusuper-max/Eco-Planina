@@ -219,7 +219,7 @@ export const AdminProvider = ({ children }) => {
     const toggleCompanyStatus = async (companyCode, newStatus) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu');
         try {
-            const { data: company, error: fetchError } = await supabase.from('companies').select('master_code_id').eq('code', companyCode).single();
+            const { data: company, error: fetchError } = await supabase.from('companies').select('master_code_id').eq('code', companyCode).maybeSingle();
             if (fetchError) throw fetchError;
             if (company?.master_code_id) {
                 const { error: mcError } = await supabase.from('master_codes').update({ status: newStatus === 'frozen' ? 'frozen' : 'used' }).eq('id', company.master_code_id);

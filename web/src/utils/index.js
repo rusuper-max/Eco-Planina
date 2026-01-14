@@ -10,3 +10,10 @@ export {
 } from './mapUtils';
 export { uploadImage } from './storage';
 export { getFillLevelColor } from './styleUtils';
+export {
+    cyrillicToLatin,
+    latinToCyrillic,
+    normalizeForSearch,
+    matchesSearch,
+    getSearchVariants
+} from './transliterate';

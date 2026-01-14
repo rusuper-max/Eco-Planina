@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { useAuth } from './AuthContext';
+import { getSearchVariants, matchesSearch } from '../utils/transliterate';
 
 const DataContext = createContext(null);
 
@@ -217,6 +218,7 @@ export const DataProvider = ({ children }) => {
     };
 
     const fetchCompanyClients = async () => {
+        console.log('DEBUG fetchCompanyClients, companyCode:', companyCode);
         if (!companyCode) return [];
         try {
             const { data, error } = await supabase
@@ -226,6 +228,7 @@ export const DataProvider = ({ children }) => {
                 .eq('role', 'client')
                 .is('deleted_at', null)
                 .order('name');
+            console.log('DEBUG fetchCompanyClients result:', { count: data?.length, error });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -235,6 +238,7 @@ export const DataProvider = ({ children }) => {
     };
 
     const fetchCompanyMembers = async () => {
+        console.log('DEBUG fetchCompanyMembers, companyCode:', companyCode);
         if (!companyCode) return [];
         try {
             const { data, error } = await supabase
@@ -243,6 +247,7 @@ export const DataProvider = ({ children }) => {
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('role', { ascending: false });
+            console.log('DEBUG fetchCompanyMembers result:', { count: data?.length, error });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -309,6 +314,7 @@ export const DataProvider = ({ children }) => {
                 waste_type: wasteType,
                 waste_label: wasteLabel,
                 request_code: requestCode,
+                region_id: user.region_id || null, // Inherit region from client
                 ...rest,
                 status: 'pending'
             }]).select().single();
@@ -326,6 +332,349 @@ export const DataProvider = ({ children }) => {
             return { success: true };
         } catch (error) {
             throw error;
+        }
+    };
+
+    // ============================================
+    // REGIONS / FILIJALE FUNKCIJE
+    // ============================================
+
+    // Fetch all regions for current company
+    const fetchCompanyRegions = async () => {
+        if (!companyCode) return [];
+        try {
+            const { data, error } = await supabase
+                .from('regions')
+                .select(`
+                    id,
+                    name,
+                    created_at,
+                    users:users(count)
+                `)
+                .eq('company_code', companyCode)
+                .is('deleted_at', null)
+                .order('name');
+            if (error) throw error;
+            // Transform count from array to number
+            return (data || []).map(r => ({
+                ...r,
+                userCount: r.users?.[0]?.count || 0
+            }));
+        } catch (error) {
+            console.error('Error fetching regions:', error);
+            return [];
+        }
+    };
+
+    // Create a new region
+    const createRegion = async (name) => {
+        if (!companyCode || !name) throw new Error('Nedostaju podaci');
+        try {
+            const { data, error } = await supabase
+                .from('regions')
+                .insert([{ company_code: companyCode, name: name.trim() }])
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Update region name
+    const updateRegion = async (regionId, name) => {
+        if (!regionId || !name) throw new Error('Nedostaju podaci');
+        try {
+            const { error } = await supabase
+                .from('regions')
+                .update({ name: name.trim() })
+                .eq('id', regionId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Delete region (soft delete)
+    const deleteRegion = async (regionId) => {
+        if (!regionId) throw new Error('Nedostaje ID filijale');
+        try {
+            const { error } = await supabase
+                .from('regions')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', regionId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Assign multiple users to a region (batch update)
+    const assignUsersToRegion = async (userIds, regionId) => {
+        if (!userIds || userIds.length === 0) return { success: false, message: 'Nema korisnika za dodeljivanje' };
+        try {
+            const { error } = await supabase
+                .from('users')
+                .update({ region_id: regionId || null })
+                .in('id', userIds)
+                .eq('company_code', companyCode);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Fetch users by address pattern (for batch assignment)
+    // Uses transliteration to match both Latin and Cyrillic addresses
+    const fetchUsersByAddressPattern = async (pattern, roleFilter = null) => {
+        if (!companyCode) return [];
+        try {
+            let query = supabase
+                .from('users')
+                .select('id, name, phone, address, role, region_id')
+                .eq('company_code', companyCode)
+                .is('deleted_at', null)
+                .neq('role', 'company_admin') // Exclude company owner from assignment
+                .order('name');
+
+            // Apply role filter if provided (at database level for efficiency)
+            if (roleFilter && roleFilter !== 'all') {
+                query = query.eq('role', roleFilter);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            let results = data || [];
+
+            // Apply address filter with transliteration (client-side for script-agnostic matching)
+            if (pattern && pattern.trim()) {
+                results = results.filter(user =>
+                    matchesSearch(user.address, pattern)
+                );
+            }
+
+            return results;
+        } catch (error) {
+            console.error('Error searching users by address:', error);
+            return [];
+        }
+    };
+
+    // Get users grouped by region (for visual editor)
+    const fetchUsersGroupedByRegion = async () => {
+        if (!companyCode) return { regions: [], unassigned: [] };
+        try {
+            const [regionsRes, usersRes] = await Promise.all([
+                supabase
+                    .from('regions')
+                    .select('id, name')
+                    .eq('company_code', companyCode)
+                    .is('deleted_at', null)
+                    .order('name'),
+                supabase
+                    .from('users')
+                    .select('id, name, role, region_id, address')
+                    .eq('company_code', companyCode)
+                    .is('deleted_at', null)
+                    .order('name')
+            ]);
+
+            if (regionsRes.error) throw regionsRes.error;
+            if (usersRes.error) throw usersRes.error;
+
+            const regions = (regionsRes.data || []).map(region => ({
+                ...region,
+                users: (usersRes.data || []).filter(u => u.region_id === region.id)
+            }));
+
+            const unassigned = (usersRes.data || []).filter(u => !u.region_id);
+
+            return { regions, unassigned };
+        } catch (error) {
+            console.error('Error fetching users grouped by region:', error);
+            return { regions: [], unassigned: [] };
+        }
+    };
+
+    // ============================================
+    // EQUIPMENT / OPREMA FUNKCIJE
+    // ============================================
+
+    // Fetch all equipment for current company (RLS handles region filtering)
+    const fetchCompanyEquipment = async () => {
+        if (!companyCode) return [];
+        try {
+            // Try with region join first
+            let result = await supabase
+                .from('equipment')
+                .select('*, region:region_id(id, name)')
+                .eq('company_code', companyCode)
+                .is('deleted_at', null)
+                .order('name');
+
+            // If region_id column doesn't exist (PGRST200), fallback to simple query
+            if (result.error?.code === 'PGRST200' || result.error?.message?.includes('region_id')) {
+                result = await supabase
+                    .from('equipment')
+                    .select('*')
+                    .eq('company_code', companyCode)
+                    .is('deleted_at', null)
+                    .order('name');
+            }
+
+            if (result.error) {
+                // If table doesn't exist yet, return empty array
+                if (result.error.code === '42P01') return [];
+                throw result.error;
+            }
+            return result.data || [];
+        } catch (error) {
+            console.error('Error fetching equipment:', error);
+            return [];
+        }
+    };
+
+    // Create new equipment
+    // - company_admin: can create company-wide (region_id = null) or for specific region
+    // - manager: must specify their region_id (enforced by RLS)
+    const createEquipment = async (equipmentData) => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
+        try {
+            const insertData = {
+                company_code: companyCode,
+                name: equipmentData.name?.trim(),
+                description: equipmentData.description?.trim() || null,
+                custom_image_url: equipmentData.customImage || null
+            };
+
+            // If region_id is provided, include it (manager must provide their region)
+            // If null/undefined, it's company-wide (only company_admin can do this via RLS)
+            if (equipmentData.region_id !== undefined) {
+                insertData.region_id = equipmentData.region_id;
+            }
+
+            let result = await supabase
+                .from('equipment')
+                .insert([insertData])
+                .select('*, region:region_id(id, name)')
+                .single();
+
+            // Fallback if region_id doesn't exist
+            if (result.error?.code === 'PGRST200' || result.error?.message?.includes('region_id')) {
+                delete insertData.region_id;
+                result = await supabase
+                    .from('equipment')
+                    .insert([insertData])
+                    .select('*')
+                    .single();
+            }
+
+            const { data, error } = result;
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Update equipment
+    const updateEquipment = async (equipmentId, equipmentData) => {
+        if (!equipmentId) throw new Error('Nedostaje ID opreme');
+        try {
+            const updates = {};
+            if (equipmentData.name !== undefined) updates.name = equipmentData.name?.trim();
+            if (equipmentData.description !== undefined) updates.description = equipmentData.description?.trim() || null;
+            if (equipmentData.customImage !== undefined) updates.custom_image_url = equipmentData.customImage || null;
+            if (equipmentData.region_id !== undefined) updates.region_id = equipmentData.region_id;
+
+            let result = await supabase
+                .from('equipment')
+                .update(updates)
+                .eq('id', equipmentId)
+                .select('*, region:region_id(id, name)')
+                .single();
+
+            // Fallback if region_id doesn't exist
+            if (result.error?.code === 'PGRST200' || result.error?.message?.includes('region_id')) {
+                delete updates.region_id;
+                result = await supabase
+                    .from('equipment')
+                    .update(updates)
+                    .eq('id', equipmentId)
+                    .select('*')
+                    .single();
+            }
+
+            if (result.error) throw result.error;
+            return result.data;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Delete equipment (soft delete)
+    const deleteEquipment = async (equipmentId) => {
+        if (!equipmentId) throw new Error('Nedostaje ID opreme');
+        try {
+            const { error } = await supabase
+                .from('equipment')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', equipmentId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Migrate equipment from localStorage to database (one-time migration)
+    const migrateEquipmentFromLocalStorage = async () => {
+        if (!companyCode) return { migrated: 0 };
+        try {
+            const localKey = 'ecomountaint_equipment';
+            const saved = localStorage.getItem(localKey);
+            if (!saved) return { migrated: 0 };
+
+            const localEquipment = JSON.parse(saved);
+            if (!Array.isArray(localEquipment) || localEquipment.length === 0) {
+                return { migrated: 0 };
+            }
+
+            // Check if we already have equipment in DB
+            const existing = await fetchCompanyEquipment();
+            if (existing.length > 0) {
+                // Already migrated, clear localStorage
+                localStorage.removeItem(localKey);
+                return { migrated: 0, message: 'Već migrirano' };
+            }
+
+            // Insert all local equipment to database
+            const toInsert = localEquipment.map(eq => ({
+                company_code: companyCode,
+                name: eq.name?.trim() || eq.label?.trim() || 'Bez naziva',
+                description: eq.description?.trim() || null,
+                custom_image_url: eq.customImage || null
+            }));
+
+            const { data, error } = await supabase
+                .from('equipment')
+                .insert(toInsert)
+                .select();
+
+            if (error) throw error;
+
+            // Clear localStorage after successful migration
+            localStorage.removeItem(localKey);
+
+            return { migrated: data?.length || 0 };
+        } catch (error) {
+            console.error('Error migrating equipment:', error);
+            return { migrated: 0, error: error.message };
         }
     };
 
@@ -347,6 +696,20 @@ export const DataProvider = ({ children }) => {
         addPickupRequest,
         fetchPickupRequests,
         deleteClient,
+        // Region functions
+        fetchCompanyRegions,
+        createRegion,
+        updateRegion,
+        deleteRegion,
+        assignUsersToRegion,
+        fetchUsersByAddressPattern,
+        fetchUsersGroupedByRegion,
+        // Equipment functions
+        fetchCompanyEquipment,
+        createEquipment,
+        updateEquipment,
+        deleteEquipment,
+        migrateEquipmentFromLocalStorage,
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

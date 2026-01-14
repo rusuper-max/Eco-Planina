@@ -8,4 +8,5 @@ export { UserEditModal } from './UserEditModal';
 export { DeleteConfirmationModal } from './DeleteConfirmationModal';
 export { PrintExport } from './PrintExport';
 export { RegionsPage } from './RegionsPage';
+export { RegionNodeEditor } from './RegionNodeEditor';
 export { CompanyStaffPage } from './CompanyStaffPage';

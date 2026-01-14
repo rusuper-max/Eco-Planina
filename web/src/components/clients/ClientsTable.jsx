@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Users, Search, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Box, Eye, Trash2 } from 'lucide-react';
+import { Users, Search, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Box, Eye, Trash2, Building2 } from 'lucide-react';
 import { EmptyState } from '../common';
 
 /**
  * Clients Table with sorting and search
  */
-export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, equipment = [] }) => {
+export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, equipment = [], regions = [] }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('name'); // name, phone, pib
     const [sortDir, setSortDir] = useState('asc');
@@ -15,6 +15,12 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
         if (!client.equipment_types || client.equipment_types.length === 0) return [];
         const existingEquipmentIds = new Set(equipment.map(eq => eq.id));
         return client.equipment_types.filter(eqId => existingEquipmentIds.has(eqId));
+    };
+
+    // Get region name by ID
+    const getRegionName = (regionId) => {
+        if (!regionId) return null;
+        return regions.find(r => r.id === regionId)?.name;
     };
 
     // Filter and sort clients
@@ -135,6 +141,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                 </button>
                             </th>
                             <th className="hidden md:table-cell px-4 py-3 text-left">Oprema</th>
+                            <th className="hidden lg:table-cell px-4 py-3 text-left">Filijala</th>
                             <th className="px-3 md:px-4 py-3 text-left">Lokacija</th>
                             <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
                         </tr>
@@ -183,6 +190,19 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                             <Box size={12} />
                                             <span>{clientEquipment.length > 0 ? `${clientEquipment.length} dodeljeno` : 'Dodeli'}</span>
                                         </button>
+                                    </td>
+                                    <td className="hidden lg:table-cell px-4 py-3">
+                                        {(() => {
+                                            const regionName = getRegionName(c.region_id);
+                                            return regionName ? (
+                                                <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 flex items-center gap-1 w-fit">
+                                                    <Building2 size={12} />
+                                                    {regionName}
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-400 text-xs">-</span>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="px-3 md:px-4 py-3">
                                         <button

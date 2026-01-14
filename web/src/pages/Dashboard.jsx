@@ -1,4 +1,5 @@
 import toast from 'react-hot-toast';
+import { useData } from '../context/DataContext';
 import {
     // Hooks
     useState, useEffect, useCallback, useMemo, useRef,
@@ -12,7 +13,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn,
+    Lock, Unlock, AlertTriangle, LogIn, Network,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -25,13 +26,15 @@ import {
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage,
     RegionsPage,
-    CompanyStaffPage
+    CompanyStaffPage,
+    RegionNodeEditor
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchCompanyClients, fetchCompanyMembers, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions } = useAuth();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -41,6 +44,7 @@ export default function Dashboard() {
     const [mapType, setMapType] = useState('requests');
     const [stats, setStats] = useState(null);
     const [clients, setClients] = useState([]);
+    const [regions, setRegions] = useState([]);
     const [companies, setCompanies] = useState([]);
     const [users, setUsers] = useState([]);
     const [masterCodes, setMasterCodes] = useState([]);
@@ -55,10 +59,7 @@ export default function Dashboard() {
     const [notifications, setNotifications] = useState([]);
     const [prevRequestCount, setPrevRequestCount] = useState(0);
     const [prevClientCount, setPrevClientCount] = useState(0);
-    const [equipment, setEquipment] = useState(() => {
-        const saved = localStorage.getItem('ecomountaint_equipment');
-        return saved ? JSON.parse(saved) : [];
-    });
+    const [equipment, setEquipment] = useState([]);
     const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
     const [processedRequests, setProcessedRequests] = useState([]);
     const [editingClientEquipment, setEditingClientEquipment] = useState(null);
@@ -95,10 +96,25 @@ export default function Dashboard() {
         localStorage.setItem('ecomountaint_activeTab', activeTab);
     }, [activeTab]);
 
-    // Save equipment to localStorage
+    // Load equipment from database (with one-time migration from localStorage)
     useEffect(() => {
-        localStorage.setItem('ecomountaint_equipment', JSON.stringify(equipment));
-    }, [equipment]);
+        const loadEquipment = async () => {
+            if (!companyCode || userRole === 'client') return;
+            try {
+                // First, try to migrate any localStorage data
+                const migrationResult = await migrateEquipmentFromLocalStorage();
+                if (migrationResult.migrated > 0) {
+                    toast.success(`Migrirano ${migrationResult.migrated} tipova opreme u bazu`);
+                }
+                // Then fetch from database
+                const dbEquipment = await fetchCompanyEquipment();
+                setEquipment(dbEquipment);
+            } catch (err) {
+                console.error('Error loading equipment:', err);
+            }
+        };
+        loadEquipment();
+    }, [companyCode, userRole]);
 
 
 
@@ -164,7 +180,7 @@ export default function Dashboard() {
         try {
             if (userRole === 'admin') {
                 setStats(await getAdminStats());
-            } else if (userRole === 'manager' || userRole === 'client') {
+            } else if (userRole === 'manager' || userRole === 'client' || userRole === 'company_admin') {
                 // Fetch company specific settings - only once
                 const companyWasteTypes = await fetchCompanyWasteTypes();
                 if (companyWasteTypes && companyWasteTypes.length > 0) {
@@ -177,6 +193,7 @@ export default function Dashboard() {
 
                 if (userRole === 'manager') {
                     setClients(await fetchCompanyClients() || []);
+                    setRegions(await fetchCompanyRegions() || []);
                     // Fetch driver assignments for status display
                     await fetchDriverAssignments();
                     // Fetch drivers for map assignment
@@ -184,8 +201,20 @@ export default function Dashboard() {
                 }
 
                 if (userRole === 'company_admin') {
-                    setClients(await fetchCompanyClients() || []);
-                    setCompanyMembers(await fetchCompanyMembers() || []);
+                    console.log('DEBUG company_admin loadInitialData, companyCode:', companyCode);
+                    const clientsData = await fetchCompanyClients();
+                    const membersData = await fetchCompanyMembers();
+                    const regionsData = await fetchCompanyRegions();
+                    console.log('DEBUG company_admin data:', { clients: clientsData?.length, members: membersData?.length, regions: regionsData?.length });
+                    setClients(clientsData || []);
+                    setRegions(regionsData || []);
+                    setCompanyMembers(membersData || []);
+                    // Load equipment and waste types for company admin
+                    const companyWasteTypes = await fetchCompanyWasteTypes();
+                    if (companyWasteTypes && companyWasteTypes.length > 0) {
+                        setWasteTypes(companyWasteTypes);
+                    }
+                    // Equipment is loaded from database via useEffect
                 }
             }
             setInitialDataLoaded(true);
@@ -260,11 +289,8 @@ export default function Dashboard() {
                 if (activeTab === 'companies' && companies.length === 0) setCompanies(await fetchAllCompanies());
                 if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
                 if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
-            } else if (userRole === 'manager') {
-                if (activeTab === 'history' && processedRequests.length === 0) {
-                    setProcessedRequests(await fetchProcessedRequests() || []);
-                }
-                if (activeTab === 'analytics' && processedRequests.length === 0) {
+            } else if (userRole === 'manager' || userRole === 'company_admin') {
+                if ((activeTab === 'history' || activeTab === 'analytics') && processedRequests.length === 0) {
                     setProcessedRequests(await fetchProcessedRequests() || []);
                 }
             }
@@ -313,26 +339,47 @@ export default function Dashboard() {
     const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
     const refreshCompanies = async () => { setCompanies(await fetchAllCompanies()); };
 
-    // Equipment handlers (local state for now, later connect to Supabase)
-    const handleAddEquipment = (newEq) => {
-        const eq = { id: Date.now().toString(), ...newEq, assigned_to: null, assigned_to_name: null };
-        setEquipment(prev => [...prev, eq]);
+    // Equipment handlers (connected to Supabase)
+    const handleAddEquipment = async (newEq) => {
+        try {
+            const created = await createEquipment(newEq);
+            setEquipment(prev => [...prev, created]);
+            toast.success('Oprema uspešno dodata');
+        } catch (err) {
+            console.error('Error adding equipment:', err);
+            toast.error('Greška pri dodavanju opreme');
+        }
     };
     const handleAssignEquipment = (eqId, clientId) => {
+        // TODO: Implement equipment assignment to clients via database
         const client = clients.find(c => c.id === clientId);
         setEquipment(prev => prev.map(eq => eq.id === eqId ? { ...eq, assigned_to: clientId, assigned_to_name: client?.name } : eq));
     };
-    const handleDeleteEquipment = (id) => {
+    const handleDeleteEquipment = async (id) => {
         const eq = equipment.find(e => e.id === id);
         const confirmMessage = eq?.assigned_to
             ? `Ova oprema je dodeljena klijentu "${eq.assigned_to_name || 'Nepoznat'}". Da li ste sigurni da želite da je obrišete?`
             : 'Obrisati opremu?';
         if (window.confirm(confirmMessage)) {
-            setEquipment(prev => prev.filter(e => e.id !== id));
+            try {
+                await deleteEquipment(id);
+                setEquipment(prev => prev.filter(e => e.id !== id));
+                toast.success('Oprema obrisana');
+            } catch (err) {
+                console.error('Error deleting equipment:', err);
+                toast.error('Greška pri brisanju opreme');
+            }
         }
     };
-    const handleEditEquipment = (updated) => {
-        setEquipment(prev => prev.map(eq => eq.id === updated.id ? updated : eq));
+    const handleEditEquipment = async (updated) => {
+        try {
+            await updateEquipment(updated.id, updated);
+            setEquipment(prev => prev.map(eq => eq.id === updated.id ? { ...updated } : eq));
+            toast.success('Oprema ažurirana');
+        } catch (err) {
+            console.error('Error updating equipment:', err);
+            toast.error('Greška pri ažuriranju opreme');
+        }
     };
 
     // Handle click on client name in requests table
@@ -420,6 +467,9 @@ export default function Dashboard() {
             { id: 'map', icon: Globe, label: 'Mapa' },
             { id: 'staff', icon: Users, label: 'Osoblje' },
             { id: 'regions', icon: MapPin, label: 'Filijale' },
+            { id: 'visual', icon: Network, label: 'Vizuelni Editor' },
+            { id: 'analytics', icon: BarChart3, label: 'Analitika' },
+            { id: 'history', icon: History, label: 'Istorija zahteva' },
             { id: 'settings', icon: Settings, label: 'Podešavanja' }
         ];
         if (userRole === 'manager') return [
@@ -659,7 +709,7 @@ export default function Dashboard() {
                 catch { setProcessedRequests(previous); } // Rollback
             }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} />;
-            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
@@ -676,6 +726,20 @@ export default function Dashboard() {
         if (userRole === 'company_admin') {
             if (activeTab === 'staff') return <CompanyStaffPage />;
             if (activeTab === 'regions') return <RegionsPage />;
+            if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} equipment={equipment} />;
+            if (activeTab === 'history') return (
+                <div className="space-y-4">
+                    <h1 className="text-2xl font-bold">Istorija svih zahteva</h1>
+                    <p className="text-slate-500">Kliknite na strelicu za prikaz timeline-a akcija za svaki zahtev</p>
+                    <HistoryTable
+                        requests={processedRequests}
+                        wasteTypes={wasteTypes}
+                        onView={setSelectedRequest}
+                        showDetailedView={true}
+                    />
+                </div>
+            );
             if (activeTab === 'map') return (
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -737,7 +801,7 @@ export default function Dashboard() {
                                     <MapPin className="w-6 h-6 text-purple-600" />
                                 </div>
                                 <div>
-                                    <p className="text-3xl font-bold text-slate-800">0</p>
+                                    <p className="text-3xl font-bold text-slate-800">{regions.length}</p>
                                     <p className="text-sm text-slate-500">Filijala</p>
                                 </div>
                             </div>
@@ -1007,7 +1071,7 @@ export default function Dashboard() {
                 </header>
                 <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative z-10">
                     <div className="max-w-7xl mx-auto">
-                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : 'Master kodovi'}</h1></div>
+                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>

@@ -375,14 +375,23 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
         if (!window.confirm('Ukloniti dodelu?')) return;
 
         try {
-            const { error } = await supabase
+            const { error, data } = await supabase
                 .from('driver_assignments')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', assignmentId);
+                .eq('id', assignmentId)
+                .select();
 
             if (error) throw error;
+
+            // Check if any rows were updated (RLS might silently block)
+            if (!data || data.length === 0) {
+                throw new Error('Nemate dozvolu za ovu akciju');
+            }
+
             await fetchAssignments();
+            toast.success('Dodela uklonjena');
         } catch (err) {
+            console.error('Unassign error:', err);
             toast.error('Greška: ' + err.message);
         }
     };

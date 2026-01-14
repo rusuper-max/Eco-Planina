@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download } from 'lucide-react';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
+import { supabase } from '../../config/supabase';
 
 const DEFAULT_WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
@@ -12,8 +13,9 @@ const DEFAULT_WASTE_TYPES = [
 
 /**
  * History Table (Processed/Rejected Requests)
+ * Enhanced version for company_admin with driver/manager info and timeline
  */
-export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete }) => {
+export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
@@ -22,6 +24,143 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
     const [editingRequest, setEditingRequest] = useState(null);
     const [deletingRequest, setDeletingRequest] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [expandedRow, setExpandedRow] = useState(null);
+    const [driverAssignments, setDriverAssignments] = useState({});
+    const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+    // Fetch driver assignments for detailed view
+    useEffect(() => {
+        if (showDetailedView && requests?.length > 0) {
+            fetchDriverAssignments();
+        }
+    }, [showDetailedView, requests]);
+
+    const fetchDriverAssignments = async () => {
+        if (!requests?.length) return;
+        setLoadingAssignments(true);
+        try {
+            // Get request IDs
+            const requestIds = requests.map(r => r.request_id).filter(Boolean);
+            if (requestIds.length === 0) {
+                setLoadingAssignments(false);
+                return;
+            }
+
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select(`
+                    id,
+                    request_id,
+                    status,
+                    assigned_at,
+                    started_at,
+                    picked_up_at,
+                    delivered_at,
+                    completed_at,
+                    driver:driver_id(id, name, phone)
+                `)
+                .in('request_id', requestIds);
+
+            if (error) throw error;
+
+            // Map by request_id for quick lookup
+            const assignmentMap = {};
+            (data || []).forEach(a => {
+                assignmentMap[a.request_id] = a;
+            });
+            setDriverAssignments(assignmentMap);
+        } catch (err) {
+            console.error('Error fetching driver assignments:', err);
+        } finally {
+            setLoadingAssignments(false);
+        }
+    };
+
+    // Calculate time difference in human readable format
+    const formatDuration = (start, end) => {
+        if (!start || !end) return null;
+        const diff = new Date(end) - new Date(start);
+        const minutes = Math.floor(diff / 60000);
+        if (minutes < 60) return `${minutes} min`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ${minutes % 60}min`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ${hours % 24}h`;
+    };
+
+    // Timeline component for a single request
+    const TimelineView = ({ assignment, request }) => {
+        if (!assignment) {
+            return (
+                <div className="p-4 bg-slate-50 rounded-xl text-center text-slate-500 text-sm">
+                    Nema podataka o vozaču za ovaj zahtev
+                </div>
+            );
+        }
+
+        const steps = [
+            { key: 'created', label: 'Kreiran zahtev', time: request.created_at, icon: Package },
+            { key: 'assigned', label: 'Dodeljen vozaču', time: assignment.assigned_at, icon: User },
+            { key: 'started', label: 'Vozač krenuo', time: assignment.started_at, icon: PlayCircle },
+            { key: 'picked_up', label: 'Preuzeto', time: assignment.picked_up_at, icon: MapPin },
+            { key: 'delivered', label: 'Isporučeno', time: assignment.delivered_at, icon: Truck },
+            { key: 'completed', label: 'Završeno', time: assignment.completed_at || request.processed_at, icon: CheckCircle2 },
+        ].filter(s => s.time);
+
+        return (
+            <div className="p-4 bg-slate-50 rounded-xl">
+                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
+                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                        <Truck className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                        <p className="font-medium text-slate-800">{assignment.driver?.name || 'Nepoznat vozač'}</p>
+                        <p className="text-sm text-slate-500">{assignment.driver?.phone || '-'}</p>
+                    </div>
+                    {request.created_at && request.processed_at && (
+                        <div className="ml-auto text-right">
+                            <p className="text-xs text-slate-400">Ukupno trajanje</p>
+                            <p className="font-bold text-emerald-600">{formatDuration(request.created_at, request.processed_at)}</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Timeline */}
+                <div className="relative pl-6">
+                    <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
+                    {steps.map((step, idx) => {
+                        const StepIcon = step.icon;
+                        const nextStep = steps[idx + 1];
+                        const duration = nextStep ? formatDuration(step.time, nextStep.time) : null;
+
+                        return (
+                            <div key={step.key} className="relative pb-4 last:pb-0">
+                                <div className="absolute -left-4 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <StepIcon size={14} className="text-slate-400" />
+                                        <span className="text-sm font-medium text-slate-700">{step.label}</span>
+                                    </div>
+                                    <span className="text-xs text-slate-500">
+                                        {new Date(step.time).toLocaleString('sr-RS', {
+                                            day: 'numeric', month: 'numeric',
+                                            hour: '2-digit', minute: '2-digit'
+                                        })}
+                                    </span>
+                                </div>
+                                {duration && (
+                                    <div className="ml-6 mt-1 text-xs text-slate-400 flex items-center gap-1">
+                                        <Clock size={10} />
+                                        {duration}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
@@ -133,14 +272,19 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                             </th>
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
                             <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
+                            {showDetailedView && <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>}
                             <th className="px-2 py-3 text-center w-20">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
-                        ) : filtered.map((req, idx) => (
-                            <tr key={req.id || idx} className="hover:bg-slate-50">
+                            <tr><td colSpan={showDetailedView ? 8 : 7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                        ) : filtered.map((req, idx) => {
+                            const assignment = driverAssignments[req.request_id];
+                            const isExpanded = expandedRow === req.id;
+                            return (
+                            <React.Fragment key={req.id || idx}>
+                            <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
                                 <td className="px-3 md:px-4 py-3">
                                     <div className="font-medium text-sm">{req.client_name}</div>
                                     <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
@@ -185,8 +329,35 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                         )}
                                     </div>
                                 </td>
+                                {/* Driver column for detailed view */}
+                                {showDetailedView && (
+                                    <td className="hidden md:table-cell px-4 py-3">
+                                        {loadingAssignments ? (
+                                            <Loader2 size={16} className="animate-spin text-slate-400" />
+                                        ) : assignment?.driver ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                                                    <Truck size={14} className="text-amber-600" />
+                                                </div>
+                                                <span className="text-sm text-slate-700">{assignment.driver.name}</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-slate-400">-</span>
+                                        )}
+                                    </td>
+                                )}
                                 <td className="px-2 py-3">
                                     <div className="flex items-center justify-center gap-1">
+                                        {/* Expand button for detailed view */}
+                                        {showDetailedView && (
+                                            <button
+                                                onClick={() => setExpandedRow(isExpanded ? null : req.id)}
+                                                className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                                                title="Prikaži timeline"
+                                            >
+                                                {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                            </button>
+                                        )}
                                         {/* On very small screens, show proof button in actions if dokaz column is hidden */}
                                         <button
                                             onClick={() => req.proof_image_url && setViewingProof(req)}
@@ -214,7 +385,17 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                     </div>
                                 </td>
                             </tr>
-                        ))}
+                            {/* Expanded row with timeline */}
+                            {showDetailedView && isExpanded && (
+                                <tr>
+                                    <td colSpan={8} className="px-4 py-3 bg-white border-t">
+                                        <TimelineView assignment={assignment} request={req} />
+                                    </td>
+                                </tr>
+                            )}
+                            </React.Fragment>
+                        );
+                        })}
                     </tbody>
                 </table>
             </div>

@@ -135,7 +135,7 @@ export const AuthProvider = ({ children }) => {
                 .select('*')
                 .eq('auth_id', authUserData.id)
                 .is('deleted_at', null)
-                .single();
+                .maybeSingle();
 
             if (error || !userData) {
                 console.error('Failed to load user profile:', error);
@@ -150,7 +150,7 @@ export const AuthProvider = ({ children }) => {
                     .select('*')
                     .eq('code', userData.company_code)
                     .is('deleted_at', null)
-                    .single();
+                    .maybeSingle();
                 companyData = company;
             }
 
@@ -160,7 +160,7 @@ export const AuthProvider = ({ children }) => {
                     .from('master_codes')
                     .select('status')
                     .eq('id', companyData.master_code_id)
-                    .single();
+                    .maybeSingle();
                 if (mc?.status === 'frozen') {
                     throw new Error('Vaša firma je zamrznuta. Kontaktirajte administratora.');
                 }
@@ -176,7 +176,7 @@ export const AuthProvider = ({ children }) => {
                     .select('id, name')
                     .eq('id', userData.region_id)
                     .is('deleted_at', null)
-                    .single();
+                    .maybeSingle();
                 regionData = region;
             }
 
@@ -400,8 +400,8 @@ export const AuthProvider = ({ children }) => {
         if (currentRole !== 'developer' && currentRole !== 'admin') {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
-        if (newRole !== 'client' && newRole !== 'manager') {
-            throw new Error('Možete menjati samo između Klijent i Menadžer uloga');
+        if (newRole !== 'client' && newRole !== 'manager' && newRole !== 'driver') {
+            throw new Error('Možete menjati samo između Klijent, Menadžer i Vozač uloga');
         }
         try {
             const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
