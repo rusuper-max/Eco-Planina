@@ -260,19 +260,72 @@ export const AdminProvider = ({ children }) => {
     const deleteMasterCode = async (id) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
-            console.log('DEBUG deleteMasterCode - id:', id);
-            const { error, count } = await supabase
+            console.log('DEBUG deleteMasterCode - attempting delete for id:', id);
+
+            // First check if this master code is linked to a company
+            const { data: code, error: fetchError } = await supabase
+                .from('master_codes')
+                .select('id, code, status, used_by_company')
+                .eq('id', id)
+                .single();
+
+            console.log('DEBUG deleteMasterCode - fetched code:', code, 'fetchError:', fetchError);
+
+            if (fetchError) {
+                throw new Error('Kod nije pronađen');
+            }
+
+            // If code is used by a company, we need to handle that
+            if (code.used_by_company) {
+                // First soft-delete the company and its users
+                const { data: company } = await supabase
+                    .from('companies')
+                    .select('code')
+                    .eq('id', code.used_by_company)
+                    .single();
+
+                if (company) {
+                    // Soft delete users of this company
+                    await supabase
+                        .from('users')
+                        .update({ deleted_at: new Date().toISOString() })
+                        .eq('company_code', company.code);
+
+                    // Soft delete the company
+                    await supabase
+                        .from('companies')
+                        .update({ deleted_at: new Date().toISOString(), master_code_id: null })
+                        .eq('id', code.used_by_company);
+                }
+            }
+
+            // Now delete the master code
+            const { error: deleteError } = await supabase
                 .from('master_codes')
                 .delete()
-                .eq('id', id)
-                .select();
+                .eq('id', id);
 
-            console.log('DEBUG deleteMasterCode - error:', error, 'count:', count);
+            console.log('DEBUG deleteMasterCode - deleteError:', deleteError);
 
-            if (error) {
-                console.error('Delete master code error:', error);
-                throw new Error(error.message || 'Greška pri brisanju koda');
+            if (deleteError) {
+                console.error('Delete master code error:', deleteError);
+                throw new Error(deleteError.message || 'Greška pri brisanju koda');
             }
+
+            // Verify the code was actually deleted (RLS might silently block)
+            const { data: stillExists } = await supabase
+                .from('master_codes')
+                .select('id')
+                .eq('id', id)
+                .maybeSingle();
+
+            console.log('DEBUG deleteMasterCode - stillExists:', stillExists);
+
+            if (stillExists) {
+                throw new Error('Brisanje nije uspelo - nemate dozvolu ili postoji zavisnost u bazi');
+            }
+
+            console.log('DEBUG deleteMasterCode - SUCCESS');
             return { success: true };
         } catch (error) {
             console.error('deleteMasterCode catch:', error);
