@@ -15,7 +15,18 @@ export const useAdmin = () => {
 export const AdminProvider = ({ children }) => {
     const { user, isAdmin, isDeveloper } = useAuth();
 
+    // DEBUG: Test get_my_role function
+    const testMyRole = async () => {
+        const { data, error } = await supabase.rpc('get_my_role');
+        console.log('TEST get_my_role:', data, 'error:', error);
+        return data;
+    };
+
     const generateMasterCode = async () => {
+        // DEBUG: Test role before generating
+        const myRole = await testMyRole();
+        console.log('My role before generate:', myRole);
+
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
