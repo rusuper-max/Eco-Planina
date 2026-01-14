@@ -33,12 +33,17 @@ import DriverManagement from './DriverManagement';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions } = useAuth();
+    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
     const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
         const saved = localStorage.getItem('ecomountaint_activeTab');
+        // For clients, default to 'new' (request form) if no saved tab or saved tab is 'dashboard'
+        const isClient = user?.role === 'client';
+        if (isClient && (!saved || saved === 'dashboard')) {
+            return 'new';
+        }
         return saved || 'dashboard';
     });
     const [mapType, setMapType] = useState('requests');
@@ -362,21 +367,47 @@ export default function Dashboard() {
 
     // Waste types handlers (connected to Supabase)
     const handleAddWasteType = async (newType) => {
-        const updated = [...wasteTypes, newType];
-        setWasteTypes(updated);
-        try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri čuvanju: ' + e.message); }
+        try {
+            const created = await createWasteType(newType);
+            setWasteTypes(prev => [...prev, created]);
+            toast.success('Vrsta robe dodana');
+        } catch (e) {
+            toast.error('Greška pri čuvanju: ' + e.message);
+        }
     };
     const handleDeleteWasteType = async (id) => {
         if (window.confirm('Obrisati vrstu robe?')) {
-            const updated = wasteTypes.filter(wt => wt.id !== id);
-            setWasteTypes(updated);
-            try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri brisanju: ' + e.message); }
+            try {
+                await deleteWasteType(id);
+                setWasteTypes(prev => prev.filter(wt => wt.id !== id));
+                toast.success('Vrsta robe obrisana');
+            } catch (e) {
+                toast.error('Greška pri brisanju: ' + e.message);
+            }
         }
     };
     const handleEditWasteType = async (updatedType) => {
-        const updated = wasteTypes.map(wt => wt.id === updatedType.id ? updatedType : wt);
-        setWasteTypes(updated);
-        try { await updateCompanyWasteTypes(updated); } catch (e) { toast.error('Greška pri izmeni: ' + e.message); }
+        console.log('DEBUG Dashboard handleEditWasteType - updatedType:', updatedType);
+        console.log('DEBUG Dashboard handleEditWasteType - customImage value:', updatedType.customImage);
+        console.log('DEBUG Dashboard handleEditWasteType - all keys:', Object.keys(updatedType));
+        try {
+            // Pass explicit object to ensure all properties are included
+            const dataToSend = {
+                id: updatedType.id,
+                label: updatedType.label,
+                icon: updatedType.icon,
+                customImage: updatedType.customImage,
+                name: updatedType.name,
+                description: updatedType.description,
+                region_id: updatedType.region_id
+            };
+            console.log('DEBUG Dashboard - dataToSend:', dataToSend);
+            const updated = await updateWasteType(updatedType.id, dataToSend);
+            setWasteTypes(prev => prev.map(wt => wt.id === updated.id ? updated : wt));
+            toast.success('Vrsta robe ažurirana');
+        } catch (e) {
+            toast.error('Greška pri izmeni: ' + e.message);
+        }
     };
 
     // Client location handler - koristi SECURITY DEFINER funkciju
@@ -418,13 +449,13 @@ export default function Dashboard() {
     };
 
     // Client equipment handler
-    const handleSaveClientEquipment = async (clientId, equipmentTypes, note, pib) => {
+    const handleSaveClientEquipment = async (clientId, equipmentTypes, note, pib, allowedWasteTypes = null) => {
         try {
-            await updateClientDetails(clientId, equipmentTypes, note, pib);
+            await updateClientDetails(clientId, equipmentTypes, note, pib, allowedWasteTypes);
             // Update local state
             setClients(prev => prev.map(c =>
                 c.id === clientId
-                    ? { ...c, equipment_types: equipmentTypes, manager_note: note, pib: pib }
+                    ? { ...c, equipment_types: equipmentTypes, manager_note: note, pib: pib, allowed_waste_types: allowedWasteTypes }
                     : c
             ));
         } catch (err) {
@@ -457,12 +488,12 @@ export default function Dashboard() {
             { id: 'wastetypes', icon: Recycle, label: 'Vrste robe' },
             { id: 'map', icon: MapPin, label: 'Mapa' }
         ];
-        // Default: client menu
+        // Default: client menu - "Novi zahtev" is the main/home page for clients
         return [
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Početna' },
             { id: 'new', icon: Plus, label: 'Novi zahtev' },
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: clientRequests?.length },
             { id: 'history', icon: Clock, label: 'Istorija' },
+            { id: 'info', icon: Info, label: 'Informacije' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }
         ];
     };
@@ -544,10 +575,15 @@ export default function Dashboard() {
             return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} deleteConversation={deleteConversation} />;
         }
         if (userRole === 'client') {
-            if (activeTab === 'new') return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} wasteTypes={wasteTypes} />;
+            // Filter waste types based on client's allowed types (null/empty = all allowed)
+            const clientWasteTypes = user?.allowed_waste_types?.length > 0
+                ? wasteTypes.filter(wt => user.allowed_waste_types.includes(wt.id))
+                : wasteTypes;
+
             if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} />;
             if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
-            // Dashboard/Početna for client
+            if (activeTab === 'info') {
+                // Informacije tab - overview of client's activity
             return (
                 <div className="space-y-6">
                     {/* Stats Cards */}
@@ -661,6 +697,9 @@ export default function Dashboard() {
                     </div>
                 </div>
             );
+            }
+            // Default: Novi zahtev form (home page for clients)
+            return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} wasteTypes={clientWasteTypes} />;
         }
         if (userRole === 'manager') {
             if (activeTab === 'requests') return (
@@ -743,10 +782,7 @@ export default function Dashboard() {
             if (activeTab === 'settings') return (
                 <div className="space-y-6">
                     <h1 className="text-2xl font-bold">Podešavanja firme</h1>
-                    <WasteTypesManagement wasteTypes={wasteTypes} onUpdate={async (types) => {
-                        await updateCompanyWasteTypes(types);
-                        setWasteTypes(types);
-                    }} />
+                    <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />
                     <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />
                 </div>
             );
@@ -1026,6 +1062,7 @@ export default function Dashboard() {
                 onClose={() => setShowCreateRequestModal(false)}
                 clients={clients}
                 wasteTypes={wasteTypes}
+                managerName={user?.name}
                 onSubmit={async (data) => {
                     await createRequestForClient(data);
                     toast.success('Zahtev uspešno kreiran');
@@ -1047,6 +1084,7 @@ export default function Dashboard() {
                 <ClientEquipmentModal
                     client={editingClientEquipment}
                     equipment={equipment}
+                    wasteTypes={wasteTypes}
                     onSave={handleSaveClientEquipment}
                     onClose={() => setEditingClientEquipment(null)}
                 />

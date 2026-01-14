@@ -274,13 +274,14 @@ export const DataProvider = ({ children }) => {
     };
 
     // Koristi SECURITY DEFINER funkciju za update klijenta
-    const updateClientDetails = async (clientId, equipmentTypes, note, pib) => {
+    const updateClientDetails = async (clientId, equipmentTypes, note, pib, allowedWasteTypes = null) => {
         try {
             const { data, error } = await supabase.rpc('update_client_details', {
                 p_client_id: clientId,
                 p_equipment_types: equipmentTypes || [],
                 p_manager_note: note || '',
-                p_pib: pib || ''
+                p_pib: pib || '',
+                p_allowed_waste_types: allowedWasteTypes // null means all types allowed
             });
             if (error) throw error;
             if (data === false) {

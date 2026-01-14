@@ -54,14 +54,19 @@ export const CompanyProvider = ({ children }) => {
                 .is('deleted_at', null)
                 .order('name');
 
+            console.log('DEBUG fetchCompanyWasteTypes - tableData:', tableData);
+            console.log('DEBUG fetchCompanyWasteTypes - tableError:', tableError);
+
             // If waste_types table exists and has data, use it
             // Map 'name' to 'label' and 'custom_image_url' to 'customImage' for UI compatibility
             if (!tableError && tableData && tableData.length > 0) {
-                return tableData.map(wt => ({
+                const mapped = tableData.map(wt => ({
                     ...wt,
                     label: wt.name, // UI uses 'label', DB uses 'name'
                     customImage: wt.custom_image_url, // UI uses 'customImage', DB uses 'custom_image_url'
                 }));
+                console.log('DEBUG fetchCompanyWasteTypes - mapped result:', mapped);
+                return mapped;
             }
 
             // Fallback to JSONB in companies table (legacy)
@@ -132,6 +137,10 @@ export const CompanyProvider = ({ children }) => {
     const updateWasteType = async (wasteTypeId, wasteTypeData) => {
         if (!wasteTypeId) throw new Error('Nedostaje ID vrste');
         try {
+            console.log('DEBUG updateWasteType - input:', { wasteTypeId, wasteTypeData });
+            console.log('DEBUG updateWasteType - wasteTypeData keys:', Object.keys(wasteTypeData || {}));
+            console.log('DEBUG updateWasteType - customImage in wasteTypeData:', wasteTypeData?.customImage);
+            console.log('DEBUG updateWasteType - wasteTypeData JSON:', JSON.stringify(wasteTypeData, null, 2));
             const updates = {};
             // UI sends 'label', DB expects 'name'; UI sends 'customImage', DB expects 'custom_image_url'
             if (wasteTypeData.name !== undefined) updates.name = wasteTypeData.name?.trim();
@@ -141,6 +150,7 @@ export const CompanyProvider = ({ children }) => {
             if (wasteTypeData.region_id !== undefined) updates.region_id = wasteTypeData.region_id;
             if (wasteTypeData.customImage !== undefined) updates.custom_image_url = wasteTypeData.customImage || null;
             if (wasteTypeData.custom_image_url !== undefined) updates.custom_image_url = wasteTypeData.custom_image_url || null;
+            console.log('DEBUG updateWasteType - updates to send:', updates);
 
             const { data, error } = await supabase
                 .from('waste_types')

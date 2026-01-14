@@ -189,7 +189,8 @@ export const AuthProvider = ({ children }) => {
                 latitude: userData.latitude,
                 longitude: userData.longitude,
                 is_owner: userData.is_owner || false,
-                region_id: userData.region_id || null
+                region_id: userData.region_id || null,
+                allowed_waste_types: userData.allowed_waste_types || null
             };
 
             setUser(userObj);

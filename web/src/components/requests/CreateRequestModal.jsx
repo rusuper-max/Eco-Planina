@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, User, Package, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, AlertCircle, Loader2 } from 'lucide-react';
 import { Modal } from '../common';
 
 /**
@@ -10,6 +10,7 @@ export const CreateRequestModal = ({
     onClose,
     clients = [],
     wasteTypes = [],
+    managerName = '',
     onSubmit
 }) => {
     const [selectedClient, setSelectedClient] = useState('');
@@ -46,7 +47,7 @@ export const CreateRequestModal = ({
                 wasteLabel: waste?.label,
                 fillLevel: fillLevel,
                 urgency: urgency,
-                note: note || 'Zahtev kreiran telefonski',
+                note: note || `Zahtev kreirao: ${managerName || 'Menadžer'}`,
                 latitude: client?.latitude,
                 longitude: client?.longitude
             });
@@ -72,8 +73,46 @@ export const CreateRequestModal = ({
         }
     };
 
+    // Calculate slider color based on fill level
+    const getSliderColor = () => {
+        if (fillLevel <= 30) return '#22c55e'; // green
+        if (fillLevel <= 60) return '#eab308'; // amber
+        return '#ef4444'; // red
+    };
+
     return (
         <Modal open={open} onClose={handleClose} title="Kreiraj zahtev">
+            <style>{`
+                .fill-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    background: white;
+                    border: 3px solid ${getSliderColor()};
+                    cursor: pointer;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                    transition: border-color 0.2s;
+                }
+                .fill-slider::-moz-range-thumb {
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 50%;
+                    background: white;
+                    border: 3px solid ${getSliderColor()};
+                    cursor: pointer;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+                }
+                .fill-slider::-webkit-slider-runnable-track {
+                    height: 12px;
+                    border-radius: 6px;
+                }
+                .fill-slider::-moz-range-track {
+                    height: 12px;
+                    border-radius: 6px;
+                }
+            `}</style>
             <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
@@ -87,22 +126,19 @@ export const CreateRequestModal = ({
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                         Klijent *
                     </label>
-                    <div className="relative">
-                        <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <select
-                            value={selectedClient}
-                            onChange={(e) => setSelectedClient(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
-                            required
-                        >
-                            <option value="">Izaberi klijenta...</option>
-                            {clients.map(client => (
-                                <option key={client.id} value={client.id}>
-                                    {client.name} {client.address ? `- ${client.address}` : ''}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    <select
+                        value={selectedClient}
+                        onChange={(e) => setSelectedClient(e.target.value)}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                        required
+                    >
+                        <option value="">Izaberi klijenta...</option>
+                        {clients.map(client => (
+                            <option key={client.id} value={client.id}>
+                                {client.name}{client.region_name ? ` - ${client.region_name}` : ''}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 {/* Waste Type Select */}
@@ -110,42 +146,50 @@ export const CreateRequestModal = ({
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                         Vrsta otpada *
                     </label>
-                    <div className="relative">
-                        <Package size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <select
-                            value={wasteType}
-                            onChange={(e) => setWasteType(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
-                            required
-                        >
-                            <option value="">Izaberi vrstu otpada...</option>
-                            {wasteTypes.map(type => (
-                                <option key={type.id} value={type.id}>
-                                    {type.icon} {type.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    <select
+                        value={wasteType}
+                        onChange={(e) => setWasteType(e.target.value)}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                        required
+                    >
+                        <option value="">Izaberi vrstu otpada...</option>
+                        {wasteTypes.map(type => (
+                            <option key={type.id} value={type.id}>
+                                {type.icon} {type.label}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 {/* Fill Level */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Popunjenost kontejnera: {fillLevel}%
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Popunjenost kontejnera: <span className={`font-bold ${fillLevel <= 30 ? 'text-emerald-600' : fillLevel <= 60 ? 'text-amber-600' : 'text-red-600'}`}>{fillLevel}%</span>
                     </label>
-                    <input
-                        type="range"
-                        min="10"
-                        max="100"
-                        step="10"
-                        value={fillLevel}
-                        onChange={(e) => setFillLevel(Number(e.target.value))}
-                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                    />
-                    <div className="flex justify-between text-xs text-slate-400 mt-1">
-                        <span>10%</span>
-                        <span>50%</span>
-                        <span>100%</span>
+                    <div className="relative py-2">
+                        <input
+                            type="range"
+                            min="10"
+                            max="100"
+                            step="10"
+                            value={fillLevel}
+                            onChange={(e) => setFillLevel(Number(e.target.value))}
+                            className="fill-slider w-full h-3 rounded-full cursor-pointer"
+                            style={{
+                                background: (() => {
+                                    const percent = ((fillLevel - 10) / 90) * 100;
+                                    // Gradient samo do pozicije slidera, ostatak siv
+                                    return `linear-gradient(to right, #22c55e 0%, #eab308 ${Math.min(percent, 50)}%, ${percent > 50 ? '#ef4444' : '#eab308'} ${percent}%, #e2e8f0 ${percent}%, #e2e8f0 100%)`;
+                                })(),
+                                WebkitAppearance: 'none',
+                                appearance: 'none'
+                            }}
+                        />
+                    </div>
+                    <div className="flex justify-between text-xs mt-1">
+                        <span className="text-emerald-600 font-medium">10%</span>
+                        <span className="text-amber-600 font-medium">50%</span>
+                        <span className="text-red-600 font-medium">100%</span>
                     </div>
                 </div>
 

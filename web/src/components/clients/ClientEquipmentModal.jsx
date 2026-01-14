@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Box, Loader2, CheckCircle2 } from 'lucide-react';
+import { Box, Loader2, CheckCircle2, Package } from 'lucide-react';
 import { Modal } from '../common';
 
 /**
- * Client Equipment Assignment Modal - Assign equipment, PIB and notes to client
+ * Client Equipment Assignment Modal - Assign equipment, PIB, waste types and notes to client
  */
-export const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => {
+export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSave, onClose }) => {
     const [selectedEquipment, setSelectedEquipment] = useState(client?.equipment_types || []);
+    const [selectedWasteTypes, setSelectedWasteTypes] = useState(client?.allowed_waste_types || []);
     const [note, setNote] = useState(client?.manager_note || '');
     const [pib, setPib] = useState(client?.pib || '');
     const [saving, setSaving] = useState(false);
@@ -22,10 +23,20 @@ export const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => 
         );
     };
 
+    const toggleWasteType = (wtId) => {
+        setSelectedWasteTypes(prev =>
+            prev.includes(wtId)
+                ? prev.filter(id => id !== wtId)
+                : [...prev, wtId]
+        );
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            await onSave(client.id, selectedEquipment, note, pib);
+            // Pass null if no waste types selected (means all allowed)
+            const wasteTypesToSave = selectedWasteTypes.length > 0 ? selectedWasteTypes : null;
+            await onSave(client.id, selectedEquipment, note, pib, wasteTypesToSave);
             onClose();
         } catch (err) {
             toast.error('Greška pri čuvanju: ' + err.message);
@@ -86,6 +97,45 @@ export const ClientEquipmentModal = ({ client, equipment, onSave, onClose }) => 
                             ))}
                         </div>
                     )}
+                </div>
+
+                {/* Waste Types Selection */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Dozvoljene vrste robe
+                        <span className="font-normal text-slate-400 ml-2">
+                            {selectedWasteTypes.length === 0 ? '(sve vrste)' : `(${selectedWasteTypes.length} izabrano)`}
+                        </span>
+                    </label>
+                    {wasteTypes.length === 0 ? (
+                        <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl text-center">
+                            Nema definisanih vrsta robe.
+                        </p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                            {wasteTypes.map(wt => (
+                                <label
+                                    key={wt.id}
+                                    className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${selectedWasteTypes.includes(wt.id)
+                                        ? 'border-blue-500 bg-blue-50'
+                                        : 'border-slate-200 hover:border-slate-300'
+                                        }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedWasteTypes.includes(wt.id)}
+                                        onChange={() => toggleWasteType(wt.id)}
+                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                    />
+                                    <span className="text-xl">{wt.icon}</span>
+                                    <span className="text-sm font-medium truncate">{wt.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                    <p className="mt-1.5 text-xs text-slate-500">
+                        Ako ništa nije izabrano, klijent vidi sve vrste robe
+                    </p>
                 </div>
 
                 {/* PIB */}

@@ -8,6 +8,7 @@ const WASTE_TYPES = [
 ];
 
 export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) => {
+    console.log('DEBUG NewRequestForm - wasteTypes:', wasteTypes);
     const [wasteType, setWasteType] = useState(null);
     const [fillLevel, setFillLevel] = useState(null);
     const [urgency, setUrgency] = useState(null);

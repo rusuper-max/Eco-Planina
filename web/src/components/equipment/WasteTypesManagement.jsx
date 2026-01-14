@@ -22,6 +22,9 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) =>
 
     const handleEdit = () => {
         if (editingType && editingType.label) {
+            console.log('DEBUG WasteTypesManagement handleEdit - editingType:', editingType);
+            console.log('DEBUG WasteTypesManagement handleEdit - customImage:', editingType.customImage);
+            console.log('DEBUG WasteTypesManagement handleEdit - all keys:', Object.keys(editingType));
             onEdit(editingType);
             setEditingType(null);
         }
