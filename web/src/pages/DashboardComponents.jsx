@@ -31,7 +31,7 @@ export { uploadImage } from '../utils/storage';
 export { getFillLevelColor } from '../utils/styleUtils';
 
 // Re-export common components
-export { Modal, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge } from '../components/common';
+export { Modal, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge, NotificationBell } from '../components/common';
 
 // Re-export map components
 export { MapView, DraggableMarker, LocationPicker, FitBounds } from '../components/map';
@@ -45,7 +45,8 @@ export {
     HistoryTable,
     EditProcessedRequestModal,
     RequestDetailsModal,
-    ProcessRequestModal
+    ProcessRequestModal,
+    CreateRequestModal
 } from '../components/requests';
 
 // Re-export client components

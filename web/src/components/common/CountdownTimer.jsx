@@ -14,7 +14,9 @@ export const CountdownTimer = ({ createdAt, urgency }) => {
     }, []);
 
     const rem = getRemainingTime(createdAt, urgency);
-    return <span className={`text-sm font-mono font-bold ${rem.color}`}>⏱ {rem.text}</span>;
+
+    // Jednostavan prikaz bez emoji-ja
+    return <span className={rem.color}>{rem.text}</span>;
 };
 
 export default CountdownTimer;

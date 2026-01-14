@@ -46,6 +46,7 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                 (r.waste_type || '').toLowerCase().includes(query) ||
                 (r.note || '').toLowerCase().includes(query) ||
                 (r.processing_note || '').toLowerCase().includes(query) ||
+                (r.request_code || '').toLowerCase().includes(query) ||
                 new Date(r.processed_at).toLocaleDateString('sr-RS').includes(query) ||
                 new Date(r.created_at).toLocaleDateString('sr-RS').includes(query)
             );
@@ -115,7 +116,14 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                                         {wasteTypes.find(w => w.id === r.waste_type)?.icon || '📦'}
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-slate-800 text-lg">{r.waste_label || r.waste_type}</h4>
+                                        <div className="flex items-center gap-2">
+                                            {r.request_code && (
+                                                <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-xs font-mono rounded font-medium">
+                                                    {r.request_code}
+                                                </span>
+                                            )}
+                                            <h4 className="font-semibold text-slate-800 text-lg">{r.waste_label || r.waste_type}</h4>
+                                        </div>
                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-slate-500">
                                             <span className="flex items-center gap-1">
                                                 <Send size={14} className="text-blue-500" />

@@ -7,3 +7,4 @@ export { HistoryTable } from './HistoryTable';
 export { EditProcessedRequestModal } from './EditProcessedRequestModal';
 export { RequestDetailsModal } from './RequestDetailsModal';
 export { ProcessRequestModal } from './ProcessRequestModal';
+export { CreateRequestModal } from './CreateRequestModal';

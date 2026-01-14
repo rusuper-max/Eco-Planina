@@ -10,7 +10,7 @@ import {
     MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap,
     L,
     // Icons
-    LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
+    LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
     Lock, Unlock, AlertTriangle, LogIn, Network,
@@ -19,9 +19,9 @@ import {
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
     ImageUploader, StatCard, SidebarItem, Modal, EmptyState,
     NewRequestForm, ClientRequestsView, ClientHistoryView, ManagerRequestsTable,
-    PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement,
+    PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement, NotificationBell,
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
-    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal,
+    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal, CreateRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage,
@@ -34,7 +34,7 @@ import DriverManagement from './DriverManagement';
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients } = useData();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -54,17 +54,14 @@ export default function Dashboard() {
     const [processingRequest, setProcessingRequest] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [editingClientLocation, setEditingClientLocation] = useState(null);
-    const [showNotifications, setShowNotifications] = useState(false);
     const [showChatDropdown, setShowChatDropdown] = useState(false);
-    const [notifications, setNotifications] = useState([]);
-    const [prevRequestCount, setPrevRequestCount] = useState(0);
-    const [prevClientCount, setPrevClientCount] = useState(0);
     const [equipment, setEquipment] = useState([]);
     const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
     const [processedRequests, setProcessedRequests] = useState([]);
     const [editingClientEquipment, setEditingClientEquipment] = useState(null);
     const [showProfileMenu, setShowProfileMenu] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showCreateRequestModal, setShowCreateRequestModal] = useState(false);
     const [language, setLanguage] = useState('sr');
     const [editingProfile, setEditingProfile] = useState({ name: '', phone: '', companyName: '', address: '', latitude: null, longitude: null });
     const [urgencyFilter, setUrgencyFilter] = useState('all');
@@ -145,31 +142,6 @@ export default function Dashboard() {
             }
         }
     }, [activeTab, userRole]);
-
-    // Track new requests/clients for notifications
-    useEffect(() => {
-        if (userRole === 'manager' && pickupRequests) {
-            const currentCount = pickupRequests.filter(r => r.status === 'pending').length;
-            if (prevRequestCount > 0 && currentCount > prevRequestCount) {
-                const newCount = currentCount - prevRequestCount;
-                setNotifications(prev => [{ id: Date.now(), type: 'request', text: `${newCount} novi zahtev${newCount > 1 ? 'a' : ''}`, time: new Date() }, ...prev.slice(0, 9)]);
-            }
-            setPrevRequestCount(currentCount);
-        }
-    }, [pickupRequests, userRole]);
-
-    useEffect(() => {
-        if (userRole === 'manager' && clients.length > 0) {
-            if (prevClientCount > 0 && clients.length > prevClientCount) {
-                const newClient = clients[0];
-                setNotifications(prev => [{ id: Date.now(), type: 'client', text: `Novi klijent: ${newClient.name}`, time: new Date() }, ...prev.slice(0, 9)]);
-            }
-            setPrevClientCount(clients.length);
-        }
-    }, [clients, userRole]);
-
-    const clearNotification = (id) => setNotifications(prev => prev.filter(n => n.id !== id));
-    const clearAllNotifications = () => setNotifications([]);
 
     // NOTE: Real-time countdown moved to CountdownTimer component in ManagerRequestsTable
     // to avoid re-rendering entire Dashboard every second
@@ -691,7 +663,20 @@ export default function Dashboard() {
             );
         }
         if (userRole === 'manager') {
-            if (activeTab === 'requests') return <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} />;
+            if (activeTab === 'requests') return (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-bold text-slate-800">Zahtevi na čekanju</h2>
+                        <button
+                            onClick={() => setShowCreateRequestModal(true)}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 flex items-center gap-2 font-medium"
+                        >
+                            <Plus size={18} /> Kreiraj zahtev
+                        </button>
+                    </div>
+                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} />
+                </div>
+            );
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
             if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onEdit={async (id, updates) => {
                 try {
@@ -963,49 +948,7 @@ export default function Dashboard() {
                             </div>
                         )}
                         {/* Notifications */}
-                        <div className="relative">
-                            <button onClick={() => { setShowNotifications(!showNotifications); setShowChatDropdown(false); setShowProfileMenu(false); }} className="relative p-2.5 text-slate-500 hover:bg-slate-50 rounded-full">
-                                <Bell size={20} />
-                                {(notifications.length > 0 || pending.some(r => getCurrentUrgency(r.created_at, r.urgency) === '24h')) && <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" />}
-                            </button>
-                            {showNotifications && (
-                                <>
-                                    <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                                    <div className="fixed sm:absolute left-4 right-4 sm:left-auto sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-auto sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden max-w-[calc(100vw-2rem)]">
-                                        <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
-                                            <h3 className="font-bold text-slate-800">{language === 'sr' ? 'Obaveštenja' : 'Notifications'}</h3>
-                                            {notifications.length > 0 && <button onClick={clearAllNotifications} className="text-xs text-emerald-600 hover:text-emerald-700">{language === 'sr' ? 'Obriši sve' : 'Clear all'}</button>}
-                                        </div>
-                                        <div className="max-h-80 overflow-y-auto">
-                                            {userRole === 'manager' && pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length > 0 && (
-                                                <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-start gap-3">
-                                                    <AlertCircle size={18} className="text-red-500 mt-0.5" />
-                                                    <div>
-                                                        <p className="text-sm font-medium text-red-700">{pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length} {language === 'sr' ? 'hitnih zahteva' : 'urgent requests'}</p>
-                                                        <p className="text-xs text-red-500">{language === 'sr' ? 'Potrebna hitna akcija' : 'Urgent action needed'}</p>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {notifications.length > 0 ? notifications.map(n => (
-                                                <div key={n.id} className="px-4 py-3 border-b border-slate-50 hover:bg-slate-50 flex items-start gap-3">
-                                                    {n.type === 'request' ? <Truck size={18} className="text-emerald-500 mt-0.5" /> : <Users size={18} className="text-blue-500 mt-0.5" />}
-                                                    <div className="flex-1">
-                                                        <p className="text-sm text-slate-700">{n.text}</p>
-                                                        <p className="text-xs text-slate-400">{new Date(n.time).toLocaleTimeString('sr-RS')}</p>
-                                                    </div>
-                                                    <button onClick={() => clearNotification(n.id)} className="p-1 text-slate-300 hover:text-slate-500"><X size={14} /></button>
-                                                </div>
-                                            )) : pending.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length === 0 && (
-                                                <div className="px-4 py-8 text-center text-slate-400">
-                                                    <Bell size={24} className="mx-auto mb-2 opacity-50" />
-                                                    <p className="text-sm">{language === 'sr' ? 'Nema novih obaveštenja' : 'No new notifications'}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
+                        <NotificationBell />
                         {/* Profile Dropdown */}
                         <div className="relative">
                             <button
@@ -1078,6 +1021,17 @@ export default function Dashboard() {
             </div>
             <RequestDetailsModal request={selectedRequest} onClose={() => setSelectedRequest(null)} />
             <ProcessRequestModal request={processingRequest} onProcess={handleConfirmProcess} onClose={() => setProcessingRequest(null)} />
+            <CreateRequestModal
+                open={showCreateRequestModal}
+                onClose={() => setShowCreateRequestModal(false)}
+                clients={clients}
+                wasteTypes={wasteTypes}
+                onSubmit={async (data) => {
+                    await createRequestForClient(data);
+                    toast.success('Zahtev uspešno kreiran');
+                    // Requests will auto-refresh via realtime subscription
+                }}
+            />
             <ClientDetailsModal client={selectedClient} equipment={equipment} onClose={() => setSelectedClient(null)} />
             {editingClientLocation && (
                 <Modal open={!!editingClientLocation} onClose={() => setEditingClientLocation(null)} title="Podesi lokaciju klijenta">

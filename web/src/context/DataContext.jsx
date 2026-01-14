@@ -292,11 +292,10 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Generate short request code (e.g., "REQ-A3X7")
+    // Generate short request code (e.g., "A3X7KP")
     const generateRequestCode = () => {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid confusing chars like 0/O, 1/I
-        const code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-        return `REQ-${code}`;
+        return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     };
 
     const addPickupRequest = async (requestData) => {
@@ -318,6 +317,48 @@ export const DataProvider = ({ children }) => {
                 ...rest,
                 status: 'pending'
             }]).select().single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Manager creates request on behalf of a client (phone call scenario)
+    const createRequestForClient = async (requestData) => {
+        if (!user || !companyCode) throw new Error('Niste prijavljeni ili nemate firmu');
+        if (user.role !== 'manager' && user.role !== 'company_admin') {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+        try {
+            const { userId, clientName, clientAddress, wasteType, wasteLabel, fillLevel, urgency, note, latitude, longitude } = requestData;
+            const requestCode = generateRequestCode();
+
+            // Get client's region_id
+            const { data: clientData } = await supabase
+                .from('users')
+                .select('region_id')
+                .eq('id', userId)
+                .single();
+
+            const { data, error } = await supabase.from('pickup_requests').insert([{
+                user_id: userId,
+                company_code: companyCode,
+                client_name: clientName,
+                client_address: clientAddress,
+                fill_level: fillLevel,
+                waste_type: wasteType,
+                waste_label: wasteLabel,
+                request_code: requestCode,
+                urgency: urgency,
+                note: note,
+                latitude: latitude,
+                longitude: longitude,
+                region_id: clientData?.region_id || null,
+                status: 'pending',
+                created_by_manager: user.id // Track who created it
+            }]).select().single();
+
             if (error) throw error;
             return data;
         } catch (error) {
@@ -694,6 +735,7 @@ export const DataProvider = ({ children }) => {
         fetchProcessedRequests,
         updateClientDetails,
         addPickupRequest,
+        createRequestForClient,
         fetchPickupRequests,
         deleteClient,
         // Region functions

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, Trash2 } from 'lucide-react';
-import { EmptyState, FillLevelBar, RequestStatusBadge } from '../common';
+import { EmptyState, FillLevelBar, RequestStatusBadge, CountdownTimer } from '../common';
 import { getRemainingTime, getCurrentUrgency } from '../../utils/timeUtils';
 
 const DEFAULT_WASTE_TYPES = [
@@ -150,6 +150,7 @@ export const ManagerRequestsTable = ({
                 <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500 border-b">
                         <tr>
+                            <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
                             <th className="px-3 md:px-4 py-3 text-left">
                                 <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     Klijent <SortIcon column="client" />
@@ -183,7 +184,7 @@ export const ManagerRequestsTable = ({
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map(req => {
                             const rem = getRemainingTime(req.created_at, req.urgency);
                             const assignment = assignments.find(a => a.request_id === req.id);
@@ -191,6 +192,11 @@ export const ManagerRequestsTable = ({
                             const driverName = assignment?.driver?.name;
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
+                                    <td className="px-2 md:px-3 py-3">
+                                        <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                            {req.request_code || '-'}
+                                        </span>
+                                    </td>
                                     <td className="px-3 md:px-4 py-3">
                                         <button
                                             onClick={() => onClientClick?.(req.user_id)}
@@ -198,9 +204,6 @@ export const ManagerRequestsTable = ({
                                         >
                                             {req.client_name}
                                         </button>
-                                        {req.request_code && (
-                                            <p className="text-xs text-slate-400 font-mono mt-0.5">{req.request_code}</p>
-                                        )}
                                     </td>
                                     <td className="px-3 md:px-4 py-3">
                                         <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
@@ -212,7 +215,11 @@ export const ManagerRequestsTable = ({
                                     <td className="hidden md:table-cell px-4 py-3">
                                         <FillLevelBar fillLevel={req.fill_level} />
                                     </td>
-                                    <td className="px-3 md:px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span></td>
+                                    <td className="px-3 md:px-4 py-3">
+                                        <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${rem.bg}`}>
+                                            <CountdownTimer createdAt={req.created_at} urgency={req.urgency} />
+                                        </span>
+                                    </td>
                                     <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
                                     <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
                                         <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>

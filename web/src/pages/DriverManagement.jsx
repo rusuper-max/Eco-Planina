@@ -111,15 +111,17 @@ const RequestRow = ({ request, isSelected, onToggle, wasteTypes, assignment, dri
                     onClick={(e) => e.stopPropagation()}
                 />
             </td>
+            <td className="px-2 py-3">
+                <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                    {request.request_code || '-'}
+                </span>
+            </td>
             <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
                     <span className="text-xl">{wasteIcon}</span>
                     <div>
                         <p className="font-medium text-slate-800">{request.client_name}</p>
                         <p className="text-sm text-slate-500">{request.waste_label}</p>
-                        {request.request_code && (
-                            <p className="text-xs text-slate-400 font-mono">{request.request_code}</p>
-                        )}
                     </div>
                 </div>
             </td>
@@ -130,8 +132,8 @@ const RequestRow = ({ request, isSelected, onToggle, wasteTypes, assignment, dri
                 <FillLevelBar fillLevel={request.fill_level} />
             </td>
             <td className="px-4 py-3">
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg} ${remaining.color}`}>
-                    {remaining.text}
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg}`}>
+                    <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
                 </span>
             </td>
             <td className="px-4 py-3 text-sm text-slate-500 max-w-[200px] truncate">
@@ -685,6 +687,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                         className="w-5 h-5 rounded border-slate-300 text-emerald-600"
                                     />
                                 </th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-slate-600">ID</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Klijent / Vrsta</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Status</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">%</th>
@@ -696,7 +699,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                         <tbody className="divide-y">
                             {filteredRequests.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                                    <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                                         <CheckCircle2 size={32} className="mx-auto mb-2 opacity-50" />
                                         <p>Nema zahteva za prikaz</p>
                                     </td>

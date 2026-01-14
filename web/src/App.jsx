@@ -6,6 +6,7 @@ import {
   ChatProvider,
   CompanyProvider,
   AdminProvider,
+  NotificationProvider,
   useAuthOnly as useAuth
 } from './context';
 import LoginPage from './pages/LoginPage';
@@ -67,11 +68,12 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <DataProvider>
-          <ChatProvider>
-            <CompanyProvider>
-              <AdminProvider>
-                <AppRoutes />
-                <Toaster
+          <NotificationProvider>
+            <ChatProvider>
+              <CompanyProvider>
+                <AdminProvider>
+                  <AppRoutes />
+                  <Toaster
                   position="top-center"
                   toastOptions={{
                     duration: 3000,
@@ -88,9 +90,10 @@ export default function App() {
                     },
                   }}
                 />
-              </AdminProvider>
-            </CompanyProvider>
-          </ChatProvider>
+                </AdminProvider>
+              </CompanyProvider>
+            </ChatProvider>
+          </NotificationProvider>
         </DataProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -170,7 +170,8 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             const query = searchQuery.toLowerCase();
             const matchesName = req.client_name?.toLowerCase().includes(query);
             const matchesType = req.waste_label?.toLowerCase().includes(query);
-            if (!matchesName && !matchesType) return false;
+            const matchesCode = req.request_code?.toLowerCase().includes(query);
+            if (!matchesName && !matchesType && !matchesCode) return false;
         }
         if (filterType !== 'all' && req.waste_type !== filterType) return false;
         return true;
@@ -254,6 +255,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                 <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-slate-500 border-b">
                         <tr>
+                            <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
                             <th className="px-3 md:px-4 py-3 text-left">
                                 <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
                                     Klijent <SortIcon column="client" />
@@ -278,13 +280,18 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={showDetailedView ? 8 : 7} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={showDetailedView ? 9 : 8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => {
                             const assignment = driverAssignments[req.request_id];
                             const isExpanded = expandedRow === req.id;
                             return (
                             <React.Fragment key={req.id || idx}>
                             <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                                <td className="px-2 md:px-3 py-3">
+                                    <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {req.request_code || '-'}
+                                    </span>
+                                </td>
                                 <td className="px-3 md:px-4 py-3">
                                     <div className="font-medium text-sm">{req.client_name}</div>
                                     <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
