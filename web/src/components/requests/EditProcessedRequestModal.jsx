@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Scale, Image, FileText, X, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, Truck } from 'lucide-react';
 import { Modal } from '../common';
 import { uploadImage } from '../../utils/storage';
 
@@ -13,12 +13,13 @@ const DEFAULT_WASTE_TYPES = [
 /**
  * Edit Processed Request Modal (for adding proof/weight later)
  */
-export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onSave, onClose }) => {
+export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onSave, onClose, drivers = [], currentDriverId = null, onAssignDriver }) => {
     const [proofFile, setProofFile] = useState(request?.proof_image_url || null);
     const [proofType, setProofType] = useState(request?.proof_image_url?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image');
     const [weight, setWeight] = useState(request?.weight?.toString() || '');
     const [weightUnit, setWeightUnit] = useState(request?.weight_unit || 'kg');
     const [note, setNote] = useState(request?.processing_note || '');
+    const [selectedDriverId, setSelectedDriverId] = useState(currentDriverId || '');
     const [uploading, setUploading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -61,6 +62,13 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
                 weight_unit: weight ? weightUnit : null
             };
             await onSave(updates);
+
+            // If driver was changed and we have the handler
+            if (onAssignDriver && selectedDriverId !== (currentDriverId || '')) {
+                if (selectedDriverId) {
+                    await onAssignDriver(request.request_id || request.id, selectedDriverId);
+                }
+            }
         } catch (err) {
             toast.error('Greška: ' + err.message);
         } finally {
@@ -71,7 +79,8 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
     const hasChanges = proofFile !== request?.proof_image_url ||
         note !== (request?.processing_note || '') ||
         weight !== (request?.weight?.toString() || '') ||
-        weightUnit !== (request?.weight_unit || 'kg');
+        weightUnit !== (request?.weight_unit || 'kg') ||
+        selectedDriverId !== (currentDriverId || '');
 
     return (
         <Modal open={!!request} onClose={onClose} title="Dopuni podatke o obradi">
@@ -111,6 +120,33 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
                         </select>
                     </div>
                 </div>
+
+                {/* Driver selection (retroactive assignment) */}
+                {drivers.length > 0 && (
+                    <div className="p-4 bg-purple-50 rounded-xl">
+                        <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
+                            <Truck size={18} className="text-purple-600" />
+                            Vozač koji je obradio zahtev
+                        </p>
+                        <select
+                            value={selectedDriverId}
+                            onChange={(e) => setSelectedDriverId(e.target.value)}
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm bg-white"
+                        >
+                            <option value="">Bez vozača / Nepoznato</option>
+                            {drivers.map(driver => (
+                                <option key={driver.id} value={driver.id}>
+                                    {driver.name} {driver.phone ? `(${driver.phone})` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        {!currentDriverId && selectedDriverId && (
+                            <p className="text-xs text-purple-600 mt-2">
+                                Vozač će biti naknadno evidentiran za ovaj zahtev
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 {/* Proof of Service photo/PDF */}
                 <div className="border-2 border-dashed border-slate-200 rounded-xl p-4">

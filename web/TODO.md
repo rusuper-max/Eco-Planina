@@ -84,10 +84,39 @@ src/context/
 - Implementirati Firebase Cloud Messaging za push
 - Offline queue za vozace (kada nema signala)
 
-### 4. Graficki izvestaji
-- Dashboard sa grafovima za menadzere
-- Export u PDF/Excel
-- Mesecni/nedeljni sumarni izvestaji
+### 4. ~~Graficki izvestaji~~ ✅ ZAVRŠENO!
+- ~~Dashboard sa grafovima za menadzere~~ ✅
+- ~~Export u PDF/Excel~~ ✅
+- ~~Mesecni/nedeljni sumarni izvestaji~~ ✅
+
+**Implementirano:**
+- AnalyticsPage sa pie/bar/line graficima
+- ExcelJS biblioteka za profesionalni .xlsx export
+- 7 sheet-ova: Sumarno, Po vrsti, Po klijentu, Dnevni trend, Detaljno, Svi zahtevi, Grafici
+- Grafici se eksportuju kao PNG slike u Excel
+- ManagerAnalyticsPage - pracenje ucinaka menadzera
+- PrintExport koristi ExcelJS za sve tipove podataka
+
+---
+
+## Nove funkcionalnosti (Januar 2026)
+
+### 5. Region sistem ✅
+- Kreiranje/editovanje/brisanje filijala
+- Vizuelni pregled (node editor)
+- Batch dodeljivanje korisnika
+- Auto-assign pri registraciji
+- Zastita od brisanja poslednje filijale
+
+### 6. Manager Analytics ✅
+- Pracenje obrade po menadzeru
+- processed_by_id/name u processed_requests
+- Timeline prikaz sa vozacem i menadzerom
+
+### 7. UI poboljsanja ✅
+- Background slike na auth i client panelu
+- Siri Excel export modal na desktopu
+- Horizontalni layout filtera
 
 ---
 

@@ -160,6 +160,8 @@ export const DataProvider = ({ children }) => {
                 proof_image_url: proofImageUrl,
                 request_id: request.id, // Store original request ID for linking with driver history
                 region_id: request.region_id, // Copy region from pickup_request for RLS filtering
+                processed_by_id: user?.id || null, // Track who processed the request
+                processed_by_name: user?.name || null, // Store name for easier display
             };
 
             if (weightData) {
@@ -222,13 +224,21 @@ export const DataProvider = ({ children }) => {
         console.log('DEBUG fetchCompanyClients, companyCode:', companyCode);
         if (!companyCode) return [];
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('users')
                 .select('*')
                 .eq('company_code', companyCode)
                 .eq('role', 'client')
                 .is('deleted_at', null)
                 .order('name');
+
+            // Menadžeri vide samo klijente iz svoje filijale
+            // Company admin, admin i developer vide sve klijente
+            if (user?.role === 'manager' && user?.region_id) {
+                query = query.eq('region_id', user.region_id);
+            }
+
+            const { data, error } = await query;
             console.log('DEBUG fetchCompanyClients result:', { count: data?.length, error });
             if (error) throw error;
             return data || [];
@@ -260,12 +270,20 @@ export const DataProvider = ({ children }) => {
     const fetchProcessedRequests = async () => {
         if (!companyCode) return [];
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('processed_requests')
                 .select('*')
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('processed_at', { ascending: false });
+
+            // Menadžeri vide samo svoju filijalu
+            // Company admin, admin i developer vide sve filijale
+            if (user?.role === 'manager' && user?.region_id) {
+                query = query.eq('region_id', user.region_id);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
             return data || [];
         } catch (error) {

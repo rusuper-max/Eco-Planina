@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin } from 'lucide-react';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
 import { supabase } from '../../config/supabase';
@@ -15,7 +15,7 @@ const DEFAULT_WASTE_TYPES = [
  * History Table (Processed/Rejected Requests)
  * Enhanced version for company_admin with driver/manager info and timeline
  */
-export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false }) => {
+export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false, drivers = [], onAssignDriverToProcessed }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
@@ -90,10 +90,40 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
 
     // Timeline component for a single request
     const TimelineView = ({ assignment, request }) => {
-        if (!assignment) {
+        if (!assignment && !request.processed_by_name) {
             return (
                 <div className="p-4 bg-slate-50 rounded-xl text-center text-slate-500 text-sm">
-                    Nema podataka o vozaču za ovaj zahtev
+                    Nema dodatnih podataka za ovaj zahtev
+                </div>
+            );
+        }
+
+        // Show processed by info even if no driver assignment
+        if (!assignment) {
+            return (
+                <div className="p-4 bg-slate-50 rounded-xl">
+                    {request.processed_by_name && (
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <UserCheck className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400">Obradio menadžer</p>
+                                <p className="font-medium text-slate-800">{request.processed_by_name}</p>
+                            </div>
+                            {request.processed_at && (
+                                <div className="ml-auto text-right">
+                                    <p className="text-xs text-slate-400">Vreme obrade</p>
+                                    <p className="text-sm text-slate-600">
+                                        {new Date(request.processed_at).toLocaleString('sr-RS', {
+                                            day: 'numeric', month: 'numeric', year: 'numeric',
+                                            hour: '2-digit', minute: '2-digit'
+                                        })}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -109,14 +139,30 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
 
         return (
             <div className="p-4 bg-slate-50 rounded-xl">
-                <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-200">
+                <div className="flex flex-wrap items-center gap-3 mb-4 pb-3 border-b border-slate-200">
+                    {/* Driver info */}
                     <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
                         <Truck className="w-5 h-5 text-amber-600" />
                     </div>
                     <div>
+                        <p className="text-xs text-slate-400">Vozač</p>
                         <p className="font-medium text-slate-800">{assignment.driver?.name || 'Nepoznat vozač'}</p>
-                        <p className="text-sm text-slate-500">{assignment.driver?.phone || '-'}</p>
                     </div>
+
+                    {/* Processed by info */}
+                    {request.processed_by_name && (
+                        <>
+                            <div className="hidden sm:block w-px h-10 bg-slate-200 mx-2" />
+                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <UserCheck className="w-5 h-5 text-indigo-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400">Obradio</p>
+                                <p className="font-medium text-slate-800">{request.processed_by_name}</p>
+                            </div>
+                        </>
+                    )}
+
                     {request.created_at && request.processed_at && (
                         <div className="ml-auto text-right">
                             <p className="text-xs text-slate-400">Ukupno trajanje</p>
@@ -272,6 +318,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                     Obrađeno <SortIcon column="processed_at" />
                                 </button>
                             </th>
+                            {showDetailedView && <th className="hidden lg:table-cell px-4 py-3 text-left">Obradio</th>}
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
                             <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
                             {showDetailedView && <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>}
@@ -280,7 +327,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={showDetailedView ? 9 : 8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={showDetailedView ? 10 : 8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => {
                             const assignment = driverAssignments[req.request_id];
                             const isExpanded = expandedRow === req.id;
@@ -312,6 +359,21 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                         <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
                                     </div>
                                 </td>
+                                {/* Processed by column for Company Admin */}
+                                {showDetailedView && (
+                                    <td className="hidden lg:table-cell px-4 py-3">
+                                        {req.processed_by_name ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center">
+                                                    <UserCheck size={14} className="text-indigo-600" />
+                                                </div>
+                                                <span className="text-sm text-slate-700">{req.processed_by_name}</span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-slate-400">-</span>
+                                        )}
+                                    </td>
+                                )}
                                 <td className="hidden sm:table-cell px-4 py-3 text-center">
                                     {req.weight ? (
                                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
@@ -395,7 +457,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                             {/* Expanded row with timeline */}
                             {showDetailedView && isExpanded && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-3 bg-white border-t">
+                                    <td colSpan={10} className="px-4 py-3 bg-white border-t">
                                         <TimelineView assignment={assignment} request={req} />
                                     </td>
                                 </tr>
@@ -474,6 +536,9 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                         setEditingRequest(null);
                     }}
                     onClose={() => setEditingRequest(null)}
+                    drivers={drivers}
+                    currentDriverId={driverAssignments[editingRequest.request_id]?.driver?.id || null}
+                    onAssignDriver={onAssignDriverToProcessed}
                 />
             )}
 

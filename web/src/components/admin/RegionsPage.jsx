@@ -110,6 +110,10 @@ export const RegionsPage = () => {
             if (region?.userCount > 0) {
                 throw new Error('Nije moguće obrisati filijalu koja ima korisnike');
             }
+            // Prevent deletion of last region
+            if (regions.length <= 1) {
+                throw new Error('Nije moguće obrisati poslednju filijalu. Kompanija mora imati bar jednu filijalu.');
+            }
             await deleteRegion(id);
             toast.success('Filijala obrisana');
             setDeleteConfirm(null);
@@ -192,6 +196,7 @@ export const RegionsPage = () => {
                     onSearchChange={setSearchQuery}
                     onEdit={setEditingRegion}
                     onDelete={setDeleteConfirm}
+                    totalRegions={regions.length}
                 />
             )}
 
@@ -240,7 +245,7 @@ export const RegionsPage = () => {
 /**
  * Regions List Tab - Grid view of all regions
  */
-const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete }) => {
+const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete, totalRegions }) => {
     if (loading) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -301,12 +306,18 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                     <button
                                         onClick={() => onDelete(region)}
                                         className={`p-2 rounded-lg transition-colors ${
-                                            region.userCount > 0
+                                            region.userCount > 0 || totalRegions <= 1
                                                 ? 'text-slate-300 cursor-not-allowed'
                                                 : 'text-red-500 hover:bg-red-50'
                                         }`}
-                                        title={region.userCount > 0 ? 'Ne može se obrisati - ima korisnike' : 'Obriši'}
-                                        disabled={region.userCount > 0}
+                                        title={
+                                            totalRegions <= 1
+                                                ? 'Ne može se obrisati poslednja filijala'
+                                                : region.userCount > 0
+                                                    ? 'Ne može se obrisati - ima korisnike'
+                                                    : 'Obriši'
+                                        }
+                                        disabled={region.userCount > 0 || totalRegions <= 1}
                                     >
                                         <Trash2 size={18} />
                                     </button>

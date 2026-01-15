@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Printer, Download, FileSpreadsheet, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Truck, History, FileText } from 'lucide-react';
+import { Printer, Download, FileSpreadsheet, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Truck, History, FileText, Loader2 } from 'lucide-react';
 import { FillLevelBar, CountdownTimer } from '../common';
 import { getRemainingTime } from '../../utils/timeUtils';
 
@@ -21,6 +21,7 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
     const [filteredData, setFilteredData] = useState([]);
     const [sortBy, setSortBy] = useState('name'); // name, remaining, date, processed
     const [sortDir, setSortDir] = useState('asc');
+    const [isExporting, setIsExporting] = useState(false);
 
     // Reset sort when changing data type
     useEffect(() => {
@@ -172,66 +173,124 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
         printWindow.print();
     };
 
-    const handleExportExcel = () => {
-        const fields = selectedFields[dataType];
-        let csv = '\uFEFF'; // BOM for UTF-8
+    const handleExportExcel = async () => {
+        if (isExporting || filteredData.length === 0) return;
+        setIsExporting(true);
 
-        // Headers
-        const headers = [];
-        if (dataType === 'clients') {
-            if (fields.name) headers.push('Ime');
-            if (fields.phone) headers.push('Telefon');
-            if (fields.address) headers.push('Adresa');
-            if (fields.equipment) headers.push('Oprema');
-        } else if (dataType === 'requests') {
-            if (fields.client) headers.push('Klijent');
-            if (fields.type) headers.push('Tip');
-            if (fields.urgency) headers.push('Preostalo');
-            if (fields.date) headers.push('Datum');
-            if (fields.fillLevel) headers.push('Popunjenost');
-            if (fields.note) headers.push('Napomena');
-        } else {
-            if (fields.client) headers.push('Klijent');
-            if (fields.type) headers.push('Tip');
-            if (fields.created) headers.push('Podneto');
-            if (fields.processed) headers.push('Obrađeno');
-        }
-        csv += headers.join(';') + '\n';
+        try {
+            // Dynamic import ExcelJS
+            const ExcelJS = (await import('exceljs')).default;
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'EcoMountainTracking';
+            workbook.created = new Date();
 
-        // Rows
-        filteredData.forEach(item => {
-            const row = [];
+            const fields = selectedFields[dataType];
+            const sheetName = dataType === 'clients' ? 'Klijenti' : dataType === 'requests' ? 'Aktivni zahtevi' : 'Istorija';
+            const worksheet = workbook.addWorksheet(sheetName);
+
+            // Define columns based on dataType and selected fields
+            const columns = [];
             if (dataType === 'clients') {
-                if (fields.name) row.push(item.name || '');
-                if (fields.phone) row.push(`="${item.phone || ''}"`); // Force text format to prevent scientific notation
-                if (fields.address) row.push(`"${(item.address || '').replace(/"/g, '""')}"`);
-                if (fields.equipment) row.push(`${item.equipment_types?.length || 0} kom`);
+                if (fields.name) columns.push({ header: 'Ime', key: 'name', width: 25 });
+                if (fields.phone) columns.push({ header: 'Telefon', key: 'phone', width: 18 });
+                if (fields.address) columns.push({ header: 'Adresa', key: 'address', width: 35 });
+                if (fields.equipment) columns.push({ header: 'Oprema', key: 'equipment', width: 12 });
             } else if (dataType === 'requests') {
-                if (fields.client) row.push(item.client_name || '');
-                if (fields.type) row.push(item.waste_label || '');
-                if (fields.urgency) {
-                    const remaining = getRemainingTime(item.created_at, item.urgency);
-                    row.push(remaining.text);
-                }
-                if (fields.date) row.push(new Date(item.created_at).toLocaleDateString('sr-RS'));
-                if (fields.fillLevel) row.push(`${item.fill_level}%`);
-                if (fields.note) row.push(`"${(item.note || '').replace(/"/g, '""')}"`);
+                if (fields.client) columns.push({ header: 'Klijent', key: 'client', width: 25 });
+                if (fields.type) columns.push({ header: 'Tip otpada', key: 'type', width: 18 });
+                if (fields.urgency) columns.push({ header: 'Preostalo', key: 'urgency', width: 15 });
+                if (fields.date) columns.push({ header: 'Datum', key: 'date', width: 14 });
+                if (fields.fillLevel) columns.push({ header: 'Popunjenost', key: 'fillLevel', width: 14 });
+                if (fields.note) columns.push({ header: 'Napomena', key: 'note', width: 30 });
             } else {
-                if (fields.client) row.push(item.client_name || '');
-                if (fields.type) row.push(item.waste_label || '');
-                if (fields.created) row.push(new Date(item.created_at).toLocaleDateString('sr-RS'));
-                if (fields.processed) row.push(new Date(item.processed_at).toLocaleDateString('sr-RS'));
+                if (fields.client) columns.push({ header: 'Klijent', key: 'client', width: 25 });
+                if (fields.type) columns.push({ header: 'Tip otpada', key: 'type', width: 18 });
+                if (fields.created) columns.push({ header: 'Podneto', key: 'created', width: 14 });
+                if (fields.processed) columns.push({ header: 'Obrađeno', key: 'processed', width: 14 });
             }
-            csv += row.join(';') + '\n';
-        });
+            worksheet.columns = columns;
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `ecoplanina_${dataType}_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
+            // Style header row
+            const headerRow = worksheet.getRow(1);
+            headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            headerRow.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF059669' } // Emerald-600
+            };
+            headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+            headerRow.height = 24;
+
+            // Add data rows
+            filteredData.forEach((item, index) => {
+                const rowData = {};
+                if (dataType === 'clients') {
+                    if (fields.name) rowData.name = item.name || '';
+                    if (fields.phone) rowData.phone = item.phone || '';
+                    if (fields.address) rowData.address = item.address || '';
+                    if (fields.equipment) rowData.equipment = `${item.equipment_types?.length || 0} kom`;
+                } else if (dataType === 'requests') {
+                    if (fields.client) rowData.client = item.client_name || '';
+                    if (fields.type) rowData.type = item.waste_label || '';
+                    if (fields.urgency) {
+                        const remaining = getRemainingTime(item.created_at, item.urgency);
+                        rowData.urgency = remaining.text;
+                    }
+                    if (fields.date) rowData.date = new Date(item.created_at).toLocaleDateString('sr-RS');
+                    if (fields.fillLevel) rowData.fillLevel = `${item.fill_level}%`;
+                    if (fields.note) rowData.note = item.note || '';
+                } else {
+                    if (fields.client) rowData.client = item.client_name || '';
+                    if (fields.type) rowData.type = item.waste_label || '';
+                    if (fields.created) rowData.created = new Date(item.created_at).toLocaleDateString('sr-RS');
+                    if (fields.processed) rowData.processed = new Date(item.processed_at).toLocaleDateString('sr-RS');
+                }
+
+                const row = worksheet.addRow(rowData);
+                row.alignment = { vertical: 'middle' };
+
+                // Alternate row colors
+                if (index % 2 === 1) {
+                    row.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFF8FAFC' } // Slate-50
+                    };
+                }
+            });
+
+            // Add borders to all cells
+            worksheet.eachRow((row, rowNum) => {
+                row.eachCell((cell) => {
+                    cell.border = {
+                        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+                        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+                    };
+                });
+            });
+
+            // Add footer with metadata
+            const footerRow = worksheet.addRow([]);
+            const metaRow = worksheet.addRow([`Generisano: ${new Date().toLocaleString('sr-RS')} | Ukupno: ${filteredData.length} stavki`]);
+            metaRow.font = { italic: true, color: { argb: 'FF94A3B8' } };
+
+            // Generate and download file
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ecoplanina_${dataType}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Excel export error:', error);
+            alert('Greška pri eksportovanju. Pokušajte ponovo.');
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const fields = selectedFields[dataType];
@@ -336,11 +395,11 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
                     <div className="flex gap-2">
                         <button
                             onClick={handleExportExcel}
-                            disabled={filteredData.length === 0}
+                            disabled={filteredData.length === 0 || isExporting}
                             className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-green-700 disabled:opacity-50"
                         >
-                            <FileSpreadsheet size={18} />
-                            <span className="hidden sm:inline">Excel/CSV</span>
+                            {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
+                            <span className="hidden sm:inline">{isExporting ? 'Eksportovanje...' : 'Excel'}</span>
                         </button>
                         <button
                             onClick={handlePrint}

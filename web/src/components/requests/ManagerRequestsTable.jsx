@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, Trash2, UserPlus, X, ChevronDown } from 'lucide-react';
 import { EmptyState, FillLevelBar, RequestStatusBadge, CountdownTimer } from '../common';
 import { getRemainingTime } from '../../utils/timeUtils';
 
@@ -8,6 +8,62 @@ const DEFAULT_WASTE_TYPES = [
     { id: 'plastic', label: 'Plastika', icon: '♻️' },
     { id: 'glass', label: 'Staklo', icon: '🍾' },
 ];
+
+/**
+ * Quick Assign Dropdown for selecting a driver
+ */
+const QuickAssignDropdown = ({ request, drivers, onAssign, onClose, position }) => {
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+                onClose();
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [onClose]);
+
+    return (
+        <div
+            ref={dropdownRef}
+            className={`absolute z-50 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 min-w-56 ${position === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}
+            style={{ right: 0 }}
+        >
+            <div className="px-3 pb-2 border-b border-slate-100 flex items-center justify-between">
+                <p className="text-xs font-medium text-slate-500">Izaberi vozača:</p>
+                <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+                    <X size={14} />
+                </button>
+            </div>
+            <div className="max-h-48 overflow-y-auto">
+                {drivers.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-slate-400 text-center">Nema dostupnih vozača</p>
+                ) : (
+                    drivers.map(driver => (
+                        <button
+                            key={driver.id}
+                            onClick={() => {
+                                onAssign(request.id, driver.id);
+                                onClose();
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-emerald-50 flex items-center gap-2 text-sm"
+                        >
+                            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                <Truck size={14} className="text-emerald-600" />
+                            </div>
+                            <div>
+                                <p className="font-medium text-slate-700">{driver.name}</p>
+                                {driver.phone && <p className="text-xs text-slate-400">{driver.phone}</p>}
+                            </div>
+                        </button>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
 
 /**
  * Manager Table with sorting, filtering and search
@@ -21,13 +77,17 @@ export const ManagerRequestsTable = ({
     wasteTypes = DEFAULT_WASTE_TYPES,
     initialUrgencyFilter = 'all',
     onUrgencyFilterChange,
-    assignments = []
+    assignments = [],
+    drivers = [],
+    onQuickAssign
 }) => {
     const [sortBy, setSortBy] = useState('remaining'); // remaining, client, type, fill, date
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all'); // all, or waste type id
     const [filterFill, setFilterFill] = useState('all'); // all, low, medium, high, full
+    const [quickAssignRequest, setQuickAssignRequest] = useState(null); // request id for quick assign dropdown
+    const [dropdownPosition, setDropdownPosition] = useState('bottom');
 
     // Sync with external filter (legacy support)
     useEffect(() => {
@@ -228,9 +288,38 @@ export const ManagerRequestsTable = ({
                                     </td>
                                     <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
                                     <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
-                                        <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
-                                        <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
-                                        <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
+                                        <div className="inline-flex items-center gap-0.5 relative">
+                                            <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
+                                            {/* Quick Assign button - only show if not assigned and we have drivers */}
+                                            {assignmentStatus === 'not_assigned' && drivers.length > 0 && onQuickAssign && (
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            const spaceBelow = window.innerHeight - rect.bottom;
+                                                            setDropdownPosition(spaceBelow < 220 ? 'top' : 'bottom');
+                                                            setQuickAssignRequest(quickAssignRequest === req.id ? null : req.id);
+                                                        }}
+                                                        className="p-1.5 md:p-2 text-purple-600 hover:bg-purple-50 rounded-lg"
+                                                        title="Dodeli vozaču"
+                                                    >
+                                                        <UserPlus size={18} />
+                                                    </button>
+                                                    {quickAssignRequest === req.id && (
+                                                        <QuickAssignDropdown
+                                                            request={req}
+                                                            drivers={drivers}
+                                                            onAssign={onQuickAssign}
+                                                            onClose={() => setQuickAssignRequest(null)}
+                                                            position={dropdownPosition}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                            <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
+                                            <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
+                                        </div>
                                     </td>
                                 </tr>
                             );

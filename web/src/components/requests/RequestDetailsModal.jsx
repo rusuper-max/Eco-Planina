@@ -31,7 +31,19 @@ export const RequestDetailsModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                         <p className="font-semibold">{request.client_name}</p>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-xl">
-                        <p className="text-xs text-slate-500">Preostalo</p>
+                        <p className="text-xs text-slate-500">Kreirano</p>
+                        <p className="font-semibold">
+                            {new Date(request.created_at).toLocaleString('sr-RS', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 rounded-xl col-span-2">
+                        <p className="text-xs text-slate-500">Preostalo vreme</p>
                         <p className="font-semibold">
                             <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
                         </p>

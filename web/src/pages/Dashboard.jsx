@@ -13,7 +13,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Network,
+    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -25,6 +25,7 @@ import {
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage,
+    ManagerAnalyticsPage,
     RegionsPage,
     CompanyStaffPage,
     RegionNodeEditor,
@@ -193,6 +194,8 @@ export default function Dashboard() {
                         setWasteTypes(companyWasteTypes);
                     }
                     // Equipment is loaded from database via useEffect
+                    // Fetch drivers for history table retroactive assignment
+                    await fetchCompanyDrivers();
                 }
             }
             setInitialDataLoaded(true);
@@ -260,6 +263,61 @@ export default function Dashboard() {
         }
     };
 
+    // Quick assign single request to driver (from requests table)
+    const handleQuickAssignDriver = async (requestId, driverId) => {
+        try {
+            const { data, error } = await supabase.rpc('assign_requests_to_driver', {
+                p_request_ids: [requestId],
+                p_driver_id: driverId,
+                p_company_code: companyCode
+            });
+
+            if (error) throw error;
+            if (data === false) {
+                throw new Error('Nemate dozvolu za ovu akciju');
+            }
+
+            // Refresh assignments
+            await fetchDriverAssignments();
+
+            const driver = companyDrivers.find(d => d.id === driverId);
+            toast.success(`Zahtev dodeljen vozaču: ${driver?.name || 'Nepoznato'}`);
+        } catch (err) {
+            console.error('Error quick assigning driver:', err);
+            toast.error('Greška pri dodeli vozača: ' + err.message);
+        }
+    };
+
+    // Retroactively assign driver to processed request (from history table)
+    const handleAssignDriverToProcessed = async (requestId, driverId) => {
+        try {
+            // Get the processed request to find the processed_at timestamp
+            const processedRequest = processedRequests.find(r => r.request_id === requestId || r.id === requestId);
+
+            // Create driver assignment with completed status
+            const { error } = await supabase
+                .from('driver_assignments')
+                .upsert({
+                    request_id: requestId,
+                    driver_id: driverId,
+                    company_code: companyCode,
+                    status: 'completed',
+                    assigned_at: processedRequest?.processed_at || new Date().toISOString(),
+                    completed_at: processedRequest?.processed_at || new Date().toISOString()
+                }, {
+                    onConflict: 'request_id'
+                });
+
+            if (error) throw error;
+
+            const driver = companyDrivers.find(d => d.id === driverId);
+            toast.success(`Vozač ${driver?.name || 'Nepoznato'} evidentiran za zahtev`);
+        } catch (err) {
+            console.error('Error assigning driver to processed request:', err);
+            toast.error('Greška pri evidentiranju vozača: ' + err.message);
+        }
+    };
+
     // Load tab-specific data (doesn't block UI with spinner)
     const loadTabData = async () => {
         try {
@@ -268,7 +326,7 @@ export default function Dashboard() {
                 if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
                 if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
             } else if (userRole === 'manager' || userRole === 'company_admin') {
-                if ((activeTab === 'history' || activeTab === 'analytics') && processedRequests.length === 0) {
+                if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics') && processedRequests.length === 0) {
                     setProcessedRequests(await fetchProcessedRequests() || []);
                 }
             }
@@ -516,6 +574,7 @@ export default function Dashboard() {
             { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
             { id: 'visual', icon: Network, label: 'Vizuelni Editor' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
+            { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera' },
             { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
@@ -758,11 +817,11 @@ export default function Dashboard() {
                             <Plus size={18} /> Kreiraj zahtev
                         </button>
                     </div>
-                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} />
+                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} />
                 </div>
             );
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
-            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} onEdit={async (id, updates) => {
+            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} drivers={companyDrivers} onAssignDriverToProcessed={handleAssignDriverToProcessed} onEdit={async (id, updates) => {
                 try {
                     await updateProcessedRequest(id, updates);
                     // Refresh the list
@@ -789,7 +848,7 @@ export default function Dashboard() {
                 const remB = getRemainingTime(b.created_at, b.urgency);
                 return remA.ms - remB.ms;
             });
-            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} assignments={driverAssignments} /></div>}</div>;
+            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} /></div>}</div>;
         }
         // Company Admin - bird's eye view of company (no operations)
         if (userRole === 'company_admin') {
@@ -797,6 +856,7 @@ export default function Dashboard() {
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} equipment={equipment} />;
+            if (activeTab === 'manager-analytics') return <ManagerAnalyticsPage processedRequests={processedRequests} members={companyMembers} wasteTypes={wasteTypes} />;
             if (activeTab === 'history') return (
                 <div className="space-y-4">
                     <h1 className="text-2xl font-bold">Istorija svih zahteva</h1>
@@ -806,6 +866,8 @@ export default function Dashboard() {
                         wasteTypes={wasteTypes}
                         onView={setSelectedRequest}
                         showDetailedView={true}
+                        drivers={companyDrivers}
+                        onAssignDriverToProcessed={handleAssignDriverToProcessed}
                     />
                 </div>
             );
@@ -940,7 +1002,7 @@ export default function Dashboard() {
                 </div>
             </aside>
             <div className="flex-1 flex flex-col min-w-0 relative">
-                <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" style={{ backgroundImage: 'url(https://vmsfsstxxndpxbsdylog.supabase.co/storage/v1/object/public/assets/background.jpg)' }} />
+                <div className={`absolute inset-0 bg-cover bg-center pointer-events-none ${userRole === 'client' ? 'opacity-70' : 'opacity-10'}`} style={{ backgroundImage: 'url(https://vmsfsstxxndpxbsdylog.supabase.co/storage/v1/object/public/assets/background.jpg)' }} />
                 {/* Impersonation Banner */}
                 {originalUser && (
                     <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between relative z-40">
@@ -1118,7 +1180,14 @@ export default function Dashboard() {
                 </main>
             </div>
             <RequestDetailsModal request={selectedRequest} onClose={() => setSelectedRequest(null)} />
-            <ProcessRequestModal request={processingRequest} onProcess={handleConfirmProcess} onClose={() => setProcessingRequest(null)} />
+            <ProcessRequestModal
+                request={processingRequest}
+                onProcess={handleConfirmProcess}
+                onClose={() => setProcessingRequest(null)}
+                hasDriverAssignment={!!driverAssignments.find(a => a.request_id === processingRequest?.id)}
+                drivers={companyDrivers}
+                onQuickAssign={handleQuickAssignDriver}
+            />
             <CreateRequestModal
                 open={showCreateRequestModal}
                 onClose={() => setShowCreateRequestModal(false)}

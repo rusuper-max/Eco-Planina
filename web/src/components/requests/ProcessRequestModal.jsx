@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { MapPin, Scale, Image, FileText, X, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { MapPin, Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, AlertTriangle, Truck, UserPlus } from 'lucide-react';
 import { Modal, CountdownTimer } from '../common';
 import { uploadImage } from '../../utils/storage';
 
@@ -13,7 +13,7 @@ const DEFAULT_WASTE_TYPES = [
 /**
  * Process Request Modal with Proof of Service photo/PDF upload
  */
-export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onProcess, onClose }) => {
+export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onProcess, onClose, hasDriverAssignment = false, drivers = [], onQuickAssign }) => {
     const [proofFile, setProofFile] = useState(null);
     const [proofType, setProofType] = useState(null); // 'image' or 'pdf'
     const [uploading, setUploading] = useState(false);
@@ -21,6 +21,8 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
     const [note, setNote] = useState('');
     const [weight, setWeight] = useState('');
     const [weightUnit, setWeightUnit] = useState('kg'); // 'kg' or 't'
+    const [showNoDriverWarning, setShowNoDriverWarning] = useState(false);
+    const [showDriverPicker, setShowDriverPicker] = useState(false);
 
     if (!request) return null;
 
@@ -52,6 +54,12 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
     };
 
     const handleProcess = async () => {
+        // Show warning if no driver assigned
+        if (!hasDriverAssignment && !showNoDriverWarning) {
+            setShowNoDriverWarning(true);
+            return;
+        }
+
         setProcessing(true);
         try {
             const weightData = weight ? { weight: parseFloat(weight), weight_unit: weightUnit } : null;
@@ -61,6 +69,17 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
             toast.error('Greška: ' + err.message);
         } finally {
             setProcessing(false);
+        }
+    };
+
+    const handleAssignDriver = async (driverId) => {
+        try {
+            await onQuickAssign(request.id, driverId);
+            setShowDriverPicker(false);
+            setShowNoDriverWarning(false);
+            toast.success('Vozač dodeljen! Sada možete obraditi zahtev.');
+        } catch (err) {
+            toast.error('Greška pri dodeli vozača');
         }
     };
 
@@ -176,6 +195,78 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                         rows={2}
                     />
                 </div>
+
+                {/* No Driver Warning */}
+                {showNoDriverWarning && !hasDriverAssignment && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={20} />
+                            <div>
+                                <p className="font-medium text-amber-800">Zahtev nije dodeljen vozaču</p>
+                                <p className="text-sm text-amber-600 mt-1">
+                                    Ovaj zahtev nema dodeljenog vozača. Da li želite da ga obradite bez evidentiranja vozača?
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Driver picker */}
+                        {showDriverPicker && drivers.length > 0 && (
+                            <div className="bg-white rounded-xl border border-amber-200 p-3 space-y-2">
+                                <p className="text-xs font-medium text-slate-500">Izaberite vozača:</p>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                    {drivers.map(driver => (
+                                        <button
+                                            key={driver.id}
+                                            onClick={() => handleAssignDriver(driver.id)}
+                                            className="w-full px-3 py-2 text-left hover:bg-emerald-50 rounded-lg flex items-center gap-2 text-sm"
+                                        >
+                                            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                                <Truck size={14} className="text-emerald-600" />
+                                            </div>
+                                            <span className="font-medium text-slate-700">{driver.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2">
+                            {drivers.length > 0 && onQuickAssign && !showDriverPicker && (
+                                <button
+                                    onClick={() => setShowDriverPicker(true)}
+                                    className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                                >
+                                    <UserPlus size={16} /> Dodeli vozača
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    setShowNoDriverWarning(false);
+                                    setShowDriverPicker(false);
+                                    // Continue with process
+                                    setProcessing(true);
+                                    const weightData = weight ? { weight: parseFloat(weight), weight_unit: weightUnit } : null;
+                                    onProcess(request, proofFile, note, weightData)
+                                        .then(() => onClose())
+                                        .catch(err => toast.error('Greška: ' + err.message))
+                                        .finally(() => setProcessing(false));
+                                }}
+                                className="flex-1 px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-sm font-medium hover:bg-amber-200"
+                            >
+                                Nastavi bez vozača
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowNoDriverWarning(false);
+                                    setShowDriverPicker(false);
+                                }}
+                                className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
+                            >
+                                Otkaži
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-3 pt-2">

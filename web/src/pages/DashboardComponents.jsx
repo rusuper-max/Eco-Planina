@@ -21,7 +21,7 @@ export {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network
+    Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network, UserCheck
 } from 'lucide-react';
 
 // Re-export utilities
@@ -82,7 +82,7 @@ export {
 } from '../components/admin';
 
 // Re-export analytics components
-export { AnalyticsPage } from '../components/analytics';
+export { AnalyticsPage, ManagerAnalyticsPage } from '../components/analytics';
 
 // Default waste types constant (kept for backward compatibility)
 export const WASTE_TYPES = [
