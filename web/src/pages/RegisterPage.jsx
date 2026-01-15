@@ -253,7 +253,7 @@ export default function RegisterPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    {role === 'driver' ? 'Vaše ime i prezime' : 'Ime firme'}
+                                    {role === 'company_admin' ? 'Ime firme' : 'Ime i prezime'}
                                 </label>
                                 <div className="relative">
                                     <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -261,7 +261,7 @@ export default function RegisterPage() {
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        placeholder={role === 'driver' ? 'Petar Petrović' : 'Naziv vaše firme'}
+                                        placeholder={role === 'company_admin' ? 'Naziv vaše firme' : 'Petar Petrović'}
                                         className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                                         required
                                     />
