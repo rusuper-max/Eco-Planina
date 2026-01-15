@@ -20,7 +20,7 @@ const WASTE_TYPE_COLORS = [
 /**
  * Analytics Page with Charts - Displays waste collection statistics
  */
-export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
+export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [] }) => {
     const [dateRange, setDateRange] = useState('month');
     const [selectedWasteType, setSelectedWasteType] = useState('all');
     const [selectedClient, setSelectedClient] = useState('all');
@@ -42,6 +42,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
         detaljno: true,
         sviZahtevi: true,
         grafici: true,
+        vozaci: true,
     });
 
     const toggleExcelSheet = (key) => {
@@ -56,6 +57,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
         { key: 'detaljno', label: 'Detaljan pregled', icon: '📋' },
         { key: 'sviZahtevi', label: 'Svi zahtevi', icon: '📝' },
         { key: 'grafici', label: 'Grafici (slike)', icon: '🎨' },
+        { key: 'vozaci', label: 'Vozači', icon: '🚚' },
     ];
 
     const getFilteredRequests = () => {
@@ -464,6 +466,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes }) => {
                 },
                 wasteTypes,
                 clients: uniqueClients,
+                drivers,
                 fileName: fileNameParts.join('_'),
                 sheets: excelSheets
             });

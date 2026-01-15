@@ -123,10 +123,19 @@ export const MapView = ({
             list = list.filter(item => item.currentUrgency === urgencyFilter);
         }
         if (wasteFilter !== 'all') {
-            list = list.filter(item => item.waste_type === wasteFilter);
+            // Find the waste type object to get both id and name for flexible matching
+            const selectedWasteType = wasteTypes.find(wt => (wt.id || wt.name) === wasteFilter);
+            list = list.filter(item => {
+                // Match by ID, name, or label (handles both old JSONB and new table formats)
+                return item.waste_type === wasteFilter ||
+                       item.waste_type === selectedWasteType?.id ||
+                       item.waste_type === selectedWasteType?.name ||
+                       item.waste_label === selectedWasteType?.label ||
+                       item.waste_label === selectedWasteType?.name;
+            });
         }
         return list;
-    }, [itemsWithCurrentUrgency, type, urgencyFilter, wasteFilter]);
+    }, [itemsWithCurrentUrgency, type, urgencyFilter, wasteFilter, wasteTypes]);
 
     // Calculate positions for items WITH valid coordinates only
     // Items without coordinates are shown ONLY in the sidebar, NOT on the map

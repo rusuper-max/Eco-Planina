@@ -193,70 +193,18 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             });
         }
 
-        // Try to load saved positions from localStorage (only for regions)
+        // Try to load saved positions from localStorage
         let finalPositions = { ...positions }; // Create a copy
         if (!forceReset) {
             try {
                 const saved = localStorage.getItem(POSITIONS_STORAGE_KEY);
                 if (saved) {
                     const savedPositions = JSON.parse(saved);
-                    // Merge saved region positions with calculated positions
-                    // Only apply saved positions for regions that still exist
+                    // Apply all saved positions that still exist in current data
                     Object.keys(savedPositions).forEach(key => {
-                        if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
-                            // Check if this region still exists in our data
-                            if (positions[key]) {
-                                const oldPos = positions[key];
-                                const newPos = savedPositions[key];
-
-                                // Calculate offset
-                                const offsetX = newPos.x - oldPos.x;
-                                const offsetY = newPos.y - oldPos.y;
-
-                                // Apply to region/container
-                                finalPositions[key] = newPos;
-
-                                // Also move users within this region/container by the same offset
-                                if (key.startsWith('region-')) {
-                                    const regionId = key.replace('region-', '');
-                                    const region = regions.find(r => r.id === regionId);
-                                    if (region) {
-                                        (region.users || []).forEach(u => {
-                                            const userKey = `user-${u.id}`;
-                                            if (positions[userKey]) {
-                                                finalPositions[userKey] = {
-                                                    x: positions[userKey].x + offsetX,
-                                                    y: positions[userKey].y + offsetY
-                                                };
-                                            }
-                                        });
-                                    }
-                                } else if (key === 'uprava') {
-                                    // Move company admins with uprava container
-                                    const companyAdmins = unassigned.filter(u => u.role === 'company_admin');
-                                    companyAdmins.forEach(u => {
-                                        const userKey = `user-${u.id}`;
-                                        if (positions[userKey]) {
-                                            finalPositions[userKey] = {
-                                                x: positions[userKey].x + offsetX,
-                                                y: positions[userKey].y + offsetY
-                                            };
-                                        }
-                                    });
-                                } else if (key === 'unassigned') {
-                                    // Move unassigned users (non-admins) with unassigned container
-                                    const realUnassigned = unassigned.filter(u => u.role !== 'company_admin');
-                                    realUnassigned.forEach(u => {
-                                        const userKey = `user-${u.id}`;
-                                        if (positions[userKey]) {
-                                            finalPositions[userKey] = {
-                                                x: positions[userKey].x + offsetX,
-                                                y: positions[userKey].y + offsetY
-                                            };
-                                        }
-                                    });
-                                }
-                            }
+                        // Only apply if this node exists in our calculated positions
+                        if (positions[key]) {
+                            finalPositions[key] = savedPositions[key];
                         }
                     });
                 }
@@ -671,26 +619,9 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             }
         }
 
-        // Auto-save position changes if we were dragging a region/container
-        const isContainerDrag = draggingNodes && draggingNodes.some(id => id.startsWith('region-') || id === 'unassigned' || id === 'uprava');
-
-        if (isContainerDrag) {
+        // Mark as having changes when any node was dragged
+        if (draggingNodes && draggingNodes.length > 0) {
             setHasPositionChanges(true);
-            // Auto-save positions to localStorage using ref for latest values
-            setTimeout(() => {
-                try {
-                    const currentPositions = nodePositionsRef.current;
-                    const positionsToSave = {};
-                    Object.keys(currentPositions).forEach(key => {
-                        if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
-                            positionsToSave[key] = currentPositions[key];
-                        }
-                    });
-                    localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(positionsToSave));
-                } catch (e) {
-                    // Silently ignore localStorage errors
-                }
-            }, 100);
         }
 
         if (isBoxSelecting) {
@@ -742,13 +673,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     // Save position layout to localStorage
     const savePositions = useCallback(() => {
         try {
-            // Only save region/container positions, not individual users
-            const positionsToSave = {};
-            Object.keys(nodePositions).forEach(key => {
-                if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
-                    positionsToSave[key] = nodePositions[key];
-                }
-            });
+            // Save ALL positions including user nodes
+            const positionsToSave = { ...nodePositions };
             localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(positionsToSave));
             setHasPositionChanges(false);
             toast.success('Pozicije sačuvane');

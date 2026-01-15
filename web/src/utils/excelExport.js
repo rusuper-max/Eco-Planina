@@ -40,6 +40,7 @@ export const exportToExcel = async ({
     filters,
     wasteTypes,
     clients,
+    drivers = [],
     fileName = 'izvestaj',
     sheets = {}
 }) => {
@@ -52,6 +53,7 @@ export const exportToExcel = async ({
         detaljno: sheets.detaljno !== false,
         sviZahtevi: sheets.sviZahtevi !== false,
         grafici: sheets.grafici !== false,
+        vozaci: sheets.vozaci !== false,
     };
 
     const workbook = new ExcelJS.Workbook();
@@ -152,6 +154,18 @@ export const exportToExcel = async ({
     const sortedData = data
         .filter(r => r.weight)
         .sort((a, b) => new Date(b.processed_at) - new Date(a.processed_at));
+
+    // Drivers sheet rows
+    const driverRows = (drivers || [])
+        .filter(d => (d.role || '').toLowerCase() === 'driver')
+        .map(d => ({
+            name: d.name || 'Nepoznato',
+            phone: d.phone || '',
+            region: d.region_name || d.region || d.region_id || '',
+            address: d.address || '',
+            email: d.email || ''
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'sr'));
 
     // ===== SHEET 1: SUMARNO (Summary) =====
     if (enabledSheets.sumarno) {
@@ -460,6 +474,45 @@ export const exportToExcel = async ({
             { width: 15 },
             { width: 15 },
         ];
+    }
+
+    // ===== SHEET: VOZAČI =====
+    if (enabledSheets.vozaci) {
+        const driverSheet = workbook.addWorksheet('Vozaci', {
+            properties: { tabColor: { argb: 'FF0EA5E9' } }
+        });
+
+        driverSheet.mergeCells('A1:E1');
+        driverSheet.getCell('A1').value = 'Vozači';
+        driverSheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FF0EA5E9' } };
+        driverSheet.getCell('A1').alignment = { horizontal: 'center' };
+
+        if (driverRows.length === 0) {
+            driverSheet.getCell('A3').value = 'Nema vozača za prikaz.';
+            driverSheet.getCell('A3').font = { italic: true, color: { argb: 'FF94A3B8' } };
+        } else {
+            driverSheet.addTable({
+                name: 'DriversTable',
+                ref: 'A3',
+                headerRow: true,
+                style: {
+                    theme: 'TableStyleMedium2',
+                    showRowStripes: true
+                },
+                columns: [
+                    { name: 'Ime' },
+                    { name: 'Telefon' },
+                    { name: 'Email' },
+                    { name: 'Adresa' },
+                    { name: 'Filijala' },
+                ],
+                rows: driverRows.map(d => [d.name, d.phone, d.email, d.address, d.region])
+            });
+
+            ['A', 'B', 'C', 'D', 'E'].forEach(col => {
+                driverSheet.getColumn(col).width = 22;
+            });
+        }
     }
 
     // ===== SHEET 7: GRAFICI (Chart Images) =====

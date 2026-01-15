@@ -705,9 +705,15 @@ export default function Dashboard() {
         }
         if (userRole === 'client') {
             // Filter waste types based on client's allowed types (null/empty = all allowed)
+            // Debug: Log what we're filtering
+            console.log('[Client WasteTypes] user.allowed_waste_types:', user?.allowed_waste_types);
+            console.log('[Client WasteTypes] wasteTypes:', wasteTypes?.map(wt => ({ id: wt.id, name: wt.name, label: wt.label })));
+
             const clientWasteTypes = user?.allowed_waste_types?.length > 0
                 ? wasteTypes.filter(wt => user.allowed_waste_types.includes(wt.id))
                 : wasteTypes;
+
+            console.log('[Client WasteTypes] Filtered result:', clientWasteTypes?.length, 'types');
 
             if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} />;
             if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
@@ -861,7 +867,7 @@ export default function Dashboard() {
                 try { await deleteProcessedRequest(id); }
                 catch { setProcessedRequests(previous); } // Rollback
             }} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
@@ -901,7 +907,7 @@ export default function Dashboard() {
             if (activeTab === 'staff') return <CompanyStaffPage />;
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} equipment={equipment} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} equipment={equipment} />;
             if (activeTab === 'manager-analytics') return (
                 <ManagerAnalyticsPage
                     processedRequests={processedRequests}
