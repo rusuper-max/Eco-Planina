@@ -1,10 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import toast from 'react-hot-toast';
 import { Truck, X, RefreshCw } from 'lucide-react';
-import { createCustomIcon, URGENCY_COLORS } from '../../utils/mapUtils';
+import { createCustomIcon } from '../../utils/mapUtils';
 import { getCurrentUrgency } from '../../utils/timeUtils';
 import { FitBounds } from './FitBounds';
 
@@ -32,7 +31,13 @@ export const MapView = ({
     const [showDriverModal, setShowDriverModal] = useState(false);
     const [selectedForAssignment, setSelectedForAssignment] = useState(null);
     const [assigningDriver, setAssigningDriver] = useState(false);
+    const [renderKey, setRenderKey] = useState(0);
     const items = type === 'requests' ? requests : clients;
+
+    // Force markers re-render when filter changes
+    useEffect(() => {
+        setRenderKey(prev => prev + 1);
+    }, [urgencyFilter]);
 
     // Get assignment info for a request
     const getAssignment = (requestId) => {
@@ -83,7 +88,7 @@ export const MapView = ({
         if (type !== 'requests') return items || [];
         if (urgencyFilter === 'all') return itemsWithCurrentUrgency;
         return itemsWithCurrentUrgency.filter(item => item.currentUrgency === urgencyFilter);
-    }, [itemsWithCurrentUrgency, items, type, urgencyFilter]);
+    }, [itemsWithCurrentUrgency, type, urgencyFilter]);
 
     // Calculate positions for all items
     const markers = useMemo(() => {
@@ -135,7 +140,7 @@ export const MapView = ({
     }, [itemsWithCurrentUrgency, type]);
 
     return (
-        <div className="bg-white rounded-2xl border overflow-hidden" style={{ height: '500px' }}>
+        <div className="bg-white rounded-2xl border overflow-hidden h-full flex flex-col">
             {/* Urgency Filter - Only show for requests */}
             {type === 'requests' && (
                 <div className="flex items-center gap-2 p-3 bg-slate-50 border-b">
@@ -169,127 +174,75 @@ export const MapView = ({
                     </button>
                 </div>
             )}
-            <MapContainer center={[44.8, 20.45]} zoom={11} style={{ height: type === 'requests' ? 'calc(100% - 52px)' : '100%', width: '100%' }}>
+            <MapContainer center={[44.8, 20.45]} zoom={11} className="flex-1 w-full" style={{ minHeight: '400px' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <FitBounds positions={allPositions} />
-                <MarkerClusterGroup
-                    key={`cluster-${urgencyFilter}-${filteredItems?.length || 0}`}
-                    chunkedLoading
-                    maxClusterRadius={50}
-                    spiderfyOnMaxZoom={true}
-                    showCoverageOnHover={false}
-                    iconCreateFunction={(cluster) => {
-                        const count = cluster.getChildCount();
-                        const childMarkers = cluster.getAllChildMarkers();
-                        const hasUrgent = childMarkers.some(m => m.options.urgencyLevel === '24h');
-                        const hasMedium = childMarkers.some(m => m.options.urgencyLevel === '48h');
-                        const color = hasUrgent ? '#EF4444' : hasMedium ? '#F59E0B' : '#10B981';
+                <FitBounds positions={allPositions} fitOnChange={true} trigger={urgencyFilter} />
 
-                        // Store marker data on cluster for later use
-                        cluster._childRequestIds = childMarkers.map(m => m.options.requestId).filter(Boolean);
-
-                        // Show truck icon for batch assignment if drivers available
-                        const showTruckIcon = type === 'requests' && drivers.length > 0 && onAssignDriver;
-
-                        return L.divIcon({
-                            html: `<div style="position: relative;">
-                                <div style="background-color: ${color}; color: white; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">${count}</div>
-                                ${showTruckIcon ? `<div class="cluster-truck-btn" style="position: absolute; top: -8px; right: -8px; background: #059669; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: 2px solid white; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18h2a1 1 0 0 0 1-1v-3.28a1 1 0 0 0-.684-.948l-1.923-.641a1 1 0 0 1-.684-.949V8a2 2 0 0 1 2-2h2"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
-                                </div>` : ''}
-                            </div>`,
-                            className: 'custom-cluster-icon',
-                            iconSize: L.point(40, 40, true),
-                        });
-                    }}
-                    eventHandlers={{
-                        clusterclick: (e) => {
-                            // Check if truck button was clicked
-                            const clickedElement = e.originalEvent?.target;
-                            if (clickedElement?.closest('.cluster-truck-btn')) {
-                                e.originalEvent.stopPropagation();
-                                const cluster = e.layer;
-                                const requestIds = cluster._childRequestIds || [];
-                                const clusterRequests = requestIds
-                                    .map(id => filteredItems.find(item => item.id === id))
-                                    .filter(Boolean);
-                                if (clusterRequests.length > 0) {
-                                    openDriverModal(clusterRequests);
-                                }
-                                return;
-                            }
-                            // Default behavior: zoom/spiderfy
-                        }
-                    }}
-                >
-                    {markers.map(({ item, position, index, hasCoords }) => (
-                        <Marker
-                            key={item.id || `marker-${index}`}
-                            position={position}
-                            icon={createCustomIcon(item.currentUrgency || item.urgency, type === 'requests' ? getWasteIcon(item.waste_type) : '🏢', type === 'clients')}
-                            opacity={hasCoords ? 1 : 0.7}
-                            urgencyLevel={item.currentUrgency || item.urgency}
-                            requestId={item.id}
-                        >
-                            <Popup>
-                                <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
-                                <p className="text-sm">{type === 'requests' ? item.waste_label : item.phone}</p>
-                                <p className="text-xs text-gray-500">{type === 'requests' ? item.client_address : item.address}</p>
-                                {type === 'requests' && item.currentUrgency && (
-                                    <p className={`text-xs font-semibold mt-1 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                        ⏱ {item.currentUrgency === '24h' ? 'Hitno' : item.currentUrgency === '48h' ? 'Srednje' : 'Normalno'}
-                                    </p>
-                                )}
-                                {!hasCoords && <p className="text-xs text-orange-500 mt-1">⚠️ Lokacija nije podešena</p>}
-                                {hasCoords && type === 'requests' && (
-                                    <div className="flex gap-1 mt-2">
-                                        <a
-                                            href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                                        >
-                                            Google Maps
-                                        </a>
-                                        <a
-                                            href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
-                                        >
-                                            Waze
-                                        </a>
-                                    </div>
-                                )}
-                                {type === 'requests' && drivers.length > 0 && onAssignDriver && (
-                                    <div className="mt-2 pt-2 border-t">
-                                        {getAssignment(item.id) ? (
-                                            <div className="text-xs">
-                                                <span className="text-slate-500">Dodeljeno: </span>
-                                                <span className="font-medium text-emerald-600">{getAssignment(item.id)?.driver?.name}</span>
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => openDriverModal(item)}
-                                                className="w-full px-2 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 flex items-center justify-center gap-1"
-                                            >
-                                                <Truck size={12} /> Dodeli vozaču
-                                            </button>
-                                        )}
-                                    </div>
-                                )}
-                                {type === 'clients' && onClientLocationEdit && (
-                                    <button
-                                        onClick={() => onClientLocationEdit(item)}
-                                        className="mt-2 px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700"
+                {markers.map(({ item, position, index, hasCoords }) => (
+                    <Marker
+                        key={`${item.id || index}-${renderKey}`}
+                        position={position}
+                        icon={createCustomIcon(item.currentUrgency || item.urgency, type === 'requests' ? getWasteIcon(item.waste_type) : '🏢', type === 'clients')}
+                        opacity={hasCoords ? 1 : 0.7}
+                    >
+                        <Popup>
+                            <p className="font-bold">{type === 'requests' ? item.client_name : item.name}</p>
+                            <p className="text-sm">{type === 'requests' ? item.waste_label : item.phone}</p>
+                            <p className="text-xs text-gray-500">{type === 'requests' ? item.client_address : item.address}</p>
+                            {type === 'requests' && item.currentUrgency && (
+                                <p className={`text-xs font-semibold mt-1 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    ⏱ {item.currentUrgency === '24h' ? 'Hitno' : item.currentUrgency === '48h' ? 'Srednje' : 'Normalno'}
+                                </p>
+                            )}
+                            {!hasCoords && <p className="text-xs text-orange-500 mt-1">⚠️ Lokacija nije podešena</p>}
+                            {hasCoords && type === 'requests' && (
+                                <div className="flex gap-1 mt-2">
+                                    <a
+                                        href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
                                     >
-                                        Uredi lokaciju
-                                    </button>
-                                )}
-                            </Popup>
-                        </Marker>
-                    ))}
-                </MarkerClusterGroup>
+                                        Google Maps
+                                    </a>
+                                    <a
+                                        href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-2 py-1 bg-cyan-600 text-white text-xs rounded hover:bg-cyan-700"
+                                    >
+                                        Waze
+                                    </a>
+                                </div>
+                            )}
+                            {type === 'requests' && drivers.length > 0 && onAssignDriver && (
+                                <div className="mt-2 pt-2 border-t">
+                                    {getAssignment(item.id) ? (
+                                        <div className="text-xs">
+                                            <span className="text-slate-500">Dodeljeno: </span>
+                                            <span className="font-medium text-emerald-600">{getAssignment(item.id)?.driver?.name}</span>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => openDriverModal(item)}
+                                            className="w-full px-2 py-1.5 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 flex items-center justify-center gap-1"
+                                        >
+                                            <Truck size={12} /> Dodeli vozaču
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            {type === 'clients' && onClientLocationEdit && (
+                                <button
+                                    onClick={() => onClientLocationEdit(item)}
+                                    className="mt-2 px-3 py-1 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700"
+                                >
+                                    Uredi lokaciju
+                                </button>
+                            )}
+                        </Popup>
+                    </Marker>
+                ))}
             </MapContainer>
 
             {/* Driver Assignment Modal */}

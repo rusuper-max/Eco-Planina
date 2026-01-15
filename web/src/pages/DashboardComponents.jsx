@@ -82,7 +82,7 @@ export {
 } from '../components/admin';
 
 // Re-export analytics components
-export { AnalyticsPage, ManagerAnalyticsPage } from '../components/analytics';
+export { AnalyticsPage, ManagerAnalyticsPage, DriverAnalyticsPage } from '../components/analytics';
 
 // Default waste types constant (kept for backward compatibility)
 export const WASTE_TYPES = [

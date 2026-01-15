@@ -9,7 +9,7 @@ const { user, login, logout, isAdmin } = useAuth();
 
 // Data & Requests
 import { useData } from '../context/DataContext';
-const { pickupRequests, addPickupRequest, markRequestAsProcessed } = useData();
+const { pickupRequests, addPickupRequest, markRequestAsProcessed, fetchCompanyRegions, createRegion, deleteRegion, assignUsersToRegion } = useData();
 
 // Chat & Messages
 import { useChat } from '../context/ChatContext';
@@ -99,6 +99,41 @@ const stats = await getAdminStats();
 
 // Fetch users with filter
 const clients = await fetchAllUsers({ role: 'client' });
+```
+
+### Region Management
+```javascript
+const { fetchCompanyRegions, createRegion, updateRegion, deleteRegion, assignUsersToRegion } = useData();
+
+// Get all regions
+const regions = await fetchCompanyRegions();
+
+// Create region
+await createRegion('Beograd');
+
+// Update region
+await updateRegion(regionId, 'Novi Sad');
+
+// Delete region (soft delete) - fails if last region
+await deleteRegion(regionId);
+
+// Batch assign users to region
+await assignUsersToRegion([userId1, userId2], regionId);
+```
+
+### Excel Export
+```javascript
+// AnalyticsPage - Professional Excel export
+import { exportToExcel } from '../utils/excelExport';
+
+await exportToExcel({
+  data: processedRequests,
+  filters: { dateFrom, dateTo, client, wasteType },
+  wasteTypes,
+  clients,
+  fileName: 'izvestaj',
+  sheets: { sumarno: true, poVrsti: true, grafici: true, ... }
+});
 ```
 
 ---
@@ -234,3 +269,4 @@ exitImpersonation();
 ---
 
 Generated: 2026-01-13
+Updated: 2026-01-15 (Region system, ExcelJS export, Manager analytics)

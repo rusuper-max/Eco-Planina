@@ -1,15 +1,18 @@
 import { useState, useMemo } from 'react';
-import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users } from 'lucide-react';
-import { EmptyState } from '../common';
+import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users, RotateCcw, AlertTriangle, Loader2, Download } from 'lucide-react';
+import { EmptyState, Modal } from '../common';
+import * as XLSX from 'xlsx';
 
 /**
  * Manager Analytics Page - Shows performance metrics for each manager
  * Used by Company Admin to track which managers processed the most requests
  */
-export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], wasteTypes = [] }) => {
+export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], wasteTypes = [], onResetStats }) => {
     const [expandedManager, setExpandedManager] = useState(null);
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetting, setResetting] = useState(false);
 
     // Filter by period
     const filteredRequests = useMemo(() => {
@@ -108,6 +111,65 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
         managers: managerStats.filter(m => m.id !== 'unknown').length
     }), [filteredRequests, managerStats]);
 
+    // Export to Excel
+    const handleExportExcel = () => {
+        // Prepare manager summary data
+        const summaryData = managerStats.map((manager, index) => ({
+            'Rang': index + 1,
+            'Menadžer': manager.name,
+            'Broj zahteva': manager.count,
+            'Ukupna težina (kg)': manager.totalWeight.toFixed(1),
+            'Broj klijenata': manager.clients,
+            'Poslednja aktivnost': manager.lastProcessed
+                ? manager.lastProcessed.toLocaleDateString('sr-RS')
+                : 'N/A'
+        }));
+
+        // Prepare detailed requests data
+        const detailedData = processedRequests.map(req => ({
+            'Datum obrade': new Date(req.processed_at).toLocaleDateString('sr-RS'),
+            'Vreme': new Date(req.processed_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }),
+            'Menadžer': req.processed_by_name || 'Nepoznat',
+            'Klijent': req.client_name || 'Nepoznat',
+            'Adresa': req.client_address || '',
+            'Vrsta robe': getWasteTypeLabel(req.waste_type),
+            'Težina (kg)': req.weight || '',
+            'Napomena': req.processing_note || ''
+        }));
+
+        // Create workbook with multiple sheets
+        const wb = XLSX.utils.book_new();
+
+        // Summary sheet
+        const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'Pregled po menadžerima');
+
+        // Detailed sheet
+        const wsDetailed = XLSX.utils.json_to_sheet(detailedData);
+        XLSX.utils.book_append_sheet(wb, wsDetailed, 'Svi zahtevi');
+
+        // Generate filename with date
+        const dateStr = new Date().toISOString().split('T')[0];
+        const filename = `Ucinci_menadzera_${dateStr}.xlsx`;
+
+        // Download
+        XLSX.writeFile(wb, filename);
+    };
+
+    // Handle reset stats
+    const handleResetStats = async () => {
+        if (!onResetStats) return;
+        setResetting(true);
+        try {
+            await onResetStats();
+            setShowResetModal(false);
+        } catch (err) {
+            console.error('Error resetting stats:', err);
+        } finally {
+            setResetting(false);
+        }
+    };
+
     if (!processedRequests?.length) {
         return <EmptyState icon={UserCheck} title="Nema podataka" desc="Kada menadžeri obrade zahteve, ovde ćete videti njihovu statistiku" />;
     }
@@ -139,6 +201,15 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                         <option value="weight">Po težini</option>
                         <option value="recent">Po aktivnosti</option>
                     </select>
+                    {onResetStats && (
+                        <button
+                            onClick={() => setShowResetModal(true)}
+                            className="px-3 py-2 border border-red-200 text-red-600 rounded-xl text-sm bg-white hover:bg-red-50 flex items-center gap-1.5"
+                        >
+                            <RotateCcw size={16} />
+                            <span className="hidden sm:inline">Restart</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -362,12 +433,81 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                 })}
             </div>
 
-            {/* Empty state for unknown managers info */}
-            {managerStats.some(m => m.id === 'unknown') && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
-                    <strong>Napomena:</strong> Zahtevi označeni kao "Bez podataka" su obrađeni pre uvođenja praćenja menadžera.
-                    Novi zahtevi će automatski beležiti ko ih je obradio.
-                </div>
+            {/* Reset Confirmation Modal */}
+            {showResetModal && (
+                <Modal open={showResetModal} onClose={() => setShowResetModal(false)} title="Restart statistike">
+                    <div className="space-y-4">
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={20} />
+                                <div>
+                                    <p className="font-medium text-amber-800">Pažnja!</p>
+                                    <p className="text-sm text-amber-600 mt-1">
+                                        Ova akcija će obrisati svu istoriju obrađenih zahteva i resetovati statistiku menadžera na nulu.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 rounded-xl">
+                            <p className="text-sm text-slate-600 mb-3">Trenutna statistika:</p>
+                            <div className="flex gap-4 text-center">
+                                <div className="flex-1 p-2 bg-white rounded-lg border">
+                                    <p className="text-xl font-bold text-indigo-600">{totals.requests}</p>
+                                    <p className="text-xs text-slate-500">zahteva</p>
+                                </div>
+                                <div className="flex-1 p-2 bg-white rounded-lg border">
+                                    <p className="text-xl font-bold text-emerald-600">{formatWeight(totals.weight)}</p>
+                                    <p className="text-xs text-slate-500">težina</p>
+                                </div>
+                                <div className="flex-1 p-2 bg-white rounded-lg border">
+                                    <p className="text-xl font-bold text-blue-600">{totals.managers}</p>
+                                    <p className="text-xs text-slate-500">menadžera</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                            <p className="text-sm font-medium text-emerald-800 mb-2">
+                                Preporučujemo da prvo preuzmete podatke:
+                            </p>
+                            <button
+                                onClick={handleExportExcel}
+                                className="w-full px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2 font-medium"
+                            >
+                                <Download size={18} />
+                                Preuzmi Excel izveštaj
+                            </button>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => setShowResetModal(false)}
+                                disabled={resetting}
+                                className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium"
+                            >
+                                Otkaži
+                            </button>
+                            <button
+                                onClick={handleResetStats}
+                                disabled={resetting}
+                                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 font-medium flex items-center justify-center gap-2"
+                            >
+                                {resetting ? (
+                                    <>
+                                        <Loader2 size={18} className="animate-spin" />
+                                        Brisanje...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RotateCcw size={18} />
+                                        Potvrdi restart
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

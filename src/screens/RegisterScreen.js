@@ -31,7 +31,7 @@ const COLORS = {
 };
 
 const RegisterScreen = ({ navigation }) => {
-  const { registerManagerWithMasterCode, registerManagerToExistingCompany, registerClient, isLoading } = useAppContext();
+  const { registerManagerWithMasterCode, registerManagerToExistingCompany, registerClient, isLoading, logout } = useAppContext();
   const { t, countryCodes } = useLanguage();
   const [name, setName] = useState('');
   const [firmName, setFirmName] = useState('');
@@ -171,13 +171,16 @@ const RegisterScreen = ({ navigation }) => {
             existingCompanyCode.trim()
           );
 
+          // Logout to clear auto-login state
+          logout();
+
           Alert.alert(
             t('registrationSuccess'),
-            t('managerJoinedSuccess') + '\n\n' + result.companyName,
+            t('managerJoinedSuccess') + '\n\n' + result.companyName + '\n\nBicete prebaceni na ekran za prijavu.',
             [
               {
                 text: t('ok'),
-                onPress: () => { }, // Navigation handled by App.js
+                onPress: () => navigation.navigate('Login'),
               },
             ]
           );
@@ -192,13 +195,16 @@ const RegisterScreen = ({ navigation }) => {
             pib.trim()
           );
 
+          // Logout to clear auto-login state
+          logout();
+
           Alert.alert(
             t('registrationSuccess'),
-            `Firma je uspesno registrovana!\n\nKod za klijente:\n${result.companyCode}\n\n${t('shareCodeHint')}`,
+            `Firma je uspesno registrovana!\n\nKod za klijente:\n${result.companyCode}\n\n${t('shareCodeHint')}\n\nBicete prebaceni na ekran za prijavu.`,
             [
               {
                 text: t('ok'),
-                onPress: () => { }, // Navigation handled by App.js
+                onPress: () => navigation.navigate('Login'),
               },
             ]
           );
@@ -239,7 +245,20 @@ const RegisterScreen = ({ navigation }) => {
           latitude,
           longitude
         );
-        // Navigation handled by App.js
+
+        // Logout to clear auto-login state
+        logout();
+
+        Alert.alert(
+          t('registrationSuccess'),
+          'Registracija uspesna!\n\nBicete prebaceni na ekran za prijavu.',
+          [
+            {
+              text: t('ok'),
+              onPress: () => navigation.navigate('Login'),
+            },
+          ]
+        );
       }
     } catch (error) {
       Alert.alert(t('error'), error.message || t('registrationError'));

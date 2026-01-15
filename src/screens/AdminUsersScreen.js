@@ -32,7 +32,7 @@ const COLORS = {
 };
 
 const AdminUsersScreen = ({ navigation }) => {
-  const { fetchAllUsers, promoteToAdmin, demoteFromAdmin, deleteUser, isGod } = useAppContext();
+  const { fetchAllUsers, promoteToAdmin, demoteFromAdmin, deleteUser, isGod, loginAsUser } = useAppContext();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -108,6 +108,30 @@ const AdminUsersScreen = ({ navigation }) => {
               Alert.alert('Greska', error.message);
             } finally {
               setDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleLoginAsUser = async () => {
+    if (!selectedUser) return;
+
+    Alert.alert(
+      'Potvrda',
+      `Da li zelite da se ulogujete kao "${selectedUser.name}"?\n\nBicete prebaceni na njihov nalog.`,
+      [
+        { text: 'Otkazi', style: 'cancel' },
+        {
+          text: 'Uloguj se',
+          onPress: async () => {
+            try {
+              await loginAsUser(selectedUser);
+              setSelectedUser(null);
+              // Navigation will be handled automatically by App.js based on role
+            } catch (error) {
+              Alert.alert('Greska', error.message);
             }
           }
         }
@@ -244,6 +268,13 @@ const AdminUsersScreen = ({ navigation }) => {
                 </View>
 
                 <View style={styles.modalActions}>
+                  {/* Login as user button - for managers and clients */}
+                  {(selectedUser.role === 'manager' || selectedUser.role === 'client') && (
+                    <TouchableOpacity style={styles.loginAsBtn} onPress={handleLoginAsUser}>
+                      <Text style={styles.loginAsBtnText}>🔑 Uloguj se kao ovaj korisnik</Text>
+                    </TouchableOpacity>
+                  )}
+
                   {selectedUser.role === 'admin' ? (
                     <TouchableOpacity style={styles.demoteBtn} onPress={handleDemote}>
                       <Text style={styles.demoteBtnText}>Ukloni Admin status</Text>
@@ -451,6 +482,17 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     gap: 12,
+  },
+  loginAsBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  loginAsBtnText: {
+    color: COLORS.white,
+    fontWeight: '600',
+    fontSize: 16,
   },
   promoteBtn: {
     backgroundColor: COLORS.purple,

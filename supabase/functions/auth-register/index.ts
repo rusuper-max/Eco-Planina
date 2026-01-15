@@ -160,6 +160,21 @@ serve(async (req) => {
         .from('master_codes')
         .update({ status: 'used', used_by_company: newCompany.id })
         .eq('id', masterCode.id)
+
+      // Create default region with company name
+      const { data: defaultRegion, error: regionError } = await supabaseAdmin
+        .from('regions')
+        .insert({
+          name: newCompany.name,
+          company_code: newCompanyCode!
+        })
+        .select()
+        .single()
+
+      if (regionError) {
+        console.error('Error creating default region:', regionError)
+        // Don't throw - company is created, region is optional
+      }
     }
 
     // Create Supabase Auth user (handles password hashing automatically)
@@ -179,6 +194,29 @@ serve(async (req) => {
       throw new Error('Greška pri kreiranju naloga: ' + authError.message)
     }
 
+    // Auto-assign region for clients, drivers, and managers
+    // company_admin doesn't need region (they see all regions)
+    let assignedRegionId: string | null = null
+
+    if (finalCompanyCode && assignedRole !== 'company_admin') {
+      // Get first region of this company (required for non-admin users)
+      const { data: regions } = await supabaseAdmin
+        .from('regions')
+        .select('id')
+        .eq('company_code', finalCompanyCode)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      if (regions && regions.length > 0) {
+        assignedRegionId = regions[0].id
+      } else {
+        // This shouldn't happen as company should always have a default region
+        // But just in case, throw an error
+        throw new Error('Firma nema kreiranu filijalu. Kontaktirajte administratora.')
+      }
+    }
+
     // Create user profile in public.users table
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
@@ -191,7 +229,8 @@ serve(async (req) => {
         longitude: longitude || null,
         role: assignedRole,
         company_code: finalCompanyCode,
-        is_owner: isOwner
+        is_owner: isOwner,
+        region_id: assignedRegionId
       })
       .select()
       .single()

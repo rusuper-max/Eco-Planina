@@ -1066,6 +1066,62 @@ export const AppProvider = ({ children }) => {
   };
 
   // Delete a company and all its users (god only)
+  // Login as another user (admin impersonation)
+  const loginAsUser = async (targetUser) => {
+    if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
+
+    // Don't allow impersonating god users
+    if (targetUser.role === 'god') {
+      throw new Error('Ne možete se ulogovati kao GOD korisnik');
+    }
+
+    setIsLoading(true);
+    try {
+      // Fetch company info for the target user
+      let companyData = null;
+      if (targetUser.company_code) {
+        const { data } = await supabase
+          .from('companies')
+          .select('*')
+          .eq('code', targetUser.company_code)
+          .single();
+        companyData = data;
+      }
+
+      // Set user state to target user
+      setUser({
+        id: targetUser.id,
+        name: targetUser.name,
+        role: targetUser.role,
+        address: targetUser.address,
+        phone: targetUser.phone,
+        latitude: targetUser.latitude,
+        longitude: targetUser.longitude,
+      });
+      setCompanyCode(targetUser.company_code);
+      setCompanyName(companyData?.name || 'Nepoznato');
+      setIsRegistered(true);
+
+      // Save session
+      saveSession({
+        id: targetUser.id,
+        name: targetUser.name,
+        role: targetUser.role,
+        address: targetUser.address,
+        phone: targetUser.phone,
+        latitude: targetUser.latitude,
+        longitude: targetUser.longitude,
+      }, targetUser.company_code, companyData?.name || 'Nepoznato');
+
+      return { success: true, role: targetUser.role };
+    } catch (error) {
+      console.error('Error logging in as user:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const deleteCompany = async (companyCode) => {
     if (!isGod()) throw new Error('Samo GOD moze da brise firme');
     try {
@@ -1286,6 +1342,7 @@ export const AppProvider = ({ children }) => {
     getAdminStats,
     deleteUser,
     deleteCompany,
+    loginAsUser,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

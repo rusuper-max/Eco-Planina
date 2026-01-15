@@ -26,6 +26,7 @@ import {
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage,
     ManagerAnalyticsPage,
+    DriverAnalyticsPage,
     RegionsPage,
     CompanyStaffPage,
     RegionNodeEditor,
@@ -36,7 +37,7 @@ import DriverManagement from './DriverManagement';
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient } = useData();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -79,6 +80,9 @@ export default function Dashboard() {
     const [driverAssignments, setDriverAssignments] = useState([]);
     const [companyDrivers, setCompanyDrivers] = useState([]);
     const [companyMembers, setCompanyMembers] = useState([]);
+    const [showRegionSelectModal, setShowRegionSelectModal] = useState(false);
+    const [selectedRegionId, setSelectedRegionId] = useState('');
+    const [savingRegion, setSavingRegion] = useState(false);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role === 'company_admin' ? 'company_admin' : user?.role || 'client';
 
@@ -196,9 +200,22 @@ export default function Dashboard() {
                     // Equipment is loaded from database via useEffect
                     // Fetch drivers for history table retroactive assignment
                     await fetchCompanyDrivers();
+                    // Fetch driver assignments for driver analytics
+                    await fetchDriverAssignments();
                 }
             }
             setInitialDataLoaded(true);
+
+            // Check if user needs to select a region (first login without region)
+            // Only for manager, driver, client - not company_admin
+            if (user?.role && user.role !== 'company_admin' && !user.region_id && companyCode) {
+                // Fetch regions to check if company has any
+                const regionsData = await fetchCompanyRegions();
+                if (regionsData && regionsData.length > 0) {
+                    setRegions(regionsData);
+                    setShowRegionSelectModal(true);
+                }
+            }
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
     };
@@ -326,7 +343,7 @@ export default function Dashboard() {
                 if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
                 if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
             } else if (userRole === 'manager' || userRole === 'company_admin') {
-                if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics') && processedRequests.length === 0) {
+                if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics' || activeTab === 'driver-analytics') && processedRequests.length === 0) {
                     setProcessedRequests(await fetchProcessedRequests() || []);
                 }
             }
@@ -575,6 +592,7 @@ export default function Dashboard() {
             { id: 'visual', icon: Network, label: 'Vizuelni Editor' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
             { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera' },
+            { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača' },
             { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
@@ -688,119 +706,119 @@ export default function Dashboard() {
             if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
             if (activeTab === 'info') {
                 // Informacije tab - overview of client's activity
-            return (
-                <div className="space-y-6">
-                    {/* Stats Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('requests')}>
-                            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
-                                <Truck className="w-6 h-6 text-emerald-600" />
+                return (
+                    <div className="space-y-6">
+                        {/* Stats Cards */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('requests')}>
+                                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center mb-3">
+                                    <Truck className="w-6 h-6 text-emerald-600" />
+                                </div>
+                                <p className="text-2xl font-bold text-slate-800">{clientRequests?.length || 0}</p>
+                                <p className="text-sm text-slate-500">Aktivni zahtevi</p>
                             </div>
-                            <p className="text-2xl font-bold text-slate-800">{clientRequests?.length || 0}</p>
-                            <p className="text-sm text-slate-500">Aktivni zahtevi</p>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('history')}>
-                            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
-                                <History className="w-6 h-6 text-blue-600" />
+                            <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('history')}>
+                                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-3">
+                                    <History className="w-6 h-6 text-blue-600" />
+                                </div>
+                                <p className="text-2xl font-bold text-slate-800">{clientHistory?.length || 0}</p>
+                                <p className="text-sm text-slate-500">Obrađeni zahtevi</p>
                             </div>
-                            <p className="text-2xl font-bold text-slate-800">{clientHistory?.length || 0}</p>
-                            <p className="text-sm text-slate-500">Obrađeni zahtevi</p>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('new')}>
-                            <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
-                                <Plus className="w-6 h-6 text-amber-600" />
+                            <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('new')}>
+                                <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-3">
+                                    <Plus className="w-6 h-6 text-amber-600" />
+                                </div>
+                                <p className="text-2xl font-bold text-slate-800">+</p>
+                                <p className="text-sm text-slate-500">Novi zahtev</p>
                             </div>
-                            <p className="text-2xl font-bold text-slate-800">+</p>
-                            <p className="text-sm text-slate-500">Novi zahtev</p>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('messages')}>
-                            <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
-                                <MessageCircle className="w-6 h-6 text-purple-600" />
+                            <div className="bg-white rounded-2xl border p-5 hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setActiveTab('messages')}>
+                                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-3">
+                                    <MessageCircle className="w-6 h-6 text-purple-600" />
+                                </div>
+                                <p className="text-2xl font-bold text-slate-800">{unreadCount || 0}</p>
+                                <p className="text-sm text-slate-500">Nove poruke</p>
                             </div>
-                            <p className="text-2xl font-bold text-slate-800">{unreadCount || 0}</p>
-                            <p className="text-sm text-slate-500">Nove poruke</p>
                         </div>
-                    </div>
 
-                    {/* Active Requests Preview */}
-                    {clientRequests?.length > 0 && (
-                        <div className="bg-white rounded-2xl border overflow-hidden">
-                            <div className="p-5 border-b flex justify-between items-center">
-                                <h2 className="font-bold text-lg">Aktivni zahtevi</h2>
-                                <button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium hover:text-emerald-700 flex items-center gap-1">
-                                    Vidi sve <ChevronRight size={16} />
-                                </button>
-                            </div>
-                            <div className="divide-y">
-                                {clientRequests.slice(0, 3).map(r => {
-                                    const assignment = r.driver_assignment;
-                                    const hasDriver = !!assignment;
-                                    const statusLabel = assignment?.status === 'in_progress' ? 'Vozač na putu' : hasDriver ? 'Dodeljen vozač' : 'Na čekanju';
-                                    const statusColor = assignment?.status === 'in_progress' ? 'bg-amber-100 text-amber-700' : hasDriver ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';
+                        {/* Active Requests Preview */}
+                        {clientRequests?.length > 0 && (
+                            <div className="bg-white rounded-2xl border overflow-hidden">
+                                <div className="p-5 border-b flex justify-between items-center">
+                                    <h2 className="font-bold text-lg">Aktivni zahtevi</h2>
+                                    <button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium hover:text-emerald-700 flex items-center gap-1">
+                                        Vidi sve <ChevronRight size={16} />
+                                    </button>
+                                </div>
+                                <div className="divide-y">
+                                    {clientRequests.slice(0, 3).map(r => {
+                                        const assignment = r.driver_assignment;
+                                        const hasDriver = !!assignment;
+                                        const statusLabel = assignment?.status === 'in_progress' ? 'Vozač na putu' : hasDriver ? 'Dodeljen vozač' : 'Na čekanju';
+                                        const statusColor = assignment?.status === 'in_progress' ? 'bg-amber-100 text-amber-700' : hasDriver ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700';
 
-                                    return (
-                                        <div key={r.id} className="p-4 hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
-                                                        {WASTE_TYPES.find(w => w.id === r.waste_type)?.icon || '📦'}
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-semibold text-slate-800">{r.waste_label}</h4>
-                                                        <p className="text-sm text-slate-500 flex items-center gap-2">
-                                                            <Calendar size={14} />
-                                                            {new Date(r.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full">
-                                                        <FillLevelBar fillLevel={r.fill_level} />
-                                                    </div>
-                                                    <span className={`px-3 py-1.5 text-xs font-medium rounded-full flex items-center gap-1 ${statusColor}`}>
-                                                        {hasDriver ? <Truck size={12} /> : <Clock size={12} />} {statusLabel}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                            {/* Show driver info when assigned */}
-                                            {hasDriver && (
-                                                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                                                    <div className="flex items-center gap-2 text-sm">
-                                                        <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                                                            <Users size={14} className="text-emerald-600" />
+                                        return (
+                                            <div key={r.id} className="p-4 hover:bg-slate-50 transition-colors">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
+                                                            {WASTE_TYPES.find(w => w.id === r.waste_type)?.icon || '📦'}
                                                         </div>
-                                                        <span className="text-slate-600">{assignment.driver_name}</span>
+                                                        <div>
+                                                            <h4 className="font-semibold text-slate-800">{r.waste_label}</h4>
+                                                            <p className="text-sm text-slate-500 flex items-center gap-2">
+                                                                <Calendar size={14} />
+                                                                {new Date(r.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    {assignment.driver_phone && (
-                                                        <a href={`tel:${assignment.driver_phone}`} className="flex items-center gap-1 text-emerald-600 text-sm font-medium hover:text-emerald-700">
-                                                            <Phone size={14} /> Pozovi
-                                                        </a>
-                                                    )}
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full">
+                                                            <FillLevelBar fillLevel={r.fill_level} />
+                                                        </div>
+                                                        <span className={`px-3 py-1.5 text-xs font-medium rounded-full flex items-center gap-1 ${statusColor}`}>
+                                                            {hasDriver ? <Truck size={12} /> : <Clock size={12} />} {statusLabel}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                                {/* Show driver info when assigned */}
+                                                {hasDriver && (
+                                                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2 text-sm">
+                                                            <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                                                <Users size={14} className="text-emerald-600" />
+                                                            </div>
+                                                            <span className="text-slate-600">{assignment.driver_name}</span>
+                                                        </div>
+                                                        {assignment.driver_phone && (
+                                                            <a href={`tel:${assignment.driver_phone}`} className="flex items-center gap-1 text-emerald-600 text-sm font-medium hover:text-emerald-700">
+                                                                <Phone size={14} /> Pozovi
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* Quick Action */}
-                    <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-8 text-white text-center">
-                        <Recycle size={48} className="mx-auto mb-4 opacity-90" />
-                        <h3 className="text-2xl font-bold mb-2">
-                            {clientRequests?.length ? `Imate ${clientRequests.length} aktivna zahteva` : 'Sve je pod kontrolom!'}
-                        </h3>
-                        <p className="text-emerald-100 mb-6">Podnesite novi zahtev za preuzimanje robe</p>
-                        <button
-                            onClick={() => setActiveTab('new')}
-                            className="bg-white text-emerald-600 px-8 py-3 rounded-xl font-semibold hover:bg-emerald-50 transition-colors inline-flex items-center gap-2"
-                        >
-                            <Plus size={20} /> Novi zahtev
-                        </button>
+                        {/* Quick Action */}
+                        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-8 text-white text-center">
+                            <Recycle size={48} className="mx-auto mb-4 opacity-90" />
+                            <h3 className="text-2xl font-bold mb-2">
+                                {clientRequests?.length ? `Imate ${clientRequests.length} aktivna zahteva` : 'Sve je pod kontrolom!'}
+                            </h3>
+                            <p className="text-emerald-100 mb-6">Podnesite novi zahtev za preuzimanje robe</p>
+                            <button
+                                onClick={() => setActiveTab('new')}
+                                className="bg-white text-emerald-600 px-8 py-3 rounded-xl font-semibold hover:bg-emerald-50 transition-colors inline-flex items-center gap-2"
+                            >
+                                <Plus size={20} /> Novi zahtev
+                            </button>
+                        </div>
                     </div>
-                </div>
-            );
+                );
             }
             // Default: Novi zahtev form (home page for clients)
             return <NewRequestForm onSubmit={handleNewRequest} loading={submitLoading} wasteTypes={clientWasteTypes} />;
@@ -856,7 +874,28 @@ export default function Dashboard() {
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} equipment={equipment} />;
-            if (activeTab === 'manager-analytics') return <ManagerAnalyticsPage processedRequests={processedRequests} members={companyMembers} wasteTypes={wasteTypes} />;
+            if (activeTab === 'manager-analytics') return (
+                <ManagerAnalyticsPage
+                    processedRequests={processedRequests}
+                    members={companyMembers}
+                    wasteTypes={wasteTypes}
+                    onResetStats={async () => {
+                        await resetManagerAnalytics();
+                        // Refresh the data after reset
+                        const fresh = await fetchProcessedRequests();
+                        setProcessedRequests(fresh);
+                        toast.success('Statistika je uspešno resetovana');
+                    }}
+                />
+            );
+            if (activeTab === 'driver-analytics') return (
+                <DriverAnalyticsPage
+                    driverAssignments={driverAssignments}
+                    drivers={companyDrivers}
+                    wasteTypes={wasteTypes}
+                    processedRequests={processedRequests}
+                />
+            );
             if (activeTab === 'history') return (
                 <div className="space-y-4">
                     <h1 className="text-2xl font-bold">Istorija svih zahteva</h1>
@@ -872,11 +911,7 @@ export default function Dashboard() {
                 </div>
             );
             if (activeTab === 'map') return (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h1 className="text-2xl font-bold">Mapa zahteva</h1>
-                        <p className="text-slate-500 text-sm">{pending.length} aktivnih zahteva</p>
-                    </div>
+                <div className="flex flex-col h-full">
                     <MapView
                         requests={pending}
                         clients={clients}
@@ -1172,9 +1207,9 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </header>
-                <main className="flex-1 overflow-y-auto p-6 lg:p-8 relative z-10">
-                    <div className="max-w-7xl mx-auto">
-                        <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'map' ? 'Mapa' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>
+                <main className={`flex-1 overflow-y-auto relative z-10 ${activeTab === 'map' ? 'p-0 overflow-hidden' : 'p-6 lg:p-8'}`}>
+                    <div className={`${activeTab === 'map' ? 'w-full h-full flex flex-col' : 'max-w-7xl mx-auto'}`}>
+                        {activeTab !== 'map' && <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>}
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>
@@ -1399,6 +1434,73 @@ export default function Dashboard() {
             {/* Help Mode Overlay - samo za manager i company_admin */}
             {(userRole === 'manager' || userRole === 'company_admin') && (
                 <HelpOverlay />
+            )}
+
+            {/* Region Selection Modal - shown on first login if user has no region */}
+            {showRegionSelectModal && regions.length > 0 && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="p-6 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white">
+                            <div className="flex items-center gap-3 mb-2">
+                                <MapPin size={28} />
+                                <h2 className="text-xl font-bold">Dobrodošli!</h2>
+                            </div>
+                            <p className="text-emerald-100 text-sm">
+                                Pre nego što nastavite, molimo izaberite filijalu kojoj pripadate.
+                            </p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">
+                                    Vaša filijala
+                                </label>
+                                <select
+                                    value={selectedRegionId}
+                                    onChange={(e) => setSelectedRegionId(e.target.value)}
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800"
+                                >
+                                    <option value="">-- Izaberite filijalu --</option>
+                                    {regions.map(region => (
+                                        <option key={region.id} value={region.id}>
+                                            {region.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <button
+                                onClick={async () => {
+                                    if (!selectedRegionId) {
+                                        toast.error('Molimo izaberite filijalu');
+                                        return;
+                                    }
+                                    setSavingRegion(true);
+                                    try {
+                                        await updateOwnRegion(selectedRegionId);
+                                        toast.success('Filijala uspešno podešena!');
+                                        setShowRegionSelectModal(false);
+                                        // Reload the page to refresh user data with new region
+                                        window.location.reload();
+                                    } catch (err) {
+                                        toast.error('Greška: ' + err.message);
+                                    } finally {
+                                        setSavingRegion(false);
+                                    }
+                                }}
+                                disabled={savingRegion || !selectedRegionId}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-medium py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                                {savingRegion ? (
+                                    <>
+                                        <RefreshCw size={18} className="animate-spin" />
+                                        Čuvanje...
+                                    </>
+                                ) : (
+                                    'Potvrdi izbor'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

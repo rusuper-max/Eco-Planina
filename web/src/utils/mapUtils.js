@@ -35,6 +35,13 @@ export const urgencyIcons = {
     '72h': createIcon('green')
 };
 
+// Urgency level to human-readable label
+const URGENCY_LABELS = {
+    '24h': 'Hitno',
+    '48h': 'Srednje',
+    '72h': 'OK'
+};
+
 /**
  * Create a custom styled marker icon with emoji and urgency badge
  * @param {string} urgency - Urgency level: '24h', '48h', or '72h'
@@ -45,7 +52,8 @@ export const urgencyIcons = {
 export const createCustomIcon = (urgency, iconEmoji, isClient = false) => {
     const color = isClient ? '#3B82F6' : (URGENCY_COLORS[urgency] || '#10B981');
     const icon = iconEmoji || (isClient ? '🏢' : '📦');
-    const badge = isClient ? '' : urgency;
+    // Use human-readable labels instead of "24h/48h/72h"
+    const badge = isClient ? '' : (URGENCY_LABELS[urgency] || '');
 
     return L.divIcon({
         className: 'custom-marker',

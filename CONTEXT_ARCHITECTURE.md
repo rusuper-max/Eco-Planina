@@ -118,7 +118,8 @@ DataContext (Depends on AuthContext)
     ↓
     ├── Uses: user (for permissions)
     ├── Uses: companyCode (for filtering)
-    └── Provides: pickupRequests, clientRequests
+    ├── Provides: pickupRequests, clientRequests
+    └── Provides: Region management (CRUD, batch assign)
     
 ChatContext (Depends on AuthContext)
     ↓
@@ -237,3 +238,25 @@ AdminContext (Depends on AuthContext)
 ---
 
 Generated: 2026-01-13
+Updated: 2026-01-15
+
+---
+
+## New Features (January 2026)
+
+### Region System
+- Company can have multiple regions/branches
+- Users are assigned to regions
+- Auto-assignment on registration
+- Last region cannot be deleted
+
+### Manager Analytics
+- Track which manager processed each request
+- `processed_by_id` and `processed_by_name` in processed_requests
+- ManagerAnalyticsPage for Company Admin
+
+### Professional Excel Export
+- ExcelJS library for real .xlsx files
+- 7 sheets with detailed data
+- Chart images (pie, bar, line) generated via Canvas API
+- Sheet selection checkboxes

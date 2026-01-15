@@ -510,6 +510,22 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // Update own region_id (for first-time region selection)
+    const updateOwnRegion = async (regionId) => {
+        if (!user?.id) throw new Error('Niste prijavljeni');
+        if (!regionId) throw new Error('Morate izabrati filijalu');
+        try {
+            const { error } = await supabase
+                .from('users')
+                .update({ region_id: regionId })
+                .eq('id', user.id);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
     // Fetch users by address pattern (for batch assignment)
     // Uses transliteration to match both Latin and Cyrillic addresses
     const fetchUsersByAddressPattern = async (pattern, roleFilter = null) => {
@@ -760,6 +776,38 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // Reset all manager analytics (delete all processed_requests for company)
+    // This is a company_admin only function
+    const resetManagerAnalytics = async () => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
+        if (user?.role !== 'company_admin' && !user?.is_owner) {
+            throw new Error('Samo vlasnik firme može resetovati statistiku');
+        }
+        try {
+            // Soft delete all processed requests for this company
+            const { error } = await supabase
+                .from('processed_requests')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('company_code', companyCode)
+                .is('deleted_at', null);
+
+            if (error) throw error;
+
+            // Also clean up completed driver assignments
+            await supabase
+                .from('driver_assignments')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('company_code', companyCode)
+                .eq('status', 'completed')
+                .is('deleted_at', null);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error resetting analytics:', error);
+            throw error;
+        }
+    };
+
     const value = {
         pickupRequests,
         clientRequests,
@@ -785,6 +833,7 @@ export const DataProvider = ({ children }) => {
         updateRegion,
         deleteRegion,
         assignUsersToRegion,
+        updateOwnRegion,
         fetchUsersByAddressPattern,
         fetchUsersGroupedByRegion,
         // Equipment functions
@@ -793,6 +842,8 @@ export const DataProvider = ({ children }) => {
         updateEquipment,
         deleteEquipment,
         migrateEquipmentFromLocalStorage,
+        // Analytics functions
+        resetManagerAnalytics,
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
