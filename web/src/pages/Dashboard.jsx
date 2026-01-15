@@ -17,9 +17,9 @@ import {
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
-    ImageUploader, StatCard, SidebarItem, Modal, EmptyState,
+    ImageUploader, StatCard, SidebarItem, Modal, EmptyState, FillLevelBar,
     NewRequestForm, ClientRequestsView, ClientHistoryView, ManagerRequestsTable,
-    PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement, NotificationBell,
+    PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement, NotificationBell, HelpButton, HelpOverlay,
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
     RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal, CreateRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
@@ -27,13 +27,14 @@ import {
     AnalyticsPage,
     RegionsPage,
     CompanyStaffPage,
-    RegionNodeEditor
+    RegionNodeEditor,
+    CompanySettingsPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
+    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
     const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -420,10 +421,30 @@ export default function Dashboard() {
                 console.log('DEBUG - Client ID:', editingClientLocation.id);
                 console.log('DEBUG - Position:', position);
 
+                // Reverse geocode to get address
+                let newAddress = editingClientLocation.address || '';
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position[0]}&lon=${position[1]}&accept-language=sr`);
+                    const geoData = await response.json();
+                    if (geoData.display_name) {
+                        // Extract shorter address format
+                        const parts = [];
+                        if (geoData.address?.road) parts.push(geoData.address.road);
+                        if (geoData.address?.house_number) parts.push(geoData.address.house_number);
+                        if (geoData.address?.city || geoData.address?.town || geoData.address?.village) {
+                            parts.push(geoData.address.city || geoData.address.town || geoData.address.village);
+                        }
+                        newAddress = parts.length > 0 ? parts.join(' ') : geoData.display_name.split(',').slice(0, 3).join(',');
+                    }
+                } catch (geoError) {
+                    console.warn('Reverse geocoding failed:', geoError);
+                }
+
                 const { data, error } = await supabase.rpc('update_client_location', {
                     client_id: editingClientLocation.id,
                     lat: position[0],
-                    lng: position[1]
+                    lng: position[1],
+                    addr: newAddress
                 });
 
                 console.log('DEBUG - RPC result:', { data, error });
@@ -433,10 +454,10 @@ export default function Dashboard() {
                     throw new Error('Nemate dozvolu za ovu akciju');
                 }
 
-                // Update local state
+                // Update local state with new address too
                 setClients(prev => prev.map(c =>
                     c.id === editingClientLocation.id
-                        ? { ...c, latitude: position[0], longitude: position[1] }
+                        ? { ...c, latitude: position[0], longitude: position[1], address: newAddress }
                         : c
                 ));
                 toast.success('Lokacija uspešno sačuvana');
@@ -463,30 +484,54 @@ export default function Dashboard() {
         }
     };
 
+    // Bulk update allowed waste types for a client (from WasteTypesManagement)
+    const handleUpdateClientWasteTypes = async (clientId, allowedWasteTypes) => {
+        const client = clients.find(c => c.id === clientId);
+        if (!client) return;
+        try {
+            await updateClientDetails(
+                clientId,
+                client.equipment_types || [],
+                client.manager_note || '',
+                client.pib || '',
+                allowedWasteTypes
+            );
+            // Update local state
+            setClients(prev => prev.map(c =>
+                c.id === clientId
+                    ? { ...c, allowed_waste_types: allowedWasteTypes }
+                    : c
+            ));
+        } catch (err) {
+            throw err;
+        }
+    };
+
     const getMenu = () => {
         if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }, { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }];
         if (userRole === 'company_admin') return [
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
-            { id: 'map', icon: Globe, label: 'Mapa' },
-            { id: 'staff', icon: Users, label: 'Osoblje' },
-            { id: 'regions', icon: MapPin, label: 'Filijale' },
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
+            { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
+            { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
+            { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
             { id: 'visual', icon: Network, label: 'Vizuelni Editor' },
-            { id: 'analytics', icon: BarChart3, label: 'Analitika' },
-            { id: 'history', icon: History, label: 'Istorija zahteva' },
-            { id: 'settings', icon: Settings, label: 'Podešavanja' }
+            { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
+            { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
+            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
+            { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
         ];
         if (userRole === 'manager') return [
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' },
-            { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length },
-            { id: 'drivers', icon: Users, label: 'Vozači' },
-            { id: 'history', icon: History, label: 'Istorija' },
-            { id: 'analytics', icon: BarChart3, label: 'Analitika' },
-            { id: 'clients', icon: Building2, label: 'Klijenti' },
-            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null },
-            { id: 'print', icon: Printer, label: 'Štampaj/Export' },
-            { id: 'equipment', icon: Box, label: 'Oprema' },
-            { id: 'wastetypes', icon: Recycle, label: 'Vrste robe' },
-            { id: 'map', icon: MapPin, label: 'Mapa' }
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
+            { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length, helpKey: 'sidebar-requests' },
+            { id: 'drivers', icon: Users, label: 'Vozači', helpKey: 'sidebar-drivers' },
+            { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
+            { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
+            { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
+            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
+            { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' },
+            { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
+            { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-equipment' },
+            { id: 'map', icon: MapPin, label: 'Mapa', helpKey: 'sidebar-map' }
         ];
         // Default: client menu - "Novi zahtev" is the main/home page for clients
         return [
@@ -572,7 +617,7 @@ export default function Dashboard() {
     const renderContent = () => {
         // Chat is available for both managers and clients
         if (activeTab === 'messages') {
-            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} userRole={userRole} subscribeToMessages={subscribeToMessages} deleteConversation={deleteConversation} />;
+            return <ChatInterface user={user} fetchMessages={fetchMessages} sendMessage={sendMessage} markMessagesAsRead={markMessagesAsRead} getConversations={getConversations} fetchCompanyClients={fetchCompanyClients} fetchCompanyMembers={fetchCompanyMembers} sendMessageToAdmins={sendMessageToAdmins} fetchCompanyAdmin={fetchCompanyAdmin} sendMessageToCompanyAdmin={sendMessageToCompanyAdmin} userRole={userRole} subscribeToMessages={subscribeToMessages} deleteConversation={deleteConversation} />;
         }
         if (userRole === 'client') {
             // Filter waste types based on client's allowed types (null/empty = all allowed)
@@ -650,9 +695,9 @@ export default function Dashboard() {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                                        {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
-                                                    </span>
+                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-full">
+                                                        <FillLevelBar fillLevel={r.fill_level} />
+                                                    </div>
                                                     <span className={`px-3 py-1.5 text-xs font-medium rounded-full flex items-center gap-1 ${statusColor}`}>
                                                         {hasDriver ? <Truck size={12} /> : <Clock size={12} />} {statusLabel}
                                                     </span>
@@ -733,10 +778,10 @@ export default function Dashboard() {
                 catch { setProcessedRequests(previous); } // Rollback
             }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} />;
-            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
-            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />;
+            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />;
             if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} wasteTypes={wasteTypes} drivers={companyDrivers} onAssignDriver={handleAssignDriverFromMap} driverAssignments={driverAssignments} /></div>;
             // Sort by remaining time (most urgent first) for dashboard preview
             const sortedByUrgency = [...pending].sort((a, b) => {
@@ -780,10 +825,15 @@ export default function Dashboard() {
                 </div>
             );
             if (activeTab === 'settings') return (
-                <div className="space-y-6">
-                    <h1 className="text-2xl font-bold">Podešavanja firme</h1>
-                    <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} />
-                    <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />
+                <div className="space-y-8">
+                    <CompanySettingsPage />
+                    <div className="border-t pt-8">
+                        <h2 className="text-xl font-bold mb-6">Vrste otpada i oprema</h2>
+                        <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />
+                    </div>
+                    <div className="border-t pt-8">
+                        <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />
+                    </div>
                 </div>
             );
             // Company Admin Dashboard - Overview stats
@@ -885,7 +935,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0"><Mountain size={20} /></div><div className="flex flex-col leading-tight"><span className="font-bold text-lg text-white">EcoMountain</span><span className="font-bold text-sm text-emerald-400">Tracking</span></div></div>
                         <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24} /></button>
                     </div>
-                    <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} isLink={m.isLink} href={m.href} onClick={() => { if (!m.isLink) { setActiveTab(m.id); setSidebarOpen(false); } }} />)}</nav>
+                    <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} isLink={m.isLink} href={m.href} helpKey={m.helpKey} onClick={() => { if (!m.isLink) { setActiveTab(m.id); setSidebarOpen(false); } }} />)}</nav>
                     <div className="p-4 border-t border-slate-700"><SidebarItem icon={LogOut} label="Odjavi se" onClick={handleLogout} /></div>
                 </div>
             </aside>
@@ -921,6 +971,14 @@ export default function Dashboard() {
                                 <code className="text-sm font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">{companyCode}</code>
                                 <Copy size={14} className="text-emerald-500" />
                             </button>
+                        )}
+                        {/* Filijala - prikaži samo za managere/vozače koji imaju dodeljenu filijalu */}
+                        {['manager', 'driver'].includes(userRole) && regionName && (
+                            <div className="hidden md:flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl px-4 py-2.5">
+                                <MapPin size={18} className="text-purple-600" />
+                                <span className="text-sm font-medium text-purple-700">Filijala:</span>
+                                <span className="text-sm font-bold text-purple-800">{regionName}</span>
+                            </div>
                         )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -982,6 +1040,10 @@ export default function Dashboard() {
                                     </>
                                 )}
                             </div>
+                        )}
+                        {/* Help Button - samo za manager i company_admin */}
+                        {(userRole === 'manager' || userRole === 'company_admin') && (
+                            <HelpButton />
                         )}
                         {/* Notifications */}
                         <NotificationBell />
@@ -1264,6 +1326,10 @@ export default function Dashboard() {
                         setEditingCompany(null);
                     }}
                 />
+            )}
+            {/* Help Mode Overlay - samo za manager i company_admin */}
+            {(userRole === 'manager' || userRole === 'company_admin') && (
+                <HelpOverlay />
             )}
         </div>
     );

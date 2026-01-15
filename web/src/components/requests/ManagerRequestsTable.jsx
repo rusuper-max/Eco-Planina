@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, Trash2 } from 'lucide-react';
 import { EmptyState, FillLevelBar, RequestStatusBadge, CountdownTimer } from '../common';
-import { getRemainingTime, getCurrentUrgency } from '../../utils/timeUtils';
+import { getRemainingTime } from '../../utils/timeUtils';
 
 const DEFAULT_WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
@@ -27,16 +27,18 @@ export const ManagerRequestsTable = ({
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all'); // all, or waste type id
-    const [filterUrgency, setFilterUrgency] = useState(initialUrgencyFilter); // all, 24h, 48h, 72h
+    const [filterFill, setFilterFill] = useState('all'); // all, low, medium, high, full
 
-    // Sync with external filter
+    // Sync with external filter (legacy support)
     useEffect(() => {
-        setFilterUrgency(initialUrgencyFilter);
+        // Convert legacy urgency to fill filter if needed
+        if (initialUrgencyFilter && initialUrgencyFilter !== 'all') {
+            // Legacy: just ignore old urgency filter
+        }
     }, [initialUrgencyFilter]);
 
-    const handleUrgencyChange = (value) => {
-        setFilterUrgency(value);
-        onUrgencyFilterChange?.(value);
+    const handleFillChange = (value) => {
+        setFilterFill(value);
     };
 
     if (!requests?.length) return <EmptyState icon={Truck} title="Nema zahteva" desc="Zahtevi će se prikazati ovde" />;
@@ -54,10 +56,13 @@ export const ManagerRequestsTable = ({
         }
         // Type filter
         if (filterType !== 'all' && req.waste_type !== filterType) return false;
-        // Urgency filter - use current urgency based on remaining time, not original
-        if (filterUrgency !== 'all') {
-            const currentUrgency = getCurrentUrgency(req.created_at, req.urgency);
-            if (currentUrgency !== filterUrgency) return false;
+        // Fill level filter
+        if (filterFill !== 'all') {
+            const fill = req.fill_level || 0;
+            if (filterFill === 'low' && fill > 25) return false;
+            if (filterFill === 'medium' && (fill <= 25 || fill > 50)) return false;
+            if (filterFill === 'high' && (fill <= 50 || fill > 75)) return false;
+            if (filterFill === 'full' && fill <= 75) return false;
         }
         return true;
     });
@@ -124,22 +129,23 @@ export const ManagerRequestsTable = ({
                     {wasteTypes.map(w => <option key={w.id} value={w.id}>{w.icon} {w.label}</option>)}
                 </select>
                 <select
-                    value={filterUrgency}
-                    onChange={(e) => handleUrgencyChange(e.target.value)}
+                    value={filterFill}
+                    onChange={(e) => handleFillChange(e.target.value)}
                     className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
                 >
-                    <option value="all">Sva hitnost</option>
-                    <option value="24h">Hitno (24h)</option>
-                    <option value="48h">Srednje (48h)</option>
-                    <option value="72h">Normalno (72h)</option>
+                    <option value="all">Sva popunjenost</option>
+                    <option value="low">Niska (0-25%)</option>
+                    <option value="medium">Srednja (26-50%)</option>
+                    <option value="high">Visoka (51-75%)</option>
+                    <option value="full">Puna (76-100%)</option>
                 </select>
             </div>
 
             {/* Results count */}
             <div className="text-sm text-slate-500">
                 Prikazano {filtered.length} od {requests.length} zahteva
-                {(searchQuery || filterType !== 'all' || filterUrgency !== 'all') && (
-                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); handleUrgencyChange('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
+                {(searchQuery || filterType !== 'all' || filterFill !== 'all') && (
+                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); handleFillChange('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
                         Obriši filtere
                     </button>
                 )}

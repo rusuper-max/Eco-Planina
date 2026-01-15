@@ -1,21 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Printer, Download, FileSpreadsheet, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Truck, History, FileText } from 'lucide-react';
-import { FillLevelBar } from '../common';
-
-// Helper function for calculating remaining time
-const getRemainingTime = (createdAt, urgency) => {
-    const hours = urgency === '24h' ? 24 : urgency === '48h' ? 48 : 72;
-    const deadline = new Date(new Date(createdAt).getTime() + hours * 60 * 60 * 1000);
-    const diff = deadline - new Date();
-    if (diff <= 0) return { text: '00:00:00', color: 'text-red-600', bg: 'bg-red-100', ms: diff };
-    const h = Math.floor(diff / (1000 * 60 * 60));
-    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const s = Math.floor((diff % (1000 * 60)) / 1000);
-    const text = h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ':' + s.toString().padStart(2, '0');
-    if (h < 6) return { text, color: 'text-red-600', bg: 'bg-red-100', ms: diff };
-    if (h < 24) return { text, color: 'text-amber-600', bg: 'bg-amber-100', ms: diff };
-    return { text, color: 'text-emerald-600', bg: 'bg-emerald-100', ms: diff };
-};
+import { FillLevelBar, CountdownTimer } from '../common';
+import { getRemainingTime } from '../../utils/timeUtils';
 
 // Default waste types
 const WASTE_TYPES = [
@@ -413,10 +399,11 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
                                         <>
                                             {fields.client && <td className="px-4 py-3"><button onClick={() => onClientClick?.(item.user_id)} className="font-medium text-blue-600 hover:text-blue-800 hover:underline text-left">{item.client_name}</button></td>}
                                             {fields.type && <td className="px-4 py-3">{item.waste_label}</td>}
-                                            {fields.urgency && (() => {
-                                                const remaining = getRemainingTime(item.created_at, item.urgency);
-                                                return <td className="px-4 py-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${remaining.bg} ${remaining.color}`}>{remaining.text}</span></td>;
-                                            })()}
+                                            {fields.urgency && (
+                                                <td className="px-4 py-3">
+                                                    <CountdownTimer createdAt={item.created_at} urgency={item.urgency} />
+                                                </td>
+                                            )}
                                             {fields.date && <td className="px-4 py-3 text-slate-600">{new Date(item.created_at).toLocaleDateString('sr-RS')}</td>}
                                             {fields.fillLevel && <td className="px-4 py-3"><FillLevelBar fillLevel={item.fill_level} /></td>}
                                             {fields.note && <td className="px-4 py-3 text-slate-600 max-w-32 truncate">{item.note || '-'}</td>}

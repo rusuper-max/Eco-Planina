@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, AlertCircle, Loader2 } from 'lucide-react';
 import { Modal } from '../common';
 
@@ -15,11 +15,32 @@ export const CreateRequestModal = ({
 }) => {
     const [selectedClient, setSelectedClient] = useState('');
     const [wasteType, setWasteType] = useState('');
-    const [fillLevel, setFillLevel] = useState(100);
-    const [urgency, setUrgency] = useState('48h');
+    const [fillLevel, setFillLevel] = useState(50);
     const [note, setNote] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    // Filtriraj vrste robe na osnovu izabranog klijenta
+    const availableWasteTypes = useMemo(() => {
+        if (!selectedClient) return [];
+
+        const client = clients.find(c => c.id === selectedClient);
+        if (!client) return [];
+
+        // Ako klijent nema ograničenja (null ili prazan niz), prikaži sve
+        if (!client.allowed_waste_types || client.allowed_waste_types.length === 0) {
+            return wasteTypes;
+        }
+
+        // Inače filtriraj samo dozvoljene
+        return wasteTypes.filter(wt => client.allowed_waste_types.includes(wt.id));
+    }, [selectedClient, clients, wasteTypes]);
+
+    // Resetuj wasteType kad se promeni klijent
+    const handleClientChange = (clientId) => {
+        setSelectedClient(clientId);
+        setWasteType(''); // Reset waste type selection
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -46,7 +67,7 @@ export const CreateRequestModal = ({
                 wasteType: wasteType,
                 wasteLabel: waste?.label,
                 fillLevel: fillLevel,
-                urgency: urgency,
+                urgency: 'standard',
                 note: note || `Zahtev kreirao: ${managerName || 'Menadžer'}`,
                 latitude: client?.latitude,
                 longitude: client?.longitude
@@ -55,8 +76,7 @@ export const CreateRequestModal = ({
             // Reset form
             setSelectedClient('');
             setWasteType('');
-            setFillLevel(100);
-            setUrgency('48h');
+            setFillLevel(50);
             setNote('');
             onClose();
         } catch (err) {
@@ -75,44 +95,22 @@ export const CreateRequestModal = ({
 
     // Calculate slider color based on fill level
     const getSliderColor = () => {
-        if (fillLevel <= 30) return '#22c55e'; // green
-        if (fillLevel <= 60) return '#eab308'; // amber
+        if (fillLevel <= 25) return '#10b981'; // emerald
+        if (fillLevel <= 50) return '#84cc16'; // lime
+        if (fillLevel <= 75) return '#f59e0b'; // amber
         return '#ef4444'; // red
+    };
+
+    // Labela za nivo popunjenosti
+    const getFillLabel = (value) => {
+        if (value <= 25) return 'Skoro prazan';
+        if (value <= 50) return 'Polupun';
+        if (value <= 75) return 'Skoro pun';
+        return 'Potpuno pun';
     };
 
     return (
         <Modal open={open} onClose={handleClose} title="Kreiraj zahtev">
-            <style>{`
-                .fill-slider::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    appearance: none;
-                    width: 24px;
-                    height: 24px;
-                    border-radius: 50%;
-                    background: white;
-                    border: 3px solid ${getSliderColor()};
-                    cursor: pointer;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-                    transition: border-color 0.2s;
-                }
-                .fill-slider::-moz-range-thumb {
-                    width: 20px;
-                    height: 20px;
-                    border-radius: 50%;
-                    background: white;
-                    border: 3px solid ${getSliderColor()};
-                    cursor: pointer;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-                }
-                .fill-slider::-webkit-slider-runnable-track {
-                    height: 12px;
-                    border-radius: 6px;
-                }
-                .fill-slider::-moz-range-track {
-                    height: 12px;
-                    border-radius: 6px;
-                }
-            `}</style>
             <form onSubmit={handleSubmit} className="space-y-4">
                 {error && (
                     <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
@@ -128,7 +126,7 @@ export const CreateRequestModal = ({
                     </label>
                     <select
                         value={selectedClient}
-                        onChange={(e) => setSelectedClient(e.target.value)}
+                        onChange={(e) => handleClientChange(e.target.value)}
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
                         required
                     >
@@ -144,83 +142,86 @@ export const CreateRequestModal = ({
                 {/* Waste Type Select */}
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                        Vrsta otpada *
+                        Vrsta robe *
                     </label>
                     <select
                         value={wasteType}
                         onChange={(e) => setWasteType(e.target.value)}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white"
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none bg-white disabled:bg-slate-100 disabled:cursor-not-allowed"
                         required
+                        disabled={!selectedClient}
                     >
-                        <option value="">Izaberi vrstu otpada...</option>
-                        {wasteTypes.map(type => (
+                        <option value="">
+                            {!selectedClient
+                                ? 'Prvo izaberi klijenta...'
+                                : availableWasteTypes.length === 0
+                                    ? 'Klijent nema dodeljene vrste robe'
+                                    : 'Izaberi vrstu robe...'}
+                        </option>
+                        {availableWasteTypes.map(type => (
                             <option key={type.id} value={type.id}>
                                 {type.icon} {type.label}
                             </option>
                         ))}
                     </select>
+                    {selectedClient && availableWasteTypes.length === 0 && (
+                        <p className="mt-1 text-xs text-amber-600">
+                            Ovom klijentu nije dodeljena nijedna vrsta robe
+                        </p>
+                    )}
                 </div>
 
                 {/* Fill Level */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Popunjenost kontejnera: <span className={`font-bold ${fillLevel <= 30 ? 'text-emerald-600' : fillLevel <= 60 ? 'text-amber-600' : 'text-red-600'}`}>{fillLevel}%</span>
-                    </label>
-                    <div className="relative py-2">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-slate-700">
+                            Popunjenost kontejnera
+                        </label>
+                        <span
+                            className="px-3 py-1 rounded-full text-sm font-bold"
+                            style={{ backgroundColor: `${getSliderColor()}20`, color: getSliderColor() }}
+                        >
+                            {fillLevel}% - {getFillLabel(fillLevel)}
+                        </span>
+                    </div>
+                    <div className="relative pt-2 pb-4">
+                        {/* Gradient bar */}
+                        <div className="h-3 rounded-full bg-gradient-to-r from-emerald-400 via-yellow-400 via-orange-400 to-red-500 shadow-inner" />
+
+                        {/* Hidden range input */}
                         <input
                             type="range"
-                            min="10"
+                            min="0"
                             max="100"
-                            step="10"
+                            step="1"
                             value={fillLevel}
                             onChange={(e) => setFillLevel(Number(e.target.value))}
-                            className="fill-slider w-full h-3 rounded-full cursor-pointer"
-                            style={{
-                                background: (() => {
-                                    const percent = ((fillLevel - 10) / 90) * 100;
-                                    // Gradient samo do pozicije slidera, ostatak siv
-                                    return `linear-gradient(to right, #22c55e 0%, #eab308 ${Math.min(percent, 50)}%, ${percent > 50 ? '#ef4444' : '#eab308'} ${percent}%, #e2e8f0 ${percent}%, #e2e8f0 100%)`;
-                                })(),
-                                WebkitAppearance: 'none',
-                                appearance: 'none'
-                            }}
+                            className="absolute top-0 left-0 w-full h-7 opacity-0 cursor-pointer z-10"
                         />
-                    </div>
-                    <div className="flex justify-between text-xs mt-1">
-                        <span className="text-emerald-600 font-medium">10%</span>
-                        <span className="text-amber-600 font-medium">50%</span>
-                        <span className="text-red-600 font-medium">100%</span>
-                    </div>
-                </div>
 
-                {/* Urgency */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Hitnost
-                    </label>
-                    <div className="flex gap-2">
-                        {[
-                            { value: '24h', label: 'Hitno (24h)', color: 'red' },
-                            { value: '48h', label: 'Srednje (48h)', color: 'amber' },
-                            { value: '72h', label: 'Normalno (72h)', color: 'emerald' }
-                        ].map(opt => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setUrgency(opt.value)}
-                                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-colors ${
-                                    urgency === opt.value
-                                        ? opt.color === 'red'
-                                            ? 'bg-red-100 text-red-700 ring-2 ring-red-500'
-                                            : opt.color === 'amber'
-                                            ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-500'
-                                            : 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
-                            >
-                                {opt.label}
-                            </button>
-                        ))}
+                        {/* Thumb indicator */}
+                        <div
+                            className="absolute top-[-2px] w-7 h-7 rounded-full bg-white border-[3px] shadow-lg transform -translate-x-1/2 pointer-events-none"
+                            style={{
+                                left: `${fillLevel}%`,
+                                borderColor: getSliderColor(),
+                                transition: 'left 0.05s ease-out, border-color 0.15s ease',
+                            }}
+                        >
+                            <div
+                                className="absolute inset-[3px] rounded-full transition-colors duration-150"
+                                style={{ backgroundColor: getSliderColor() }}
+                            />
+                        </div>
+
+                        {/* Scale markers */}
+                        <div className="flex justify-between mt-3 px-1 text-xs text-slate-400">
+                            <span>0%</span>
+                            <span>25%</span>
+                            <span>50%</span>
+                            <span>75%</span>
+                            <span>100%</span>
+                        </div>
                     </div>
                 </div>
 

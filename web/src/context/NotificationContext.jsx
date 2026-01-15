@@ -82,13 +82,11 @@ export const NotificationProvider = ({ children }) => {
                     filter: `user_id=eq.${user.id}`
                 },
                 (payload) => {
-                    setNotifications(prev =>
-                        prev.map(n => n.id === payload.new.id ? payload.new : n)
-                    );
-                    // Recalculate unread count
                     setNotifications(prev => {
-                        setUnreadCount(prev.filter(n => !n.is_read).length);
-                        return prev;
+                        const updated = prev.map(n => n.id === payload.new.id ? payload.new : n);
+                        // Recalculate unread count from updated array
+                        setUnreadCount(updated.filter(n => !n.is_read).length);
+                        return updated;
                     });
                 }
             )

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { History, Loader2, Search, X, ArrowUp, ArrowDown, Send, CheckCircle2, Image, ChevronDown, Download } from 'lucide-react';
-import { Modal } from '../common';
+import { Modal, FillLevelBar } from '../common';
 
 /**
  * Client History View - Shows past processed requests with pagination and search
@@ -141,10 +141,11 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                                     <span className="px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-100 text-emerald-700 flex items-center gap-2">
                                         <CheckCircle2 size={16} /> Obrađeno
                                     </span>
-                                    {r.urgency && (
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${r.urgency === '24h' ? 'bg-red-50 text-red-600' : r.urgency === '48h' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'}`}>
-                                            {r.urgency === '24h' ? 'Bilo hitno' : r.urgency === '48h' ? 'Bilo srednje' : 'Bilo normalno'}
-                                        </span>
+                                    {(r.fill_level !== null && r.fill_level !== undefined) && (
+                                        <div className="flex items-center gap-2 px-3 py-1 bg-slate-50 rounded-full">
+                                            <span className="text-xs text-slate-500">Bilo:</span>
+                                            <FillLevelBar fillLevel={r.fill_level} />
+                                        </div>
                                     )}
                                     {r.proof_image_url && (
                                         <button

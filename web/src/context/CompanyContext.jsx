@@ -227,6 +227,39 @@ export const CompanyProvider = ({ children }) => {
         }
     };
 
+    // Get company's max pickup hours setting
+    const fetchMaxPickupHours = async () => {
+        if (!companyCode) return 48; // Default
+        try {
+            const { data, error } = await supabase
+                .from('companies')
+                .select('max_pickup_hours')
+                .eq('code', companyCode)
+                .is('deleted_at', null)
+                .maybeSingle();
+            if (error) throw error;
+            return data?.max_pickup_hours || 48;
+        } catch (error) {
+            console.error('Error fetching max pickup hours:', error);
+            return 48;
+        }
+    };
+
+    // Update company's max pickup hours setting
+    const updateMaxPickupHours = async (hours) => {
+        if (!companyCode) throw new Error('Nema kompanije');
+        try {
+            const { error } = await supabase
+                .from('companies')
+                .update({ max_pickup_hours: hours })
+                .eq('code', companyCode);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
     const value = {
         fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes,
@@ -241,6 +274,9 @@ export const CompanyProvider = ({ children }) => {
         updateCompanyName,
         updateLocation,
         fetchCompanyDetails,
+        // Pickup settings
+        fetchMaxPickupHours,
+        updateMaxPickupHours,
     };
 
     return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, ArrowUp, ArrowDown, Calendar, Clock, Truck, Phone, User } from 'lucide-react';
-import { CountdownTimer } from '../common';
+import { CountdownTimer, FillLevelBar } from '../common';
 
 // Helper to get status label and color
 const getAssignmentStatus = (status) => {
@@ -36,9 +36,9 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
     const sorted = [...requests].sort((a, b) => {
         let cmp = 0;
         if (sortBy === 'date') cmp = new Date(b.created_at) - new Date(a.created_at);
-        else if (sortBy === 'urgency') {
-            const urgencyOrder = { '24h': 0, '48h': 1, '72h': 2 };
-            cmp = (urgencyOrder[a.urgency] || 2) - (urgencyOrder[b.urgency] || 2);
+        else if (sortBy === 'fill') {
+            // Sortiraj po popunjenosti - najveća popunjenost prva
+            cmp = (b.fill_level || 0) - (a.fill_level || 0);
         } else if (sortBy === 'type') cmp = (a.waste_label || '').localeCompare(b.waste_label || '');
         return sortDir === 'desc' ? -cmp : cmp;
     });
@@ -53,7 +53,7 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
             <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
                 <h2 className="font-bold text-lg">Aktivni zahtevi ({requests.length})</h2>
                 <div className="flex gap-2">
-                    {[{ key: 'date', label: 'Datum' }, { key: 'urgency', label: 'Hitnost' }, { key: 'type', label: 'Tip' }].map(s => (
+                    {[{ key: 'date', label: 'Datum' }, { key: 'fill', label: 'Popunjenost' }, { key: 'type', label: 'Tip' }].map(s => (
                         <button
                             key={s.key}
                             onClick={() => toggleSort(s.key)}
@@ -101,9 +101,11 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
                                     </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <span className={`px-4 py-2 text-sm font-semibold rounded-xl ${r.urgency === '24h' ? 'bg-red-100 text-red-700' : r.urgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                        {r.urgency === '24h' ? 'Hitno (24h)' : r.urgency === '48h' ? 'Srednje (48h)' : 'Normalno (72h)'}
-                                    </span>
+                                    {/* Popunjenost kontejnera */}
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-xl">
+                                        <span className="text-xs text-slate-500">Popunjenost:</span>
+                                        <FillLevelBar fillLevel={r.fill_level} />
+                                    </div>
                                     <CountdownTimer createdAt={r.created_at} urgency={r.urgency} />
                                     <span className={`px-3 py-1 text-xs font-medium rounded-full flex items-center gap-1 ${statusInfo.color}`}>
                                         <StatusIcon size={12} />

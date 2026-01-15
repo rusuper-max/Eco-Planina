@@ -4,3 +4,19 @@
   --font-sans: "Inter", "system-ui", "sans-serif";
   --breakpoint-xs: 480px;
 }
+
+/* Help Mode Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}

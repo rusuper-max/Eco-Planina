@@ -7,3 +7,4 @@ export { FillLevelBar } from './FillLevelBar';
 export { ImageUploader } from './ImageUploader';
 export { RequestStatusBadge } from './RequestStatusBadge';
 export { default as NotificationBell } from './NotificationBell';
+export { HelpTooltip, HelpButton, HelpOverlay } from './HelpTooltip';

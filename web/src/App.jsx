@@ -7,6 +7,7 @@ import {
   CompanyProvider,
   AdminProvider,
   NotificationProvider,
+  HelpModeProvider,
   useAuthOnly as useAuth
 } from './context';
 import LoginPage from './pages/LoginPage';
@@ -72,8 +73,9 @@ export default function App() {
             <ChatProvider>
               <CompanyProvider>
                 <AdminProvider>
-                  <AppRoutes />
-                  <Toaster
+                  <HelpModeProvider>
+                    <AppRoutes />
+                    <Toaster
                   position="top-center"
                   toastOptions={{
                     duration: 3000,
@@ -89,7 +91,8 @@ export default function App() {
                       duration: 4000,
                     },
                   }}
-                />
+                  />
+                  </HelpModeProvider>
                 </AdminProvider>
               </CompanyProvider>
             </ChatProvider>

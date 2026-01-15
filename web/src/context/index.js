@@ -12,6 +12,7 @@ export { ChatProvider } from './ChatContext';
 export { CompanyProvider } from './CompanyContext';
 export { AdminProvider } from './AdminContext';
 export { NotificationProvider } from './NotificationContext';
+export { HelpModeProvider } from './HelpModeContext';
 
 // Export individual hooks (recommended for new code)
 export { useAuth as useAuthOnly } from './AuthContext';
@@ -20,6 +21,7 @@ export { useChat } from './ChatContext';
 export { useCompany } from './CompanyContext';
 export { useAdmin } from './AdminContext';
 export { useNotifications } from './NotificationContext';
+export { useHelpMode } from './HelpModeContext';
 
 // Export legacy combined hook (for backward compatibility)
 export { useLegacyAuth as useAuth } from '../hooks/useLegacyAuth';

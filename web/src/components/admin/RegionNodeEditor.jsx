@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Building2, Users, Truck, User, MapPin, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Save, Network, Move, Phone, Mail, X, LogIn, Edit3 } from 'lucide-react';
+import { Building2, Users, Truck, User, MapPin, ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw, Save, Network, Move, Phone, Mail, X, LogIn, Edit3, GripVertical } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context';
 import toast from 'react-hot-toast';
@@ -46,6 +46,12 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
 
     // Node positions
     const [nodePositions, setNodePositions] = useState({});
+    const nodePositionsRef = useRef(nodePositions);
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        nodePositionsRef.current = nodePositions;
+    }, [nodePositions]);
 
     // Cached region bounds - only updates on save/load, not while dragging
     const [cachedRegionBounds, setCachedRegionBounds] = useState({});
@@ -80,6 +86,12 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     // Pending changes
     const [pendingChanges, setPendingChanges] = useState([]);
 
+    // Position changes tracking
+    const [hasPositionChanges, setHasPositionChanges] = useState(false);
+
+    // localStorage key for positions
+    const POSITIONS_STORAGE_KEY = 'eco_region_editor_positions';
+
     useEffect(() => {
         loadData();
     }, []);
@@ -103,7 +115,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     };
 
     // Initialize positions
-    const initializePositions = useCallback((groupedData) => {
+    const initializePositions = useCallback((groupedData, forceReset = false) => {
         const positions = {};
         const centerX = 600;
         const startY = 100;
@@ -181,11 +193,84 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             });
         }
 
-        setNodePositions(positions);
+        // Try to load saved positions from localStorage (only for regions)
+        let finalPositions = { ...positions }; // Create a copy
+        if (!forceReset) {
+            try {
+                const saved = localStorage.getItem(POSITIONS_STORAGE_KEY);
+                if (saved) {
+                    const savedPositions = JSON.parse(saved);
+                    // Merge saved region positions with calculated positions
+                    // Only apply saved positions for regions that still exist
+                    Object.keys(savedPositions).forEach(key => {
+                        if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
+                            // Check if this region still exists in our data
+                            if (positions[key]) {
+                                const oldPos = positions[key];
+                                const newPos = savedPositions[key];
+
+                                // Calculate offset
+                                const offsetX = newPos.x - oldPos.x;
+                                const offsetY = newPos.y - oldPos.y;
+
+                                // Apply to region/container
+                                finalPositions[key] = newPos;
+
+                                // Also move users within this region/container by the same offset
+                                if (key.startsWith('region-')) {
+                                    const regionId = key.replace('region-', '');
+                                    const region = regions.find(r => r.id === regionId);
+                                    if (region) {
+                                        (region.users || []).forEach(u => {
+                                            const userKey = `user-${u.id}`;
+                                            if (positions[userKey]) {
+                                                finalPositions[userKey] = {
+                                                    x: positions[userKey].x + offsetX,
+                                                    y: positions[userKey].y + offsetY
+                                                };
+                                            }
+                                        });
+                                    }
+                                } else if (key === 'uprava') {
+                                    // Move company admins with uprava container
+                                    const companyAdmins = unassigned.filter(u => u.role === 'company_admin');
+                                    companyAdmins.forEach(u => {
+                                        const userKey = `user-${u.id}`;
+                                        if (positions[userKey]) {
+                                            finalPositions[userKey] = {
+                                                x: positions[userKey].x + offsetX,
+                                                y: positions[userKey].y + offsetY
+                                            };
+                                        }
+                                    });
+                                } else if (key === 'unassigned') {
+                                    // Move unassigned users (non-admins) with unassigned container
+                                    const realUnassigned = unassigned.filter(u => u.role !== 'company_admin');
+                                    realUnassigned.forEach(u => {
+                                        const userKey = `user-${u.id}`;
+                                        if (positions[userKey]) {
+                                            finalPositions[userKey] = {
+                                                x: positions[userKey].x + offsetX,
+                                                y: positions[userKey].y + offsetY
+                                            };
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+            } catch (e) {
+                // Silently ignore localStorage errors
+            }
+        }
+
+        setNodePositions(finalPositions);
+        setHasPositionChanges(false);
 
         // Calculate and cache initial region bounds
         setTimeout(() => {
-            updateCachedBounds(positions, groupedData);
+            updateCachedBounds(finalPositions, groupedData);
         }, 0);
     }, []);
 
@@ -394,28 +479,24 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         return nodePositions[nodeId] || { x: 0, y: 0 };
     }, [nodePositions]);
 
-    // Get region bounds - cached for normal regions, dynamic for "uprava"
+    // Get region bounds - always calculate dynamically from current node positions
     const getRegionBounds = useCallback((circleId) => {
-        // Uprava circle follows CA nodes dynamically
-        if (circleId === 'uprava') {
-            const circle = regionCircles.find(c => c.id === 'uprava');
-            if (circle) {
-                const childPositions = circle.childIds.map(id => nodePositions[id]).filter(p => p);
-                if (childPositions.length > 0) {
-                    const xs = childPositions.map(p => p.x);
-                    const ys = childPositions.map(p => p.y);
-                    // Larger padding for Uprava circle so text looks better
-                    const padding = 55;
-                    const minX = Math.min(...xs) - padding;
-                    const maxX = Math.max(...xs) + padding;
-                    const minY = Math.min(...ys) - padding;
-                    const maxY = Math.max(...ys) + padding;
-                    const cx = (minX + maxX) / 2;
-                    const cy = (minY + maxY) / 2;
-                    // Minimum radius of 65 to ensure text has space
-                    const r = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 65);
-                    return { cx, cy, r };
-                }
+        const circle = regionCircles.find(c => c.id === circleId);
+        if (circle && circle.childIds.length > 0) {
+            const childPositions = circle.childIds.map(id => nodePositions[id]).filter(p => p);
+            if (childPositions.length > 0) {
+                const xs = childPositions.map(p => p.x);
+                const ys = childPositions.map(p => p.y);
+                const padding = circleId === 'uprava' ? 55 : 45;
+                const minX = Math.min(...xs) - padding;
+                const maxX = Math.max(...xs) + padding;
+                const minY = Math.min(...ys) - padding;
+                const maxY = Math.max(...ys) + padding;
+                const cx = (minX + maxX) / 2;
+                const cy = (minY + maxY) / 2;
+                const minRadius = circleId === 'uprava' ? 65 : 70;
+                const r = Math.max((maxX - minX) / 2, (maxY - minY) / 2, minRadius);
+                return { cx, cy, r };
             }
         }
         return cachedRegionBounds[circleId] || { cx: 0, cy: 0, r: 80 };
@@ -438,6 +519,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
 
         const circle = regionCircles.find(c => c.id === nodeId);
         if (circle) {
+            // Dodaj sam kontejner ID u listu za pomeranje
+            linked.add(circle.id);
             circle.childIds.forEach(id => linked.add(id));
             return linked;
         }
@@ -588,6 +671,28 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             }
         }
 
+        // Auto-save position changes if we were dragging a region/container
+        const isContainerDrag = draggingNodes && draggingNodes.some(id => id.startsWith('region-') || id === 'unassigned' || id === 'uprava');
+
+        if (isContainerDrag) {
+            setHasPositionChanges(true);
+            // Auto-save positions to localStorage using ref for latest values
+            setTimeout(() => {
+                try {
+                    const currentPositions = nodePositionsRef.current;
+                    const positionsToSave = {};
+                    Object.keys(currentPositions).forEach(key => {
+                        if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
+                            positionsToSave[key] = currentPositions[key];
+                        }
+                    });
+                    localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(positionsToSave));
+                } catch (e) {
+                    // Silently ignore localStorage errors
+                }
+            }, 100);
+        }
+
         if (isBoxSelecting) {
             const minX = Math.min(boxSelectStart.x, boxSelectEnd.x);
             const maxX = Math.max(boxSelectStart.x, boxSelectEnd.x);
@@ -634,6 +739,25 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         setZoom(z => Math.max(0.3, Math.min(2, z + delta)));
     }, []);
 
+    // Save position layout to localStorage
+    const savePositions = useCallback(() => {
+        try {
+            // Only save region/container positions, not individual users
+            const positionsToSave = {};
+            Object.keys(nodePositions).forEach(key => {
+                if (key.startsWith('region-') || key === 'unassigned' || key === 'company' || key === 'uprava') {
+                    positionsToSave[key] = nodePositions[key];
+                }
+            });
+            localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(positionsToSave));
+            setHasPositionChanges(false);
+            toast.success('Pozicije sačuvane');
+        } catch (e) {
+            console.error('Failed to save positions:', e);
+            toast.error('Greška pri čuvanju pozicija');
+        }
+    }, [nodePositions]);
+
     // Save changes - uses assignUsersToRegion (batch)
     const saveChanges = async () => {
         if (pendingChanges.length === 0) return;
@@ -679,7 +803,15 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const resetView = () => {
         setZoom(0.7);
         setPanOffset({ x: 0, y: 0 });
-        initializePositions(data);
+        initializePositions(data, false); // Keep saved positions
+    };
+
+    const resetPositions = () => {
+        localStorage.removeItem(POSITIONS_STORAGE_KEY);
+        setZoom(0.7);
+        setPanOffset({ x: 0, y: 0 });
+        initializePositions(data, true); // Force reset to default
+        toast.success('Pozicije resetovane');
     };
 
     if (loading) {
@@ -709,6 +841,15 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Position save button */}
+                    {hasPositionChanges && (
+                        <button onClick={savePositions}
+                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs flex items-center gap-1.5 mr-2">
+                            <Move size={12} />
+                            Sačuvaj pozicije
+                        </button>
+                    )}
+
                     {pendingChanges.length > 0 && (
                         <div className="flex items-center gap-2 mr-2">
                             <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs">
@@ -738,8 +879,11 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                         </button>
                     </div>
 
-                    <button onClick={loadData} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400">
+                    <button onClick={loadData} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400" title="Osveži podatke">
                         <RefreshCw size={14} />
+                    </button>
+                    <button onClick={resetPositions} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400" title="Resetuj pozicije">
+                        <Move size={14} />
                     </button>
                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400">
                         {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -781,6 +925,9 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                         {regionCircles.map(circle => {
                             const bounds = getRegionBounds(circle.id);
                             const isDropping = dropTarget?.id === circle.id;
+                            // canDrag - svi kontejneri mogu da se pomeraju
+                            const canDrag = true;
+                            // canEdit - samo regularne filijale mogu da se edituju (menjaju ime)
                             const canEdit = circle.regionId && circle.regionId !== 'uprava' && circle.id !== 'unassigned';
 
                             return (
@@ -805,6 +952,36 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                                     >
                                         {circle.label}
                                     </text>
+                                    {/* Drag handle for all containers */}
+                                    {canDrag && (
+                                        <g
+                                            className="cursor-grab active:cursor-grabbing"
+                                            onMouseDown={(e) => handleNodeMouseDown(e, circle.id)}
+                                        >
+                                            <rect
+                                                x={bounds.cx - bounds.r + 2}
+                                                y={bounds.cy - bounds.r + 2}
+                                                width={24}
+                                                height={18}
+                                                rx={4}
+                                                fill="#1e293b"
+                                                stroke={circle.color}
+                                                strokeWidth={1.5}
+                                                className="hover:fill-slate-700 transition-colors"
+                                            />
+                                            <foreignObject
+                                                x={bounds.cx - bounds.r + 6}
+                                                y={bounds.cy - bounds.r + 3}
+                                                width={16}
+                                                height={16}
+                                                style={{ pointerEvents: 'none' }}
+                                            >
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <GripVertical size={12} color={circle.color} />
+                                                </div>
+                                            </foreignObject>
+                                        </g>
+                                    )}
                                     {/* Edit button for regions */}
                                     {canEdit && (
                                         <g

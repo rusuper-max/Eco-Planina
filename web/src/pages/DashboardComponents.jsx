@@ -6,7 +6,7 @@ export { createPortal } from 'react-dom';
 export { useNavigate } from 'react-router-dom';
 
 // Re-export Auth context (legacy combined hook for backward compatibility)
-export { useAuth } from '../context';
+export { useAuth, useHelpMode } from '../context';
 
 // Re-export Supabase
 export { supabase } from '../config/supabase';
@@ -31,7 +31,7 @@ export { uploadImage } from '../utils/storage';
 export { getFillLevelColor } from '../utils/styleUtils';
 
 // Re-export common components
-export { Modal, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge, NotificationBell } from '../components/common';
+export { Modal, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge, NotificationBell, HelpButton, HelpOverlay } from '../components/common';
 
 // Re-export map components
 export { MapView, DraggableMarker, LocationPicker, FitBounds } from '../components/map';
@@ -77,7 +77,8 @@ export {
     PrintExport,
     RegionsPage,
     CompanyStaffPage,
-    RegionNodeEditor
+    RegionNodeEditor,
+    CompanySettingsPage
 } from '../components/admin';
 
 // Re-export analytics components

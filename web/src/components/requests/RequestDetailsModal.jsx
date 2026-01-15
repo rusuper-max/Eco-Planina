@@ -1,5 +1,4 @@
-import { Modal, FillLevelBar } from '../common';
-import { getRemainingTime } from '../../utils/timeUtils';
+import { Modal, FillLevelBar, CountdownTimer } from '../common';
 
 const DEFAULT_WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
@@ -12,7 +11,6 @@ const DEFAULT_WASTE_TYPES = [
  */
 export const RequestDetailsModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onClose }) => {
     if (!request) return null;
-    const rem = getRemainingTime(request.created_at, request.urgency);
 
     return (
         <Modal open={!!request} onClose={onClose} title="Detalji zahteva">
@@ -34,7 +32,9 @@ export const RequestDetailsModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                     </div>
                     <div className="p-4 bg-slate-50 rounded-xl">
                         <p className="text-xs text-slate-500">Preostalo</p>
-                        <p className={`font-semibold ${rem.color}`}>{rem.text}</p>
+                        <p className="font-semibold">
+                            <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
+                        </p>
                     </div>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl">

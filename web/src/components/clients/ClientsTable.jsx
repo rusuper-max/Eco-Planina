@@ -5,7 +5,7 @@ import { EmptyState } from '../common';
 /**
  * Clients Table with sorting and search
  */
-export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, equipment = [], regions = [] }) => {
+export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, equipment = [], regions = [], showRegionColumn = true }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('name'); // name, phone, pib
     const [sortDir, setSortDir] = useState('asc');
@@ -141,7 +141,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                 </button>
                             </th>
                             <th className="hidden md:table-cell px-4 py-3 text-left">Oprema</th>
-                            <th className="hidden lg:table-cell px-4 py-3 text-left">Filijala</th>
+                            {showRegionColumn && <th className="hidden lg:table-cell px-4 py-3 text-left">Filijala</th>}
                             <th className="px-3 md:px-4 py-3 text-left">Lokacija</th>
                             <th className="px-2 md:px-4 py-3 text-right">Akcije</th>
                         </tr>
@@ -191,6 +191,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                             <span>{clientEquipment.length > 0 ? `${clientEquipment.length} dodeljeno` : 'Dodeli'}</span>
                                         </button>
                                     </td>
+                                    {showRegionColumn && (
                                     <td className="hidden lg:table-cell px-4 py-3">
                                         {(() => {
                                             const regionName = getRegionName(c.region_id);
@@ -204,6 +205,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                             );
                                         })()}
                                     </td>
+                                    )}
                                     <td className="px-3 md:px-4 py-3">
                                         <button
                                             onClick={() => onEditLocation(c)}

@@ -14,6 +14,8 @@ export const ChatInterface = ({
     fetchCompanyClients,
     fetchCompanyMembers,
     sendMessageToAdmins,
+    fetchCompanyAdmin,
+    sendMessageToCompanyAdmin,
     userRole,
     subscribeToMessages,
     deleteConversation
@@ -29,11 +31,19 @@ export const ChatInterface = ({
     const [showAdminContact, setShowAdminContact] = useState(false);
     const [adminMessage, setAdminMessage] = useState('');
     const [sendingToAdmin, setSendingToAdmin] = useState(false);
+    const [companyAdmin, setCompanyAdmin] = useState(null);
+    const [showCompanyAdminContact, setShowCompanyAdminContact] = useState(false);
+    const [companyAdminMessage, setCompanyAdminMessage] = useState('');
+    const [sendingToCompanyAdmin, setSendingToCompanyAdmin] = useState(false);
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
         loadConversations();
         loadContacts();
+        // Load company admin for managers
+        if (userRole === 'manager' && fetchCompanyAdmin) {
+            fetchCompanyAdmin().then(admin => setCompanyAdmin(admin));
+        }
     }, []);
 
     useEffect(() => {
@@ -88,8 +98,13 @@ export const ChatInterface = ({
     const loadContacts = async () => {
         const members = await fetchCompanyMembers();
         if (userRole === 'client') {
+            // Clients see managers
             setContacts((members || []).filter(m => m.role === 'manager'));
+        } else if (userRole === 'company_admin') {
+            // Company admin sees managers and drivers
+            setContacts((members || []).filter(m => m.role === 'manager' || m.role === 'driver'));
         } else {
+            // Managers see clients
             setContacts((members || []).filter(m => m.role === 'client'));
         }
     };
@@ -139,6 +154,31 @@ export const ChatInterface = ({
         setSendingToAdmin(false);
     };
 
+    const handleSendToCompanyAdmin = async () => {
+        if (!companyAdminMessage.trim()) return;
+        setSendingToCompanyAdmin(true);
+        try {
+            await sendMessageToCompanyAdmin(companyAdminMessage);
+            toast.success('Poruka je uspešno poslata adminu firme!');
+            setCompanyAdminMessage('');
+            setShowCompanyAdminContact(false);
+            // Refresh conversations to show the new chat
+            await loadConversations();
+        } catch (error) {
+            toast.error('Greška pri slanju: ' + error.message);
+        }
+        setSendingToCompanyAdmin(false);
+    };
+
+    const startChatWithCompanyAdmin = () => {
+        if (companyAdmin) {
+            setSelectedChat({
+                partnerId: companyAdmin.id,
+                partner: { name: companyAdmin.name, role: 'company_admin', phone: companyAdmin.phone }
+            });
+        }
+    };
+
     const formatTime = (dateStr) => {
         const date = new Date(dateStr);
         const now = new Date();
@@ -160,8 +200,13 @@ export const ChatInterface = ({
                             <p className="text-xs text-slate-500">{conversations.length} razgovora</p>
                         </div>
                         <div className="flex gap-2">
+                            {userRole === 'manager' && companyAdmin && (
+                                <button onClick={startChatWithCompanyAdmin} className="p-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 shadow-sm" title="Piši adminu firme">
+                                    <Users size={20} />
+                                </button>
+                            )}
                             {userRole === 'manager' && (
-                                <button onClick={() => setShowAdminContact(true)} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-sm" title="Kontaktiraj Admina">
+                                <button onClick={() => setShowAdminContact(true)} className="p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-sm" title="Kontaktiraj tehničku podršku">
                                     <AlertCircle size={20} />
                                 </button>
                             )}
@@ -193,8 +238,8 @@ export const ChatInterface = ({
                                     >
                                         <button onClick={() => setSelectedChat(conv)} className="flex items-center gap-3 flex-1 min-w-0">
                                             <div className="relative flex-shrink-0">
-                                                <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                                                    {conv.partner.name?.charAt(0) || '?'}
+                                                <div className={`w-12 h-12 bg-gradient-to-br ${['admin', 'developer'].includes(conv.partner.role) ? 'from-blue-400 to-blue-600' : conv.partner.role === 'company_admin' ? 'from-purple-400 to-purple-600' : 'from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
+                                                    {['admin', 'developer'].includes(conv.partner.role) ? 'A' : conv.partner.role === 'company_admin' ? 'F' : conv.partner.name?.charAt(0) || '?'}
                                                 </div>
                                                 {conv.unread > 0 && (
                                                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">{conv.unread}</span>
@@ -203,15 +248,17 @@ export const ChatInterface = ({
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex justify-between items-center mb-0.5">
                                                     {['admin', 'developer'].includes(conv.partner.role) ? (
-                                                        <span className="font-semibold text-blue-600">Admin Chat</span>
+                                                        <span className="font-semibold text-blue-600">Tehnička podrška</span>
+                                                    ) : conv.partner.role === 'company_admin' ? (
+                                                        <span className="font-semibold text-purple-600">{conv.partner.name}</span>
                                                     ) : (
                                                         <span className={`font-semibold truncate ${conv.unread > 0 ? 'text-slate-900' : 'text-slate-700'}`}>{conv.partner.name}</span>
                                                     )}
                                                     <span className="text-xs text-slate-400 ml-2 flex-shrink-0">{formatTime(conv.lastMessageAt)}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : conv.partner.role === 'driver' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                        {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Admin' : conv.partner.role === 'driver' ? 'Vozač' : 'Menadžer'}
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${conv.partner.role === 'client' ? 'bg-blue-100 text-blue-600' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'bg-blue-500 text-white font-medium' : conv.partner.role === 'company_admin' ? 'bg-purple-500 text-white font-medium' : conv.partner.role === 'driver' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                        {conv.partner.role === 'client' ? 'Klijent' : conv.partner.role === 'admin' || conv.partner.role === 'developer' ? 'Podrška' : conv.partner.role === 'company_admin' ? 'Admin firme' : conv.partner.role === 'driver' ? 'Vozač' : 'Menadžer'}
                                                     </span>
                                                 </div>
                                                 <p className={`text-sm truncate mt-1 ${conv.unread > 0 ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>{conv.lastMessage}</p>
@@ -252,16 +299,16 @@ export const ChatInterface = ({
                                 <button onClick={() => setSelectedChat(null)} className="md:hidden p-2 hover:bg-slate-100 rounded-lg">
                                     <ArrowLeft size={20} />
                                 </button>
-                                <div className={`w-11 h-11 ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-gradient-to-br from-blue-400 to-blue-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
-                                    {['admin', 'developer'].includes(selectedChat.partner.role) ? 'A' : selectedChat.partner.name?.charAt(0) || '?'}
+                                <div className={`w-11 h-11 ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-gradient-to-br from-blue-400 to-blue-600' : selectedChat.partner.role === 'company_admin' ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-emerald-400 to-emerald-600'} rounded-full flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
+                                    {['admin', 'developer'].includes(selectedChat.partner.role) ? 'A' : selectedChat.partner.role === 'company_admin' ? 'F' : selectedChat.partner.name?.charAt(0) || '?'}
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className={`font-bold ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'text-blue-600' : 'text-slate-800'}`}>
-                                        {['admin', 'developer'].includes(selectedChat.partner.role) ? 'Admin Chat' : selectedChat.partner.name}
+                                    <h3 className={`font-bold ${['admin', 'developer'].includes(selectedChat.partner.role) ? 'text-blue-600' : selectedChat.partner.role === 'company_admin' ? 'text-purple-600' : 'text-slate-800'}`}>
+                                        {['admin', 'developer'].includes(selectedChat.partner.role) ? 'Tehnička podrška' : selectedChat.partner.role === 'company_admin' ? `Admin firme - ${selectedChat.partner.name}` : selectedChat.partner.name}
                                     </h3>
                                     <p className="text-xs text-slate-500 flex items-center gap-1">
-                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-blue-500' : selectedChat.partner.role === 'driver' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'Administrator' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.role === 'driver' ? 'Vozač' : selectedChat.partner.phone}
+                                        <span className={`w-2 h-2 rounded-full ${selectedChat.partner.role === 'client' ? 'bg-blue-500' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'bg-blue-500' : selectedChat.partner.role === 'company_admin' ? 'bg-purple-500' : selectedChat.partner.role === 'driver' ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                                        {selectedChat.partner.role === 'client' ? 'Klijent' : ['admin', 'developer'].includes(selectedChat.partner.role) ? 'Tehnička podrška' : selectedChat.partner.role === 'company_admin' ? 'Admin firme' : selectedChat.partner.role === 'manager' ? 'Menadžer' : selectedChat.partner.role === 'driver' ? 'Vozač' : selectedChat.partner.phone}
                                     </p>
                                 </div>
                             </div>

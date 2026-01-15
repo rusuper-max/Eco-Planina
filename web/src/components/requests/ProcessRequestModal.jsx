@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { MapPin, Scale, Image, FileText, X, Upload, Loader2, CheckCircle2 } from 'lucide-react';
-import { Modal } from '../common';
-import { getRemainingTime } from '../../utils/timeUtils';
+import { Modal, CountdownTimer } from '../common';
 import { uploadImage } from '../../utils/storage';
 
 const DEFAULT_WASTE_TYPES = [
@@ -24,7 +23,6 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
     const [weightUnit, setWeightUnit] = useState('kg'); // 'kg' or 't'
 
     if (!request) return null;
-    const rem = getRemainingTime(request.created_at, request.urgency);
 
     const handleFileUpload = async (e) => {
         const file = e.target.files?.[0];
@@ -76,7 +74,7 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                         <h3 className="font-bold text-lg">{request.waste_label}</h3>
                         <p className="text-sm text-slate-500">{request.client_name}</p>
                     </div>
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${rem.bg} ${rem.color}`}>{rem.text}</span>
+                    <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
                 </div>
 
                 {/* Address */}

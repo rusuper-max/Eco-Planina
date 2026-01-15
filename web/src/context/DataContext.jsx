@@ -159,6 +159,7 @@ export const DataProvider = ({ children }) => {
                 created_at: request.created_at,
                 proof_image_url: proofImageUrl,
                 request_id: request.id, // Store original request ID for linking with driver history
+                region_id: request.region_id, // Copy region from pickup_request for RLS filtering
             };
 
             if (weightData) {
@@ -310,6 +311,8 @@ export const DataProvider = ({ children }) => {
                 company_code: companyCode,
                 client_name: user.name,
                 client_address: user.address,
+                latitude: user.latitude || null,    // Include client's location
+                longitude: user.longitude || null,  // Include client's location
                 fill_level: fillLevel,
                 waste_type: wasteType,
                 waste_label: wasteLabel,
@@ -342,7 +345,10 @@ export const DataProvider = ({ children }) => {
                 .eq('id', userId)
                 .single();
 
-            const { data, error } = await supabase.from('pickup_requests').insert([{
+            // Use manager's region if client has no region
+            const regionId = clientData?.region_id || user.region_id || null;
+
+            const { error } = await supabase.from('pickup_requests').insert([{
                 user_id: userId,
                 company_code: companyCode,
                 client_name: clientName,
@@ -355,13 +361,21 @@ export const DataProvider = ({ children }) => {
                 note: note,
                 latitude: latitude,
                 longitude: longitude,
-                region_id: clientData?.region_id || null,
+                region_id: regionId,
                 status: 'pending',
                 created_by_manager: user.id // Track who created it
-            }]).select().single();
+            }]);
+            // Note: Removed .select() to avoid SELECT RLS issues for clients without region
 
             if (error) throw error;
-            return data;
+
+            // Return constructed data since we can't select it back
+            return {
+                request_code: requestCode,
+                client_name: clientName,
+                waste_label: wasteLabel,
+                status: 'pending'
+            };
         } catch (error) {
             throw error;
         }

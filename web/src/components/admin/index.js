@@ -10,3 +10,4 @@ export { PrintExport } from './PrintExport';
 export { RegionsPage } from './RegionsPage';
 export { RegionNodeEditor } from './RegionNodeEditor';
 export { CompanyStaffPage } from './CompanyStaffPage';
+export { CompanySettingsPage } from './CompanySettingsPage';

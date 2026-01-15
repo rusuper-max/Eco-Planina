@@ -1,14 +1,28 @@
 import { useState } from 'react';
-import { Plus, Recycle, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Recycle, Edit3, Trash2, Users } from 'lucide-react';
 import { EmptyState, ImageUploader } from '../common';
+import { WasteTypeClientsModal } from './WasteTypeClientsModal';
 
 /**
  * Waste Types Management - CRUD for waste types
  */
-export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) => {
+export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clients = [], onUpdateClientWasteTypes }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingType, setEditingType] = useState(null);
     const [newType, setNewType] = useState({ label: '', icon: '📦', customImage: null });
+    const [managingClientsFor, setManagingClientsFor] = useState(null); // waste type for client management
+
+    // Izračunaj koliko klijenata ima pristup svakoj vrsti robe
+    const getClientCountForWasteType = (wasteTypeId) => {
+        return clients.filter(client => {
+            // Ako je allowed_waste_types null ili prazno, klijent ima sve vrste
+            if (!client.allowed_waste_types || client.allowed_waste_types.length === 0) {
+                return true;
+            }
+            // Inače, proveri da li ima ovu vrstu
+            return client.allowed_waste_types.includes(wasteTypeId);
+        }).length;
+    };
 
     const iconOptions = ['📦', '♻️', '🍾', '🗑️', '🛢️', '📄', '🔋', '💡', '🧴', '🥫', '🪵', '🧱'];
 
@@ -151,33 +165,57 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit }) =>
                             <tr>
                                 <th className="px-6 py-4 text-left">Ikonica</th>
                                 <th className="px-6 py-4 text-left">Naziv</th>
+                                <th className="px-4 py-4 text-center">Klijenti</th>
                                 <th className="px-6 py-4 text-right">Akcije</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {wasteTypes.map(wt => (
-                                <tr key={wt.id} className={`hover:bg-slate-50 ${editingType?.id === wt.id ? 'bg-blue-50' : ''}`}>
-                                    <td className="px-6 py-4">
-                                        {wt.customImage ? (
-                                            <img src={wt.customImage} alt={wt.label} className="w-12 h-12 object-cover rounded-xl" />
-                                        ) : (
-                                            <span className="text-3xl">{wt.icon}</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 font-medium">{wt.label}</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button onClick={() => startEdit(wt)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Izmeni">
-                                            <Edit3 size={18} />
-                                        </button>
-                                        <button onClick={() => onDelete(wt.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                            {wasteTypes.map(wt => {
+                                const clientCount = getClientCountForWasteType(wt.id);
+                                return (
+                                    <tr key={wt.id} className={`hover:bg-slate-50 ${editingType?.id === wt.id ? 'bg-blue-50' : ''}`}>
+                                        <td className="px-6 py-4">
+                                            {wt.customImage ? (
+                                                <img src={wt.customImage} alt={wt.label} className="w-12 h-12 object-cover rounded-xl" />
+                                            ) : (
+                                                <span className="text-3xl">{wt.icon}</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 font-medium">{wt.label}</td>
+                                        <td className="px-4 py-4 text-center">
+                                            <button
+                                                onClick={() => setManagingClientsFor(wt)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors text-sm font-medium"
+                                                title="Upravljaj klijentima"
+                                            >
+                                                <Users size={14} />
+                                                {clientCount} {clientCount === 1 ? 'klijent' : clientCount < 5 ? 'klijenta' : 'klijenata'}
+                                            </button>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button onClick={() => startEdit(wt)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Izmeni">
+                                                <Edit3 size={18} />
+                                            </button>
+                                            <button onClick={() => onDelete(wt.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši">
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
+            )}
+
+            {/* Modal za upravljanje klijentima */}
+            {managingClientsFor && onUpdateClientWasteTypes && (
+                <WasteTypeClientsModal
+                    wasteType={managingClientsFor}
+                    clients={clients}
+                    onClose={() => setManagingClientsFor(null)}
+                    onSave={onUpdateClientWasteTypes}
+                />
             )}
         </div>
     );

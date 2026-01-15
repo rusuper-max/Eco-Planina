@@ -150,6 +150,44 @@ export const ChatProvider = ({ children }) => {
         }
     };
 
+    // Fetch company admin for current company (for manager to contact)
+    const fetchCompanyAdmin = async () => {
+        if (!companyCode) return null;
+        try {
+            const { data, error } = await supabase.from('users').select('id, name, role, phone')
+                .eq('company_code', companyCode)
+                .eq('role', 'company_admin')
+                .is('deleted_at', null)
+                .limit(1)
+                .single();
+            if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows returned
+            return data || null;
+        } catch (error) {
+            console.error('Error fetching company admin:', error);
+            return null;
+        }
+    };
+
+    // Send message to company admin
+    const sendMessageToCompanyAdmin = async (content) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        try {
+            const companyAdmin = await fetchCompanyAdmin();
+            if (!companyAdmin) throw new Error('Nema dostupnog admina firme');
+            const msgCompanyCode = companyCode || 'SUPPORT';
+            const { data, error } = await supabase.from('messages').insert([{
+                sender_id: user.id,
+                receiver_id: companyAdmin.id,
+                company_code: msgCompanyCode,
+                content: content.trim()
+            }]).select().single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            throw error;
+        }
+    };
+
     const sendMessageToAdmins = async (content) => {
         if (!user) throw new Error('Niste prijavljeni');
         try {
@@ -182,6 +220,8 @@ export const ChatProvider = ({ children }) => {
         subscribeToMessages,
         fetchAdmins,
         sendMessageToAdmins,
+        fetchCompanyAdmin,
+        sendMessageToCompanyAdmin,
     };
 
     return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

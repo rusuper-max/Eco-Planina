@@ -8,12 +8,23 @@ import { Modal } from '../common';
  */
 export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSave, onClose }) => {
     const [selectedEquipment, setSelectedEquipment] = useState(client?.equipment_types || []);
-    const [selectedWasteTypes, setSelectedWasteTypes] = useState(client?.allowed_waste_types || []);
+    // Obrnuta logika: null/prazno = sve dozvoljeno (sve štiklirano), inače samo izabrane
+    const [selectedWasteTypes, setSelectedWasteTypes] = useState(() => {
+        // Ako je null ili prazna lista, klijent ima sve vrste - štikliraj sve
+        if (!client?.allowed_waste_types || client.allowed_waste_types.length === 0) {
+            return wasteTypes.map(wt => wt.id);
+        }
+        // Inače vrati samo dozvoljene
+        return client.allowed_waste_types;
+    });
     const [note, setNote] = useState(client?.manager_note || '');
     const [pib, setPib] = useState(client?.pib || '');
     const [saving, setSaving] = useState(false);
 
     if (!client) return null;
+
+    // Da li su sve vrste izabrane?
+    const allWasteTypesSelected = wasteTypes.length > 0 && selectedWasteTypes.length === wasteTypes.length;
 
     const toggleEquipment = (eqId) => {
         setSelectedEquipment(prev =>
@@ -34,8 +45,9 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
     const handleSave = async () => {
         setSaving(true);
         try {
-            // Pass null if no waste types selected (means all allowed)
-            const wasteTypesToSave = selectedWasteTypes.length > 0 ? selectedWasteTypes : null;
+            // Ako su sve vrste izabrane, sačuvaj null (= sve dozvoljene)
+            // Inače sačuvaj samo izabrane
+            const wasteTypesToSave = allWasteTypesSelected ? null : selectedWasteTypes;
             await onSave(client.id, selectedEquipment, note, pib, wasteTypesToSave);
             onClose();
         } catch (err) {
@@ -104,7 +116,12 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                     <label className="block text-sm font-medium text-slate-700 mb-2">
                         Dozvoljene vrste robe
                         <span className="font-normal text-slate-400 ml-2">
-                            {selectedWasteTypes.length === 0 ? '(sve vrste)' : `(${selectedWasteTypes.length} izabrano)`}
+                            {allWasteTypesSelected
+                                ? '(sve vrste)'
+                                : selectedWasteTypes.length === 0
+                                    ? '(nijedna vrsta!)'
+                                    : `(${selectedWasteTypes.length}/${wasteTypes.length})`
+                            }
                         </span>
                     </label>
                     {wasteTypes.length === 0 ? (
@@ -118,7 +135,7 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                                     key={wt.id}
                                     className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${selectedWasteTypes.includes(wt.id)
                                         ? 'border-blue-500 bg-blue-50'
-                                        : 'border-slate-200 hover:border-slate-300'
+                                        : 'border-red-200 bg-red-50 hover:border-red-300'
                                         }`}
                                 >
                                     <input
@@ -134,7 +151,7 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                         </div>
                     )}
                     <p className="mt-1.5 text-xs text-slate-500">
-                        Ako ništa nije izabrano, klijent vidi sve vrste robe
+                        Odštiklirajte vrste koje NE želite da klijent vidi
                     </p>
                 </div>
 
