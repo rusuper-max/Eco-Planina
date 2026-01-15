@@ -119,13 +119,21 @@ export const DataProvider = ({ children }) => {
     const fetchPickupRequests = async (code = companyCode) => {
         if (!code) return;
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('pickup_requests')
                 .select('*')
                 .eq('company_code', code)
                 .eq('status', 'pending')
                 .is('deleted_at', null)
                 .order('created_at', { ascending: false });
+
+            // Menadžeri vide samo zahteve iz svoje filijale
+            // Company admin, admin i developer vide sve zahteve
+            if (user?.role === 'manager' && user?.region_id) {
+                query = query.eq('region_id', user.region_id);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
             setPickupRequests(data || []);
         } catch (error) {

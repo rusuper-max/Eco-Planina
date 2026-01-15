@@ -173,6 +173,7 @@ export const MapView = ({
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FitBounds positions={allPositions} />
                 <MarkerClusterGroup
+                    key={`cluster-${urgencyFilter}-${filteredItems?.length || 0}`}
                     chunkedLoading
                     maxClusterRadius={50}
                     spiderfyOnMaxZoom={true}
