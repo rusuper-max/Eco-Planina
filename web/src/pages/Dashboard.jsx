@@ -165,14 +165,9 @@ export default function Dashboard() {
                 setStats(await getAdminStats());
             } else if (userRole === 'manager' || userRole === 'client' || userRole === 'company_admin') {
                 // Fetch company specific settings - only once
+                // No fallback to hardcoded defaults - show real DB data
                 const companyWasteTypes = await fetchCompanyWasteTypes();
-                if (companyWasteTypes && companyWasteTypes.length > 0) {
-                    setWasteTypes(companyWasteTypes);
-                } else if (userRole === 'manager') {
-                    setWasteTypes(WASTE_TYPES);
-                } else {
-                    setWasteTypes([]);
-                }
+                setWasteTypes(companyWasteTypes || []);
 
                 if (userRole === 'manager') {
                     setClients(await fetchCompanyClients() || []);
