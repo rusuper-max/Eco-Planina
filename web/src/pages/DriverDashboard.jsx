@@ -522,7 +522,15 @@ export default function DriverDashboard() {
                 .limit(50);
 
             if (error) throw error;
-            console.log('Driver history loaded:', data?.length, 'items for driver:', myUserId);
+            console.log('[Driver History] Loaded:', data?.length, 'items for driver:', myUserId);
+
+            // Debug: Also check ALL assignments for this driver (any status)
+            const { data: allData } = await supabase
+                .from('driver_assignments')
+                .select('id, status, deleted_at, client_name')
+                .eq('driver_id', myUserId);
+            console.log('[Driver History] ALL assignments (any status):', allData);
+
             setHistoryRequests(data || []);
         } catch (err) {
             console.error('Error loading history:', err);
@@ -915,6 +923,9 @@ export default function DriverDashboard() {
                             <MapContainer
                                 center={[44.8, 20.45]}
                                 zoom={11}
+                                preferCanvas={true}
+                                wheelDebounceTime={20}
+                                wheelPxPerZoomLevel={80}
                                 style={{ height: '100%', width: '100%' }}
                                 zoomControl={false}
                             >
@@ -946,33 +957,34 @@ export default function DriverDashboard() {
                                             urgencyLevel={item.currentUrgency}
                                         >
                                             <Popup>
-                                                <div className="min-w-[220px]">
+                                                <div className="min-w-[240px]">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <p className="font-bold text-lg">{item.client_name}</p>
+                                                        <p className="font-semibold text-slate-900 text-base">{item.client_name}</p>
                                                         {item.assignmentStatus === 'picked_up' && (
-                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-semibold">
                                                                 Preuzeto
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-sm text-slate-600">{item.waste_label}</p>
+                                                    <p className="text-sm text-slate-600 mb-1">{item.waste_label}</p>
                                                     {item.request_code && (
-                                                        <p className="text-xs text-slate-400 font-mono">{item.request_code}</p>
+                                                        <p className="text-xs text-slate-400 font-mono mb-1">{item.request_code}</p>
                                                     )}
-                                                    <p className="text-xs text-slate-500 mt-1">{item.client_address}</p>
+                                                    <p className="text-xs text-slate-500 leading-relaxed">{item.client_address}</p>
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <span className="text-xs text-slate-500">Popunjenost:</span>
                                                         <FillLevelBar fillLevel={item.fill_level} />
                                                     </div>
-                                                    <div className={`text-sm font-bold mt-2 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                                        <CountdownTimer createdAt={item.created_at} urgency={item.urgency} />
+                                                    <div className={`text-xs font-semibold mt-2 flex items-center gap-1 ${item.currentUrgency === '24h' ? 'text-red-600' : item.currentUrgency === '48h' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                        ⏱ <CountdownTimer createdAt={item.created_at} urgency={item.urgency} />
                                                     </div>
                                                     <div className="flex gap-2 mt-3">
                                                         <a
                                                             href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 text-center font-medium"
+                                                            className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 text-center font-semibold shadow-sm"
+                                                            style={{ color: '#fff' }}
                                                         >
                                                             Google Maps
                                                         </a>
@@ -980,7 +992,8 @@ export default function DriverDashboard() {
                                                             href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-3 py-2 bg-cyan-600 text-white text-xs rounded-lg hover:bg-cyan-700 text-center font-medium"
+                                                            className="flex-1 px-3 py-2 bg-cyan-600 text-white text-xs rounded-lg hover:bg-cyan-700 text-center font-semibold shadow-sm"
+                                                            style={{ color: '#fff' }}
                                                         >
                                                             Waze
                                                         </a>
@@ -989,7 +1002,7 @@ export default function DriverDashboard() {
                                                         <button
                                                             onClick={() => handleDelivery(item)}
                                                             disabled={processing}
-                                                            className="w-full mt-2 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                                                            className="w-full mt-3 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-sm"
                                                         >
                                                             <PackageCheck size={16} />
                                                             Dostavljeno
@@ -998,7 +1011,7 @@ export default function DriverDashboard() {
                                                         <button
                                                             onClick={() => handlePickup(item)}
                                                             disabled={processing}
-                                                            className="w-full mt-2 px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2"
+                                                            className="w-full mt-3 px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-sm"
                                                         >
                                                             <Package size={16} />
                                                             Preuzeto od klijenta

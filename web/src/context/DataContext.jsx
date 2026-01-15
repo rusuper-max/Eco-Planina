@@ -20,10 +20,11 @@ export const DataProvider = ({ children }) => {
     const [processedNotification, setProcessedNotification] = useState(null);
 
     // Real-time subscriptions for pickup requests
+    // Re-fetch when user's region_id changes (e.g., manager moved to different branch)
     useEffect(() => {
         if (!companyCode) return;
         fetchPickupRequests(companyCode);
-        const channelName = `pickup_requests_web_${companyCode}`;
+        const channelName = `pickup_requests_web_${companyCode}_${user?.region_id || 'all'}`;
         const subscription = supabase
             .channel(channelName)
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pickup_requests', filter: `company_code=eq.${companyCode}` }, () => fetchPickupRequests(companyCode))
@@ -31,7 +32,7 @@ export const DataProvider = ({ children }) => {
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pickup_requests' }, () => fetchPickupRequests(companyCode))
             .subscribe();
         return () => { supabase.removeChannel(subscription); };
-    }, [companyCode]);
+    }, [companyCode, user?.region_id]);
 
     // Real-time for client requests
     useEffect(() => {
@@ -133,7 +134,14 @@ export const DataProvider = ({ children }) => {
                 query = query.eq('region_id', user.region_id);
             }
 
+            console.log('[DEBUG fetchPickupRequests]', {
+                role: user?.role,
+                userRegionId: user?.region_id,
+                companyCode: code
+            });
+
             const { data, error } = await query;
+            console.log('[DEBUG fetchPickupRequests] result:', { count: data?.length, error });
             if (error) throw error;
             setPickupRequests(data || []);
         } catch (error) {
@@ -526,6 +534,51 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // Set client location and update all their pending requests
+    const setClientLocationWithRequests = async (clientId, latitude, longitude) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        if (user.role !== 'manager' && user.role !== 'company_admin') {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+        const latNum = typeof latitude === 'string' ? parseFloat(latitude) : latitude;
+        const lngNum = typeof longitude === 'string' ? parseFloat(longitude) : longitude;
+
+        if (!clientId || !Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
+            throw new Error('Nedostaju podaci za lokaciju');
+        }
+
+        try {
+            // 1. Update client's location in users table
+            const { error: userError } = await supabase
+                .from('users')
+                .update({
+                    latitude: latNum,
+                    longitude: lngNum
+                })
+                .eq('id', clientId)
+                .eq('company_code', companyCode);
+
+            if (userError) throw userError;
+
+            // 2. Update all pending requests for this client with the new location
+            const { error: requestsError } = await supabase
+                .from('pickup_requests')
+                .update({
+                    latitude: latNum,
+                    longitude: lngNum
+                })
+                .eq('user_id', clientId)
+                .eq('company_code', companyCode)
+                .eq('status', 'pending');
+
+            if (requestsError) throw requestsError;
+
+            return { success: true };
+        } catch (error) {
+            throw error;
+        }
+    };
+
     // Fetch users by address pattern (for batch assignment)
     // Uses transliteration to match both Latin and Cyrillic addresses
     const fetchUsersByAddressPattern = async (pattern, roleFilter = null) => {
@@ -834,6 +887,7 @@ export const DataProvider = ({ children }) => {
         deleteRegion,
         assignUsersToRegion,
         updateOwnRegion,
+        setClientLocationWithRequests,
         fetchUsersByAddressPattern,
         fetchUsersGroupedByRegion,
         // Equipment functions

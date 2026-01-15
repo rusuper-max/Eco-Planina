@@ -291,18 +291,7 @@ export const CompanyStaffPage = () => {
                         </div>
                     </div>
                 </div>
-                <div className="bg-white rounded-xl border p-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                            <MapPin className="w-5 h-5 text-purple-600" />
-                        </div>
-                        <div>
-                            <p className="text-2xl font-bold text-slate-800">{stats.unassigned}</p>
-                            <p className="text-xs text-slate-500">Bez filijale</p>
-                        </div>
-                    </div>
                 </div>
-            </div>
 
             {/* Filters */}
             <div className="flex flex-wrap gap-3">
@@ -332,7 +321,6 @@ export const CompanyStaffPage = () => {
                     className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                 >
                     <option value="all">Sve filijale</option>
-                    <option value="none">Bez filijale</option>
                     {regions.map(r => (
                         <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
@@ -418,11 +406,8 @@ export const CompanyStaffPage = () => {
                                                 <select
                                                     value={member.region_id || ''}
                                                     onChange={(e) => handleUpdateRegion(member.id, e.target.value || null)}
-                                                    className={`text-sm px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none ${
-                                                        member.region_id ? 'border-purple-200 bg-purple-50 text-purple-700' : 'border-slate-200 text-slate-400'
-                                                    }`}
+                                                    className="text-sm px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none border-purple-200 bg-purple-50 text-purple-700"
                                                 >
-                                                    <option value="">Bez filijale</option>
                                                     {regions.map(r => (
                                                         <option key={r.id} value={r.id}>{r.name}</option>
                                                     ))}

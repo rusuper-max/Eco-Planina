@@ -37,7 +37,7 @@ import DriverManagement from './DriverManagement';
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion } = useData();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -515,19 +515,24 @@ export default function Dashboard() {
                     console.warn('Reverse geocoding failed:', geoError);
                 }
 
-                const { data, error } = await supabase.rpc('update_client_location', {
-                    client_id: editingClientLocation.id,
-                    lat: position[0],
-                    lng: position[1],
-                    addr: newAddress
-                });
+                // 1) Ažuriraj korisnika i SVE njegove pending zahteve (lat/lng) preko centralne funkcije
+                await setClientLocationWithRequests(editingClientLocation.id, position[0], position[1]);
 
-                console.log('DEBUG - RPC result:', { data, error });
+                // 2) Osveži adresu u users i pending pickup_requests (da se u listama/mapi vidi nova adresa)
+                const { error: userError } = await supabase
+                    .from('users')
+                    .update({ address: newAddress })
+                    .eq('id', editingClientLocation.id)
+                    .eq('company_code', companyCode);
+                if (userError) throw userError;
 
-                if (error) throw error;
-                if (data === false) {
-                    throw new Error('Nemate dozvolu za ovu akciju');
-                }
+                const { error: requestsError } = await supabase
+                    .from('pickup_requests')
+                    .update({ client_address: newAddress })
+                    .eq('user_id', editingClientLocation.id)
+                    .eq('company_code', companyCode)
+                    .eq('status', 'pending');
+                if (requestsError) throw requestsError;
 
                 // Update local state with new address too
                 setClients(prev => prev.map(c =>
@@ -535,6 +540,8 @@ export default function Dashboard() {
                         ? { ...c, latitude: position[0], longitude: position[1], address: newAddress }
                         : c
                 ));
+                await fetchPickupRequests();
+
                 toast.success('Lokacija uspešno sačuvana');
                 setEditingClientLocation(null);
             } catch (err) {
@@ -859,7 +866,28 @@ export default function Dashboard() {
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />;
-            if (activeTab === 'map') return <div className="space-y-4"><div className="flex gap-2"><button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button><button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button></div><MapView requests={pending} clients={clients} type={mapType} onClientLocationEdit={setEditingClientLocation} wasteTypes={wasteTypes} drivers={companyDrivers} onAssignDriver={handleAssignDriverFromMap} driverAssignments={driverAssignments} /></div>;
+            if (activeTab === 'map') return (
+                <div className="flex flex-col h-full">
+                    <div className="flex gap-2 p-3 bg-white border-b shrink-0">
+                        <button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button>
+                        <button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button>
+                    </div>
+                    <MapView
+                        requests={pending}
+                        clients={clients}
+                        type={mapType}
+                        onClientLocationEdit={setEditingClientLocation}
+                        wasteTypes={wasteTypes}
+                        drivers={companyDrivers}
+                        onAssignDriver={handleAssignDriverFromMap}
+                        driverAssignments={driverAssignments}
+                        onSetClientLocation={async (clientId, lat, lng) => {
+                            await setClientLocationWithRequests(clientId, lat, lng);
+                            await fetchCompanyClients();
+                        }}
+                    />
+                </div>
+            );
             // Sort by remaining time (most urgent first) for dashboard preview
             const sortedByUrgency = [...pending].sort((a, b) => {
                 const remA = getRemainingTime(a.created_at, a.urgency);
@@ -918,6 +946,11 @@ export default function Dashboard() {
                         type="requests"
                         wasteTypes={wasteTypes}
                         drivers={[]}
+                        onSetClientLocation={async (clientId, lat, lng) => {
+                            await setClientLocationWithRequests(clientId, lat, lng);
+                            // Refresh data after location update
+                            await fetchCompanyClients();
+                        }}
                     />
                 </div>
             );

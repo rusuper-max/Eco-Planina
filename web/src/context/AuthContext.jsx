@@ -97,6 +97,8 @@ export const AuthProvider = ({ children }) => {
                         setUser(impersonated.user);
                         setCompanyCode(impersonated.companyCode);
                         setCompanyName(impersonated.companyName);
+                        setRegionId(impersonated.regionId || impersonated.user?.region_id || null);
+                        setRegionName(impersonated.regionName || null);
                         setOriginalUser(original);
                         setAuthUser(data.session.user);
                     } else {
@@ -124,6 +126,56 @@ export const AuthProvider = ({ children }) => {
 
         return () => { cancelled = true; clearTimeout(timeout); };
     }, []);
+
+    // Real-time subscription to user profile changes (e.g., when admin changes region_id)
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channelName = `user_profile_${user.id}`;
+        const subscription = supabase
+            .channel(channelName)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'users',
+                filter: `id=eq.${user.id}`
+            }, async (payload) => {
+                console.log('[Auth] User profile updated:', payload.new);
+                const newData = payload.new;
+
+                // Update user state with new data
+                setUser(prev => ({
+                    ...prev,
+                    region_id: newData.region_id || null,
+                    role: newData.role,
+                    name: newData.name,
+                    address: newData.address,
+                    phone: newData.phone,
+                    latitude: newData.latitude,
+                    longitude: newData.longitude
+                }));
+
+                // Update region name if region_id changed
+                if (newData.region_id) {
+                    const { data: region } = await supabase
+                        .from('regions')
+                        .select('id, name')
+                        .eq('id', newData.region_id)
+                        .is('deleted_at', null)
+                        .maybeSingle();
+                    setRegionId(region?.id || null);
+                    setRegionName(region?.name || null);
+                } else {
+                    setRegionId(null);
+                    setRegionName(null);
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(subscription);
+        };
+    }, [user?.id]);
 
     // Load user profile from public.users table
     const loadUserProfile = async (authUserData) => {
@@ -213,6 +265,8 @@ export const AuthProvider = ({ children }) => {
         setAuthUser(null);
         setCompanyCode(null);
         setCompanyName(null);
+        setRegionId(null);
+        setRegionName(null);
         setOriginalUser(null);
         localStorage.removeItem('eco_session');
         localStorage.removeItem('eco_original_user');
@@ -344,7 +398,7 @@ export const AuthProvider = ({ children }) => {
 
             // Save original user session (only if not already impersonating)
             if (!originalUser) {
-                const originalSession = { user, companyCode, companyName };
+                const originalSession = { user, companyCode, companyName, regionId, regionName };
                 setOriginalUser(originalSession);
                 localStorage.setItem('eco_original_user', JSON.stringify(originalSession));
             }
@@ -364,6 +418,19 @@ export const AuthProvider = ({ children }) => {
             const isAdminRole = targetUser.role === 'developer' || targetUser.role === 'admin';
             const newCompanyCode = isAdminRole ? null : (companyData?.code || targetUser.company_code)?.trim() || null;
             const newCompanyName = isAdminRole ? null : (companyData?.name || 'Nepoznato');
+            const targetRegionId = targetUser.region_id || null;
+            let targetRegionName = null;
+
+            if (targetRegionId) {
+                const { data: region } = await supabase
+                    .from('regions')
+                    .select('id, name')
+                    .eq('id', targetRegionId)
+                    .is('deleted_at', null)
+                    .maybeSingle();
+                targetRegionName = region?.name || null;
+            }
+
             const userObj = {
                 id: targetUser.id,
                 name: targetUser.name,
@@ -371,16 +438,27 @@ export const AuthProvider = ({ children }) => {
                 address: targetUser.address,
                 phone: targetUser.phone,
                 latitude: targetUser.latitude,
-                longitude: targetUser.longitude
+                longitude: targetUser.longitude,
+                region_id: targetRegionId,
+                allowed_waste_types: targetUser.allowed_waste_types || null,
+                is_owner: targetUser.is_owner || false
             };
 
             // Save impersonated user to localStorage for persistence across refreshes
-            const impersonatedSession = { user: userObj, companyCode: newCompanyCode, companyName: newCompanyName };
+            const impersonatedSession = {
+                user: userObj,
+                companyCode: newCompanyCode,
+                companyName: newCompanyName,
+                regionId: targetRegionId,
+                regionName: targetRegionName
+            };
             localStorage.setItem('eco_impersonated_user', JSON.stringify(impersonatedSession));
 
             setUser(userObj);
             setCompanyCode(newCompanyCode);
             setCompanyName(newCompanyName);
+            setRegionId(targetRegionId);
+            setRegionName(targetRegionName);
 
             console.log('[Impersonate] Success, role:', targetUser.role);
             return { success: true, role: targetUser.role };
@@ -395,6 +473,8 @@ export const AuthProvider = ({ children }) => {
         setUser(originalUser.user);
         setCompanyCode(originalUser.companyCode?.trim() || null);
         setCompanyName(originalUser.companyName);
+        setRegionId(originalUser.regionId || originalUser.user?.region_id || null);
+        setRegionName(originalUser.regionName || null);
         setOriginalUser(null);
         localStorage.removeItem('eco_original_user');
         localStorage.removeItem('eco_impersonated_user');
