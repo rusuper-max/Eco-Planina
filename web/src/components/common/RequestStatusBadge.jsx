@@ -38,8 +38,11 @@ export const RequestStatusBadge = ({ status, driverName, assignment }) => {
 
         if (buttonRef.current) {
             const rect = buttonRef.current.getBoundingClientRect();
+            // Store rect for fixed positioning
+            popupRef.current = rect;
+
             const spaceBelow = window.innerHeight - rect.bottom;
-            setPopupPosition(spaceBelow < 200 ? 'top' : 'bottom');
+            setPopupPosition(spaceBelow < 220 ? 'top' : 'bottom');
         }
         setShowPopup(!showPopup);
     };
@@ -51,8 +54,26 @@ export const RequestStatusBadge = ({ status, driverName, assignment }) => {
         });
     };
 
+    // Calculate fixed style if popup is shown
+    const getFixedStyle = () => {
+        if (!popupRef.current) return {};
+        const rect = popupRef.current;
+        const style = {
+            position: 'fixed',
+            zIndex: 9999,
+            left: rect.left + 'px',
+        };
+
+        if (popupPosition === 'top') {
+            style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+        } else {
+            style.top = (rect.bottom + 5) + 'px';
+        }
+        return style;
+    };
+
     return (
-        <div className="relative" ref={popupRef}>
+        <div className="relative">
             <button
                 ref={buttonRef}
                 onClick={handleClick}
@@ -63,9 +84,13 @@ export const RequestStatusBadge = ({ status, driverName, assignment }) => {
                 <span>{config.shortLabel}</span>
             </button>
 
-            {/* Details Popup - positioned above or below based on available space */}
+            {/* Details Popup - uses fixed positioning to escape overflow */}
             {showPopup && hasDetails && (
-                <div className={`absolute z-50 left-0 w-56 bg-white rounded-xl shadow-xl border border-slate-200 p-3 text-left ${popupPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                <div
+                    className="bg-white rounded-xl shadow-xl border border-slate-200 p-3 text-left w-56 animate-in fade-in zoom-in-95 duration-100"
+                    style={getFixedStyle()}
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${config.bg} ${config.color}`}>

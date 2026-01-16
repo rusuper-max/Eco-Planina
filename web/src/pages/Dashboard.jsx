@@ -883,8 +883,13 @@ export default function Dashboard() {
             }} onDelete={async (id) => {
                 const previous = processedRequests;
                 setProcessedRequests(prev => prev.filter(r => r.id !== id)); // Optimistic
-                try { await deleteProcessedRequest(id); }
-                catch { setProcessedRequests(previous); } // Rollback
+                try {
+                    await deleteProcessedRequest(id);
+                    toast.success('Zahtev je obrisan iz istorije');
+                } catch (err) {
+                    setProcessedRequests(previous); // Rollback
+                    toast.error('Greška pri brisanju: ' + (err.message || 'Nepoznata greška'));
+                }
             }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} />;
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;

@@ -246,14 +246,29 @@ export const DataProvider = ({ children }) => {
 
     const deleteProcessedRequest = async (id) => {
         try {
-            // Soft delete
-            const { error } = await supabase
+            // Soft delete - add company_code filter for security
+            const { data, error } = await supabase
                 .from('processed_requests')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', id);
-            if (error) throw error;
+                .eq('id', id)
+                .eq('company_code', companyCode)
+                .select();
+
+            if (error) {
+                console.error('Delete processed request error:', error);
+                throw error;
+            }
+
+            // Check if any rows were affected
+            if (!data || data.length === 0) {
+                console.warn('No rows updated - request may not exist or belong to different company');
+                throw new Error('Zahtev nije pronađen ili nemate dozvolu za brisanje');
+            }
+
+            console.log('Soft deleted processed request:', id);
             return { success: true };
         } catch (error) {
+            console.error('deleteProcessedRequest failed:', error);
             throw error;
         }
     };
