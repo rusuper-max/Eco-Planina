@@ -191,17 +191,21 @@ export const DataProvider = ({ children }) => {
 
     const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
         try {
-            // Get driver info if assigned
+            // Get driver info and assignment ID if assigned
             let driverInfo = null;
+            let driverAssignmentId = null;
             if (request.id) {
                 const { data: assignment } = await supabase
                     .from('driver_assignments')
-                    .select('driver_id, driver:driver_id(id, name)')
+                    .select('id, driver_id, driver:driver_id(id, name)')
                     .eq('request_id', request.id)
                     .is('deleted_at', null)
                     .single();
-                if (assignment?.driver) {
-                    driverInfo = assignment.driver;
+                if (assignment) {
+                    driverAssignmentId = assignment.id;
+                    if (assignment.driver) {
+                        driverInfo = assignment.driver;
+                    }
                 }
             }
 
@@ -225,6 +229,7 @@ export const DataProvider = ({ children }) => {
                 processed_by_name: user?.name || null, // Store name for easier display
                 driver_id: driverInfo?.id || null, // Store driver who handled this request
                 driver_name: driverInfo?.name || null, // Store driver name for easier display
+                driver_assignment_id: driverAssignmentId, // Store direct link to driver_assignment for timeline
             };
 
             if (weightData) {
@@ -239,16 +244,33 @@ export const DataProvider = ({ children }) => {
             if (insertError) throw insertError;
 
             // Update driver assignment status to 'completed' if exists
-            // This preserves driver history after manager processes the request
-            // Set both delivered_at and completed_at so it appears in driver's history
+            // IMPORTANT: Only set completed_at, do NOT overwrite picked_up_at or delivered_at
+            // Those timestamps are set by the driver and should be preserved
             const now = new Date().toISOString();
+
+            // First check if assignment exists and has driver timestamps
+            const { data: existingAssignment } = await supabase
+                .from('driver_assignments')
+                .select('picked_up_at, delivered_at')
+                .eq('request_id', request.id)
+                .is('deleted_at', null)
+                .single();
+
+            // Only update status and completed_at, preserve driver's timestamps
+            const updateData = {
+                status: 'completed',
+                completed_at: now
+            };
+
+            // Only set delivered_at if driver didn't already set it
+            // (for cases where manager processes before driver marks as delivered)
+            if (!existingAssignment?.delivered_at) {
+                updateData.delivered_at = now;
+            }
+
             await supabase
                 .from('driver_assignments')
-                .update({
-                    status: 'completed',
-                    delivered_at: now,
-                    completed_at: now
-                })
+                .update(updateData)
                 .eq('request_id', request.id)
                 .is('deleted_at', null);
 

@@ -41,13 +41,20 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
         if (!requests?.length) return;
         setLoadingAssignments(true);
         try {
-            // Get request IDs
-            const requestIds = requests.map(r => r.request_id).filter(Boolean);
-            if (requestIds.length === 0) {
+            // Get driver_assignment_ids from processed_requests (direct link after migration 025)
+            const assignmentIds = requests
+                .map(r => r.driver_assignment_id)
+                .filter(Boolean);
+
+            console.log('[HistoryTable] Looking for assignments by driver_assignment_ids:', assignmentIds);
+
+            if (assignmentIds.length === 0) {
+                console.log('[HistoryTable] No driver_assignment_ids found in processed_requests');
                 setLoadingAssignments(false);
                 return;
             }
 
+            // Fetch assignments directly by their ID
             const { data, error } = await supabase
                 .from('driver_assignments')
                 .select(`
@@ -55,22 +62,34 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     request_id,
                     status,
                     assigned_at,
-                    started_at,
                     picked_up_at,
                     delivered_at,
                     completed_at,
                     assigned_by,
-                    driver:driver_id(id, name, phone)
+                    driver:driver_id(id, name, phone),
+                    client_name
                 `)
-                .in('request_id', requestIds);
+                .in('id', assignmentIds);
 
             if (error) throw error;
 
-            // Map by request_id for quick lookup
+            console.log('[HistoryTable] Fetched driver_assignments:', data?.length, 'records');
+            if (data?.length > 0) {
+                console.log('[HistoryTable] Sample assignment:', {
+                    id: data[0].id,
+                    picked_up_at: data[0].picked_up_at,
+                    delivered_at: data[0].delivered_at,
+                    driver_name: data[0].driver?.name
+                });
+            }
+
+            // Map by assignment ID for easy lookup from processed_request.driver_assignment_id
             const assignmentMap = {};
             (data || []).forEach(a => {
-                assignmentMap[a.request_id] = a;
+                assignmentMap[a.id] = a;
             });
+
+            console.log('[HistoryTable] Assignment map has', Object.keys(assignmentMap).length, 'entries');
             setDriverAssignments(assignmentMap);
         } catch (err) {
             console.error('Error fetching driver assignments:', err);
@@ -146,9 +165,16 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             const steps = [];
             const assignerName = getAssignerName();
 
-            // Check if driver was assigned retroactively (after processing, no pickup/delivery timestamps)
-            const isRetroactiveDriver = request.driver_id && !assignment?.picked_up_at && !assignment?.delivered_at;
-            const retroactiveDriverName = request.driver_name || assignment?.driver?.name;
+            // Check if driver was assigned retroactively (after processing, without actually working)
+            // Retroactive = driver_id is set on processed_request BUT:
+            //   - No assignment record exists at all (driver was manually entered after processing)
+            // NOT retroactive if:
+            //   - Driver has assignment with picked_up_at or delivered_at (driver actually worked)
+            //   - Assignment exists for the same driver (even without pickup/delivery - they were assigned through proper flow)
+            const driverActuallyWorked = assignment?.picked_up_at || assignment?.delivered_at;
+            const hasValidAssignment = assignment && assignment.driver?.id;
+            const isRetroactiveDriver = request.driver_id && !driverActuallyWorked && !hasValidAssignment;
+            const retroactiveDriverName = request.driver_name;
 
             // 1. Created - always show if we have created_at
             if (request.created_at) {
@@ -440,7 +466,8 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                         {filtered.length === 0 ? (
                             <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => {
-                            const assignment = driverAssignments[req.request_id];
+                            // Find assignment by driver_assignment_id (direct link stored in processed_requests after migration 025)
+                            const assignment = driverAssignments[req.driver_assignment_id];
                             const isExpanded = expandedRow === req.id;
                             return (
                             <React.Fragment key={req.id || idx}>
@@ -563,7 +590,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                         <TimelineView
                                             assignment={assignment}
                                             request={req}
-                                            logs={activityLogs[req.request_id] || activityLogs[req.original_request_id] || []}
+                                            logs={activityLogs[req.request_id] || []}
                                         />
                                     </td>
                                 </tr>
@@ -643,9 +670,9 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     }}
                     onClose={() => setEditingRequest(null)}
                     drivers={drivers}
-                    currentDriverId={driverAssignments[editingRequest.request_id]?.driver?.id || editingRequest.driver_id || null}
+                    currentDriverId={driverAssignments[editingRequest.driver_assignment_id]?.driver?.id || editingRequest.driver_id || null}
                     onAssignDriver={onAssignDriverToProcessed}
-                    driverAssignment={driverAssignments[editingRequest.request_id]}
+                    driverAssignment={driverAssignments[editingRequest.driver_assignment_id]}
                 />
             )}
 
