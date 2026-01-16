@@ -62,8 +62,6 @@ const formatDateTime = (dateStr) => {
 // History Card with Timeline
 const HistoryCard = ({ item, wasteTypes }) => {
     const [expanded, setExpanded] = useState(false);
-    const [processedData, setProcessedData] = useState(null);
-    const [loadingProcessed, setLoadingProcessed] = useState(false);
     const [showProofModal, setShowProofModal] = useState(false);
 
     const wasteIcon = wasteTypes?.find(w => w.id === item.waste_type)?.icon || '📦';
@@ -99,35 +97,14 @@ const HistoryCard = ({ item, wasteTypes }) => {
         }
     ];
 
-    // Load processed request data when expanded
-    const loadProcessedData = async () => {
-        if (processedData || loadingProcessed) return;
-        setLoadingProcessed(true);
-        try {
-            // Try to find processed request by request_id
-            const { data, error } = await supabase
-                .from('processed_requests')
-                .select('*')
-                .eq('request_id', item.request_id)
-                .is('deleted_at', null)
-                .single();
-
-            if (!error && data) {
-                setProcessedData(data);
-            }
-        } catch (err) {
-            console.error('Error loading processed data:', err);
-        } finally {
-            setLoadingProcessed(false);
-        }
-    };
-
-    // Load data when expanded
-    useEffect(() => {
-        if (expanded && !processedData) {
-            loadProcessedData();
-        }
-    }, [expanded]);
+    // Processed data is now included directly in item from loadHistory
+    const processedData = item.processed_at ? {
+        processed_at: item.processed_at,
+        weight: item.weight,
+        weight_unit: item.weight_unit,
+        proof_url: item.proof_url,
+        notes: item.notes
+    } : null;
 
     return (
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -319,12 +296,6 @@ const HistoryCard = ({ item, wasteTypes }) => {
                                     </div>
                                 )}
 
-                                {loadingProcessed && (
-                                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
-                                        <RefreshCw size={12} className="animate-spin" />
-                                        Učitavanje podataka...
-                                    </div>
-                                )}
                             </div>
                         </div>
                     )}
@@ -547,19 +518,10 @@ export default function DriverDashboard() {
     const loadHistory = async () => {
         setLoadingHistory(true);
         try {
-            // 1. Get delivered/completed assignments from driver_assignments
-            const { data: assignments, error: assignmentsError } = await supabase
-                .from('driver_assignments')
-                .select('*')
-                .eq('driver_id', myUserId)
-                .in('status', ['delivered', 'completed'])
-                .is('deleted_at', null)
-                .order('delivered_at', { ascending: false, nullsFirst: false })
-                .limit(50);
+            // After migration 025: driver_assignments.request_id becomes NULL after processing
+            // So we need to use processed_requests.driver_assignment_id to link them
 
-            if (assignmentsError) throw assignmentsError;
-
-            // 2. Get processed requests where driver was assigned after processing
+            // 1. Get processed requests where this driver worked (either via proper flow or retroactive)
             const { data: processedRequests, error: processedError } = await supabase
                 .from('processed_requests')
                 .select('*')
@@ -570,40 +532,107 @@ export default function DriverDashboard() {
 
             if (processedError) {
                 console.error('[Driver History] processed_requests error:', processedError);
-                // Don't throw - just continue with assignments only
             }
 
-            console.log('[Driver History] driver_assignments:', assignments?.length || 0, 'processed_requests:', processedRequests?.length || 0);
+            // 2. Get driver_assignments for these processed requests (to get timeline data)
+            const assignmentIds = (processedRequests || [])
+                .map(p => p.driver_assignment_id)
+                .filter(Boolean);
 
-            // Map processed_requests to same format as assignments
-            const mappedProcessed = (processedRequests || []).map(p => ({
-                id: p.id,
-                request_id: p.id,
-                status: 'completed',
-                source: 'processed_request',
-                client_name: p.client_name,
-                client_address: p.client_address,
-                waste_type: p.waste_type,
-                waste_label: p.waste_label,
-                latitude: p.latitude,
-                longitude: p.longitude,
-                assigned_at: null,
-                picked_up_at: null,
-                delivered_at: p.processed_at,
-                completed_at: p.processed_at,
-                created_at: p.created_at
+            let assignmentsMap = {};
+            if (assignmentIds.length > 0) {
+                const { data: assignments, error: assignmentsError } = await supabase
+                    .from('driver_assignments')
+                    .select('*')
+                    .in('id', assignmentIds);
+
+                if (!assignmentsError && assignments) {
+                    assignments.forEach(a => {
+                        assignmentsMap[a.id] = a;
+                    });
+                }
+            }
+
+            // 3. Also get in-progress assignments (delivered but not yet processed by manager)
+            const { data: pendingAssignments, error: pendingError } = await supabase
+                .from('driver_assignments')
+                .select('*')
+                .eq('driver_id', myUserId)
+                .eq('status', 'delivered')
+                .is('deleted_at', null)
+                .order('delivered_at', { ascending: false })
+                .limit(20);
+
+            if (pendingError) {
+                console.error('[Driver History] pending assignments error:', pendingError);
+            }
+
+            console.log('[Driver History] processed_requests:', processedRequests?.length || 0,
+                'linked_assignments:', Object.keys(assignmentsMap).length,
+                'pending_assignments:', pendingAssignments?.length || 0);
+
+            // Build combined history from processed_requests with assignment data
+            const historyFromProcessed = (processedRequests || []).map(p => {
+                const assignment = assignmentsMap[p.driver_assignment_id];
+                const isRetroactive = !assignment || (!assignment.assigned_at && !assignment.picked_up_at);
+
+                return {
+                    id: p.id,
+                    processed_request_id: p.id,
+                    driver_assignment_id: p.driver_assignment_id,
+                    status: 'completed',
+                    source: isRetroactive ? 'processed_request' : 'driver_assignment',
+                    client_name: p.client_name,
+                    client_address: p.client_address,
+                    waste_type: p.waste_type,
+                    waste_label: p.waste_label,
+                    latitude: p.latitude,
+                    longitude: p.longitude,
+                    // Use assignment timestamps if available (driver actually worked), else use processed_at
+                    assigned_at: assignment?.assigned_at || null,
+                    picked_up_at: assignment?.picked_up_at || null,
+                    delivered_at: assignment?.delivered_at || p.processed_at,
+                    completed_at: assignment?.completed_at || p.processed_at,
+                    processed_at: p.processed_at,
+                    created_at: p.created_at,
+                    // Include processed data for display
+                    weight: p.weight,
+                    weight_unit: p.weight_unit,
+                    proof_url: p.proof_image_url,
+                    notes: p.processing_note
+                };
+            });
+
+            // Add pending assignments (delivered but not yet processed)
+            const pendingHistory = (pendingAssignments || []).map(a => ({
+                id: a.id,
+                driver_assignment_id: a.id,
+                status: 'delivered',
+                source: 'driver_assignment',
+                client_name: a.client_name,
+                client_address: a.client_address,
+                waste_type: a.waste_type,
+                waste_label: a.waste_label,
+                latitude: a.latitude,
+                longitude: a.longitude,
+                assigned_at: a.assigned_at,
+                picked_up_at: a.picked_up_at,
+                delivered_at: a.delivered_at,
+                completed_at: null,
+                processed_at: null,
+                created_at: a.created_at
             }));
 
-            // Combine and deduplicate (prefer driver_assignment if both exist)
-            const assignmentRequestIds = new Set((assignments || []).map(a => a.request_id));
-            const uniqueProcessed = mappedProcessed.filter(p => !assignmentRequestIds.has(p.id));
+            // Combine and deduplicate
+            const processedAssignmentIds = new Set(historyFromProcessed.map(h => h.driver_assignment_id).filter(Boolean));
+            const uniquePending = pendingHistory.filter(p => !processedAssignmentIds.has(p.driver_assignment_id));
 
-            const combined = [...(assignments || []), ...uniqueProcessed];
+            const combined = [...historyFromProcessed, ...uniquePending];
 
             // Sort by most recent timestamp
             combined.sort((a, b) => {
-                const dateA = new Date(a.delivered_at || a.completed_at || a.created_at);
-                const dateB = new Date(b.delivered_at || b.completed_at || b.created_at);
+                const dateA = new Date(a.delivered_at || a.completed_at || a.processed_at || a.created_at);
+                const dateB = new Date(b.delivered_at || b.completed_at || b.processed_at || b.created_at);
                 return dateB - dateA;
             });
 

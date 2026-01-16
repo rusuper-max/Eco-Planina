@@ -12,39 +12,54 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
 
-    // Filter by period - combine driver_assignments AND retroactively assigned processed_requests
+    // Filter by period - use processed_requests as primary source with driver_assignment data
+    // After migration 025: driver_assignments.request_id becomes NULL after processing
+    // So we use processed_requests.driver_assignment_id to link them
     const filteredAssignments = useMemo(() => {
-        // 1. Completed assignments from driver_assignments table (normal flow)
-        const completedAssignments = driverAssignments.filter(a => a.status === 'completed');
+        // Build a map of driver_assignments by ID for fast lookup
+        const assignmentsById = {};
+        driverAssignments.forEach(a => {
+            assignmentsById[a.id] = a;
+        });
 
-        // 2. Get request_ids already covered by driver_assignments
-        const assignedRequestIds = new Set(completedAssignments.map(a => a.request_id));
+        // Process requests with driver info - these are the source of truth after processing
+        const processedWithDriver = processedRequests
+            .filter(pr => pr.driver_id)
+            .map(pr => {
+                // Get linked assignment if exists (for timeline data)
+                const linkedAssignment = pr.driver_assignment_id ? assignmentsById[pr.driver_assignment_id] : null;
+                const isRetroactive = !linkedAssignment || (!linkedAssignment.assigned_at && !linkedAssignment.picked_up_at);
 
-        // 3. Find retroactively assigned requests (have driver_id but no driver_assignment record)
-        const retroactiveRequests = processedRequests
-            .filter(pr => pr.driver_id && !assignedRequestIds.has(pr.request_id))
-            .map(pr => ({
-                // Create a pseudo-assignment object for compatibility
-                id: `retro-${pr.id}`,
-                request_id: pr.request_id || pr.id,
-                driver_id: pr.driver_id,
-                status: 'completed',
-                completed_at: pr.processed_at,
-                assigned_at: pr.processed_at,
-                isRetroactive: true
-            }));
+                return {
+                    id: pr.driver_assignment_id || `retro-${pr.id}`,
+                    processed_request_id: pr.id,
+                    driver_assignment_id: pr.driver_assignment_id,
+                    driver_id: pr.driver_id,
+                    status: 'completed',
+                    completed_at: linkedAssignment?.completed_at || pr.processed_at,
+                    assigned_at: linkedAssignment?.assigned_at || pr.processed_at,
+                    picked_up_at: linkedAssignment?.picked_up_at,
+                    delivered_at: linkedAssignment?.delivered_at,
+                    isRetroactive,
+                    // Include processed request data directly
+                    client_name: pr.client_name,
+                    client_address: pr.client_address,
+                    waste_type: pr.waste_type,
+                    waste_label: pr.waste_label,
+                    weight: pr.weight,
+                    client_id: pr.client_id,
+                    processed_at: pr.processed_at
+                };
+            });
 
-        // 4. Combine both sources
-        const allCompleted = [...completedAssignments, ...retroactiveRequests];
-
-        if (periodFilter === 'all') return allCompleted;
+        if (periodFilter === 'all') return processedWithDriver;
 
         const now = new Date();
         const cutoff = new Date();
         if (periodFilter === 'month') cutoff.setMonth(now.getMonth() - 1);
         if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
 
-        return allCompleted.filter(a => new Date(a.completed_at || a.assigned_at) >= cutoff);
+        return processedWithDriver.filter(a => new Date(a.completed_at || a.assigned_at) >= cutoff);
     }, [driverAssignments, processedRequests, periodFilter]);
 
     // Calculate stats per driver
@@ -72,21 +87,20 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
 
             stats[driverId].count++;
 
-            // Find related processed request to get weight
-            const relatedRequest = processedRequests.find(r => r.request_id === assignment.request_id);
-            if (relatedRequest?.weight) {
-                stats[driverId].totalWeight += parseFloat(relatedRequest.weight) || 0;
+            // Weight is now included directly in assignment from processed_requests
+            if (assignment.weight) {
+                stats[driverId].totalWeight += parseFloat(assignment.weight) || 0;
             }
 
-            // Track waste types
-            if (relatedRequest?.waste_type) {
-                const wasteType = relatedRequest.waste_type;
+            // Track waste types (now directly in assignment)
+            if (assignment.waste_type) {
+                const wasteType = assignment.waste_type;
                 stats[driverId].wasteTypes[wasteType] = (stats[driverId].wasteTypes[wasteType] || 0) + 1;
             }
 
-            // Track unique clients
-            if (relatedRequest?.client_id) {
-                stats[driverId].clients.add(relatedRequest.client_id);
+            // Track unique clients (now directly in assignment)
+            if (assignment.client_id) {
+                stats[driverId].clients.add(assignment.client_id);
             }
 
             // Track latest completed
@@ -95,11 +109,8 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                 stats[driverId].lastCompleted = completedAt;
             }
 
-            // Store assignment for details
-            stats[driverId].assignments.push({
-                ...assignment,
-                relatedRequest
-            });
+            // Store assignment for details (data already included)
+            stats[driverId].assignments.push(assignment);
         });
 
         // Convert to array and sort
@@ -114,7 +125,7 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
         else if (sortBy === 'recent') result.sort((a, b) => (b.lastCompleted || 0) - (a.lastCompleted || 0));
 
         return result;
-    }, [filteredAssignments, drivers, processedRequests, sortBy]);
+    }, [filteredAssignments, drivers, sortBy]);
 
     // Get waste type label from ID
     const getWasteTypeLabel = (typeId) => {
@@ -156,18 +167,17 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                 : 'N/A'
         }));
 
-        // Prepare detailed deliveries data
+        // Prepare detailed deliveries data (data now directly in assignment)
         const detailedData = filteredAssignments.map(assignment => {
             const driver = drivers.find(d => d.id === assignment.driver_id);
-            const relatedRequest = processedRequests.find(r => r.request_id === assignment.request_id);
             return {
                 'Datum': new Date(assignment.completed_at || assignment.assigned_at).toLocaleDateString('sr-RS'),
                 'Vreme': new Date(assignment.completed_at || assignment.assigned_at).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' }),
                 'Vozač': driver?.name || 'Nepoznat',
-                'Klijent': relatedRequest?.client_name || 'Nepoznat',
-                'Adresa': relatedRequest?.client_address || '',
-                'Vrsta robe': relatedRequest ? getWasteTypeLabel(relatedRequest.waste_type) : '',
-                'Težina (kg)': relatedRequest?.weight || ''
+                'Klijent': assignment.client_name || 'Nepoznat',
+                'Adresa': assignment.client_address || '',
+                'Vrsta robe': assignment.waste_type ? getWasteTypeLabel(assignment.waste_type) : '',
+                'Težina (kg)': assignment.weight || ''
             };
         });
 
@@ -421,16 +431,16 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                                                         >
                                                             <div>
                                                                 <p className="font-medium text-sm text-slate-800">
-                                                                    {assignment.relatedRequest?.client_name || 'Nepoznat klijent'}
+                                                                    {assignment.client_name || 'Nepoznat klijent'}
                                                                 </p>
                                                                 <p className="text-xs text-slate-500 flex items-center gap-1">
                                                                     <MapPin size={12} />
-                                                                    {assignment.relatedRequest?.client_address || 'Nepoznata adresa'}
+                                                                    {assignment.client_address || 'Nepoznata adresa'}
                                                                 </p>
                                                             </div>
                                                             <div className="text-right">
                                                                 <p className="text-sm font-medium text-emerald-600">
-                                                                    {assignment.relatedRequest?.weight ? `${assignment.relatedRequest.weight} kg` : '-'}
+                                                                    {assignment.weight ? `${assignment.weight} kg` : '-'}
                                                                 </p>
                                                                 <p className="text-xs text-slate-400">
                                                                     {new Date(assignment.completed_at || assignment.assigned_at).toLocaleDateString('sr-RS')}
