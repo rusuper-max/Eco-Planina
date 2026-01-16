@@ -26,12 +26,14 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
     const [isDeleting, setIsDeleting] = useState(false);
     const [expandedRow, setExpandedRow] = useState(null);
     const [driverAssignments, setDriverAssignments] = useState({});
+    const [activityLogs, setActivityLogs] = useState({});
     const [loadingAssignments, setLoadingAssignments] = useState(false);
 
-    // Fetch driver assignments for detailed view
+    // Fetch driver assignments and activity logs for detailed view
     useEffect(() => {
         if (showDetailedView && requests?.length > 0) {
             fetchDriverAssignments();
+            fetchActivityLogs();
         }
     }, [showDetailedView, requests]);
 
@@ -57,6 +59,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     picked_up_at,
                     delivered_at,
                     completed_at,
+                    assigned_by,
                     driver:driver_id(id, name, phone)
                 `)
                 .in('request_id', requestIds);
@@ -76,6 +79,36 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
         }
     };
 
+    // Fetch activity logs for requests to get full history (who assigned, driver changes, etc.)
+    const fetchActivityLogs = async () => {
+        if (!requests?.length) return;
+        try {
+            const requestIds = requests.map(r => r.request_id || r.original_request_id).filter(Boolean);
+            if (requestIds.length === 0) return;
+
+            const { data, error } = await supabase
+                .from('activity_logs')
+                .select('*')
+                .in('entity_id', requestIds)
+                .in('action', ['create', 'assign', 'picked_up', 'delivered', 'process'])
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+
+            // Group by entity_id (request_id)
+            const logsMap = {};
+            (data || []).forEach(log => {
+                if (!logsMap[log.entity_id]) {
+                    logsMap[log.entity_id] = [];
+                }
+                logsMap[log.entity_id].push(log);
+            });
+            setActivityLogs(logsMap);
+        } catch (err) {
+            console.error('Error fetching activity logs:', err);
+        }
+    };
+
     // Calculate time difference in human readable format
     const formatDuration = (start, end) => {
         if (!start || !end) return null;
@@ -88,9 +121,128 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
         return `${days}d ${hours % 24}h`;
     };
 
-    // Timeline component for a single request
-    const TimelineView = ({ assignment, request }) => {
-        if (!assignment && !request.processed_by_name) {
+    // Horizontal Timeline component for a single request
+    const TimelineView = ({ assignment, request, logs = [] }) => {
+        // Format time for display
+        const formatTime = (date) => {
+            if (!date) return '-';
+            return new Date(date).toLocaleString('sr-RS', {
+                day: 'numeric', month: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        };
+
+        // Find who assigned the driver from activity logs
+        const getAssignerName = () => {
+            const assignLog = logs.find(l => l.action === 'assign');
+            if (assignLog) {
+                return assignLog.user_name || 'Menadžer';
+            }
+            return null;
+        };
+
+        // Build timeline steps based on available data
+        const buildSteps = () => {
+            const steps = [];
+            const assignerName = getAssignerName();
+
+            // Check if driver was assigned retroactively (after processing, no pickup/delivery timestamps)
+            const isRetroactiveDriver = request.driver_id && !assignment?.picked_up_at && !assignment?.delivered_at;
+            const retroactiveDriverName = request.driver_name || assignment?.driver?.name;
+
+            // 1. Created - always show if we have created_at
+            if (request.created_at) {
+                steps.push({
+                    key: 'created',
+                    label: 'Kreiran',
+                    actor: request.client_name || 'Klijent',
+                    time: request.created_at,
+                    icon: Package,
+                    color: 'bg-blue-500',
+                    bgColor: 'bg-blue-50',
+                    textColor: 'text-blue-700'
+                });
+            }
+
+            // 2. Assigned to driver (show who assigned + to whom) - only if driver actually worked
+            if (assignment?.assigned_at && (assignment?.picked_up_at || assignment?.delivered_at)) {
+                const driverName = assignment.driver?.name || request.driver_name || 'Vozač';
+                steps.push({
+                    key: 'assigned',
+                    label: 'Dodeljen',
+                    actor: driverName,
+                    subActor: assignerName ? `od ${assignerName}` : null,
+                    time: assignment.assigned_at,
+                    icon: User,
+                    color: 'bg-amber-500',
+                    bgColor: 'bg-amber-50',
+                    textColor: 'text-amber-700'
+                });
+            }
+
+            // 3. Picked up by driver
+            if (assignment?.picked_up_at) {
+                steps.push({
+                    key: 'picked_up',
+                    label: 'Preuzeto',
+                    actor: assignment.driver?.name || 'Vozač',
+                    time: assignment.picked_up_at,
+                    icon: MapPin,
+                    color: 'bg-cyan-500',
+                    bgColor: 'bg-cyan-50',
+                    textColor: 'text-cyan-700'
+                });
+            }
+
+            // 4. Delivered by driver
+            if (assignment?.delivered_at) {
+                steps.push({
+                    key: 'delivered',
+                    label: 'Dovezeno',
+                    actor: assignment.driver?.name || 'Vozač',
+                    time: assignment.delivered_at,
+                    icon: Truck,
+                    color: 'bg-purple-500',
+                    bgColor: 'bg-purple-50',
+                    textColor: 'text-purple-700'
+                });
+            }
+
+            // 5. Processed by manager
+            if (request.processed_at) {
+                steps.push({
+                    key: 'processed',
+                    label: 'Obrađeno',
+                    actor: request.processed_by_name || 'Menadžer',
+                    time: request.processed_at,
+                    icon: CheckCircle2,
+                    color: 'bg-emerald-500',
+                    bgColor: 'bg-emerald-50',
+                    textColor: 'text-emerald-700'
+                });
+            }
+
+            // 6. Retroactive driver assignment (after processing)
+            if (isRetroactiveDriver && retroactiveDriverName) {
+                steps.push({
+                    key: 'retroactive_driver',
+                    label: 'Naknadno vozač',
+                    actor: retroactiveDriverName,
+                    subActor: 'evidentiran',
+                    time: null, // No specific time
+                    icon: UserCheck,
+                    color: 'bg-violet-500',
+                    bgColor: 'bg-violet-50',
+                    textColor: 'text-violet-700'
+                });
+            }
+
+            return steps;
+        };
+
+        const steps = buildSteps();
+
+        if (steps.length === 0) {
             return (
                 <div className="p-4 bg-slate-50 rounded-xl text-center text-slate-500 text-sm">
                     Nema dodatnih podataka za ovaj zahtev
@@ -98,112 +250,72 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             );
         }
 
-        // Show processed by info even if no driver assignment
-        if (!assignment) {
-            return (
-                <div className="p-4 bg-slate-50 rounded-xl">
-                    {request.processed_by_name && (
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                <UserCheck className="w-5 h-5 text-indigo-600" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-400">Obradio menadžer</p>
-                                <p className="font-medium text-slate-800">{request.processed_by_name}</p>
-                            </div>
-                            {request.processed_at && (
-                                <div className="ml-auto text-right">
-                                    <p className="text-xs text-slate-400">Vreme obrade</p>
-                                    <p className="text-sm text-slate-600">
-                                        {new Date(request.processed_at).toLocaleString('sr-RS', {
-                                            day: 'numeric', month: 'numeric', year: 'numeric',
-                                            hour: '2-digit', minute: '2-digit'
-                                        })}
-                                    </p>
+        return (
+            <div className="p-4 bg-gradient-to-r from-slate-50 to-white rounded-xl">
+                {/* Horizontal Timeline */}
+                <div className="relative overflow-x-auto pb-2">
+                    {/* Steps container */}
+                    <div className="flex items-start min-w-max">
+                        {steps.map((step, idx) => {
+                            const StepIcon = step.icon;
+
+                            return (
+                                <div key={step.key} className="flex items-start">
+                                    {/* Step box */}
+                                    <div className="flex flex-col items-center" style={{ minWidth: '110px' }}>
+                                        {/* Icon circle */}
+                                        <div className={`w-10 h-10 rounded-full ${step.color} flex items-center justify-center shadow-md z-10 border-2 border-white`}>
+                                            <StepIcon size={18} className="text-white" />
+                                        </div>
+
+                                        {/* Label and info */}
+                                        <div className={`mt-2 px-3 py-1.5 rounded-lg ${step.bgColor} text-center`}>
+                                            <p className={`text-xs font-bold ${step.textColor}`}>{step.label}</p>
+                                            <p className="text-[11px] text-slate-700 font-medium truncate max-w-[100px]" title={step.actor}>{step.actor}</p>
+                                            {step.subActor && (
+                                                <p className="text-[9px] text-slate-500 italic">{step.subActor}</p>
+                                            )}
+                                            {step.time && (
+                                                <p className="text-[10px] text-slate-400 whitespace-nowrap mt-0.5">{formatTime(step.time)}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Arrow connector */}
+                                    {idx < steps.length - 1 && (
+                                        <div className="flex items-center h-10 px-1">
+                                            <div className="w-8 h-0.5 bg-emerald-400" />
+                                            <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[8px] border-l-emerald-400" />
+                                        </div>
+                                    )}
                                 </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Summary footer */}
+                {request.created_at && request.processed_at && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3 text-xs">
+                            {request.weight && (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium whitespace-nowrap">
+                                    {request.weight} {request.weight_unit || 'kg'}
+                                </span>
+                            )}
+                            {(assignment?.driver?.name || request.driver_name) && (
+                                <span className="text-slate-500 flex items-center gap-1">
+                                    <Truck size={12} />
+                                    {assignment?.driver?.name || request.driver_name}
+                                </span>
                             )}
                         </div>
-                    )}
-                </div>
-            );
-        }
-
-        const steps = [
-            { key: 'created', label: 'Kreiran zahtev', time: request.created_at, icon: Package },
-            { key: 'assigned', label: 'Dodeljen vozaču', time: assignment.assigned_at, icon: User },
-            { key: 'started', label: 'Vozač krenuo', time: assignment.started_at, icon: PlayCircle },
-            { key: 'picked_up', label: 'Preuzeto', time: assignment.picked_up_at, icon: MapPin },
-            { key: 'delivered', label: 'Isporučeno', time: assignment.delivered_at, icon: Truck },
-            { key: 'completed', label: 'Završeno', time: assignment.completed_at || request.processed_at, icon: CheckCircle2 },
-        ].filter(s => s.time);
-
-        return (
-            <div className="p-4 bg-slate-50 rounded-xl">
-                <div className="flex flex-wrap items-center gap-3 mb-4 pb-3 border-b border-slate-200">
-                    {/* Driver info */}
-                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                        <Truck className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div>
-                        <p className="text-xs text-slate-400">Vozač</p>
-                        <p className="font-medium text-slate-800">{assignment.driver?.name || 'Nepoznat vozač'}</p>
-                    </div>
-
-                    {/* Processed by info */}
-                    {request.processed_by_name && (
-                        <>
-                            <div className="hidden sm:block w-px h-10 bg-slate-200 mx-2" />
-                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                                <UserCheck className="w-5 h-5 text-indigo-600" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-400">Obradio</p>
-                                <p className="font-medium text-slate-800">{request.processed_by_name}</p>
-                            </div>
-                        </>
-                    )}
-
-                    {request.created_at && request.processed_at && (
-                        <div className="ml-auto text-right">
-                            <p className="text-xs text-slate-400">Ukupno trajanje</p>
-                            <p className="font-bold text-emerald-600">{formatDuration(request.created_at, request.processed_at)}</p>
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                            <Clock size={12} />
+                            <span>Ukupno: <span className="font-bold text-emerald-600">{formatDuration(request.created_at, request.processed_at)}</span></span>
                         </div>
-                    )}
-                </div>
-
-                {/* Timeline */}
-                <div className="relative pl-6">
-                    <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-slate-200" />
-                    {steps.map((step, idx) => {
-                        const StepIcon = step.icon;
-                        const nextStep = steps[idx + 1];
-                        const duration = nextStep ? formatDuration(step.time, nextStep.time) : null;
-
-                        return (
-                            <div key={step.key} className="relative pb-4 last:pb-0">
-                                <div className="absolute -left-4 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white" />
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <StepIcon size={14} className="text-slate-400" />
-                                        <span className="text-sm font-medium text-slate-700">{step.label}</span>
-                                    </div>
-                                    <span className="text-xs text-slate-500">
-                                        {new Date(step.time).toLocaleString('sr-RS', {
-                                            day: 'numeric', month: 'numeric',
-                                            hour: '2-digit', minute: '2-digit'
-                                        })}
-                                    </span>
-                                </div>
-                                {duration && (
-                                    <div className="ml-6 mt-1 text-xs text-slate-400 flex items-center gap-1">
-                                        <Clock size={10} />
-                                        {duration}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -318,7 +430,6 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                     Obrađeno <SortIcon column="processed_at" />
                                 </button>
                             </th>
-                            {showDetailedView && <th className="hidden lg:table-cell px-4 py-3 text-left">Obradio</th>}
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
                             <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
                             <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>
@@ -327,7 +438,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={showDetailedView ? 10 : 9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => {
                             const assignment = driverAssignments[req.request_id];
                             const isExpanded = expandedRow === req.id;
@@ -359,24 +470,9 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                         <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
                                     </div>
                                 </td>
-                                {/* Processed by column for Company Admin */}
-                                {showDetailedView && (
-                                    <td className="hidden lg:table-cell px-4 py-3">
-                                        {req.processed_by_name ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center">
-                                                    <UserCheck size={14} className="text-indigo-600" />
-                                                </div>
-                                                <span className="text-sm text-slate-700">{req.processed_by_name}</span>
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-slate-400">-</span>
-                                        )}
-                                    </td>
-                                )}
                                 <td className="hidden sm:table-cell px-4 py-3 text-center">
                                     {req.weight ? (
-                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
                                             {req.weight} {req.weight_unit || 'kg'}
                                         </span>
                                     ) : (
@@ -463,8 +559,12 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                             {/* Expanded row with timeline */}
                             {showDetailedView && isExpanded && (
                                 <tr>
-                                    <td colSpan={10} className="px-4 py-3 bg-white border-t">
-                                        <TimelineView assignment={assignment} request={req} />
+                                    <td colSpan={9} className="px-4 py-3 bg-white border-t">
+                                        <TimelineView
+                                            assignment={assignment}
+                                            request={req}
+                                            logs={activityLogs[req.request_id] || activityLogs[req.original_request_id] || []}
+                                        />
                                     </td>
                                 </tr>
                             )}

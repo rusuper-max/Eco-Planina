@@ -12,20 +12,40 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
 
-    // Filter by period
+    // Filter by period - combine driver_assignments AND retroactively assigned processed_requests
     const filteredAssignments = useMemo(() => {
-        // Only count completed assignments
-        const completed = driverAssignments.filter(a => a.status === 'completed');
+        // 1. Completed assignments from driver_assignments table (normal flow)
+        const completedAssignments = driverAssignments.filter(a => a.status === 'completed');
 
-        if (periodFilter === 'all') return completed;
+        // 2. Get request_ids already covered by driver_assignments
+        const assignedRequestIds = new Set(completedAssignments.map(a => a.request_id));
+
+        // 3. Find retroactively assigned requests (have driver_id but no driver_assignment record)
+        const retroactiveRequests = processedRequests
+            .filter(pr => pr.driver_id && !assignedRequestIds.has(pr.request_id))
+            .map(pr => ({
+                // Create a pseudo-assignment object for compatibility
+                id: `retro-${pr.id}`,
+                request_id: pr.request_id || pr.id,
+                driver_id: pr.driver_id,
+                status: 'completed',
+                completed_at: pr.processed_at,
+                assigned_at: pr.processed_at,
+                isRetroactive: true
+            }));
+
+        // 4. Combine both sources
+        const allCompleted = [...completedAssignments, ...retroactiveRequests];
+
+        if (periodFilter === 'all') return allCompleted;
 
         const now = new Date();
         const cutoff = new Date();
         if (periodFilter === 'month') cutoff.setMonth(now.getMonth() - 1);
         if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
 
-        return completed.filter(a => new Date(a.completed_at || a.assigned_at) >= cutoff);
-    }, [driverAssignments, periodFilter]);
+        return allCompleted.filter(a => new Date(a.completed_at || a.assigned_at) >= cutoff);
+    }, [driverAssignments, processedRequests, periodFilter]);
 
     // Calculate stats per driver
     const driverStats = useMemo(() => {

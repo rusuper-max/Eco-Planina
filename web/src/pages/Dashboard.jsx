@@ -949,6 +949,7 @@ export default function Dashboard() {
                     processedRequests={processedRequests}
                     members={companyMembers}
                     wasteTypes={wasteTypes}
+                    driverAssignments={driverAssignments}
                     onResetStats={async () => {
                         await resetManagerAnalytics();
                         // Refresh the data after reset
@@ -977,6 +978,26 @@ export default function Dashboard() {
                         showDetailedView={true}
                         drivers={companyDrivers}
                         onAssignDriverToProcessed={handleAssignDriverToProcessed}
+                        onEdit={async (id, updates) => {
+                            try {
+                                await updateProcessedRequest(id, updates);
+                                const updated = await fetchProcessedRequests();
+                                setProcessedRequests(updated);
+                            } catch (err) {
+                                toast.error('Greška pri ažuriranju: ' + err.message);
+                            }
+                        }}
+                        onDelete={async (id) => {
+                            const previous = processedRequests;
+                            setProcessedRequests(prev => prev.filter(r => r.id !== id));
+                            try {
+                                await deleteProcessedRequest(id);
+                                toast.success('Zahtev je obrisan iz istorije');
+                            } catch (err) {
+                                setProcessedRequests(previous);
+                                toast.error('Greška pri brisanju: ' + (err.message || 'Nepoznata greška'));
+                            }
+                        }}
                     />
                 </div>
             );

@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
-import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users, RotateCcw, AlertTriangle, Loader2, Download } from 'lucide-react';
+import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users, RotateCcw, AlertTriangle, Loader2, Download, Truck } from 'lucide-react';
 import { EmptyState, Modal } from '../common';
 import * as XLSX from 'xlsx';
 
 /**
  * Manager Analytics Page - Shows performance metrics for each manager
  * Used by Company Admin to track which managers processed the most requests
+ * Also shows driver assignments made by each manager
  */
-export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], wasteTypes = [], onResetStats }) => {
+export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], wasteTypes = [], onResetStats, driverAssignments = [] }) => {
     const [expandedManager, setExpandedManager] = useState(null);
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
@@ -26,10 +27,23 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
         return processedRequests.filter(r => new Date(r.processed_at) >= cutoff);
     }, [processedRequests, periodFilter]);
 
-    // Calculate stats per manager
+    // Filter driver assignments by period
+    const filteredAssignments = useMemo(() => {
+        if (periodFilter === 'all') return driverAssignments;
+
+        const now = new Date();
+        const cutoff = new Date();
+        if (periodFilter === 'month') cutoff.setMonth(now.getMonth() - 1);
+        if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
+
+        return driverAssignments.filter(a => new Date(a.assigned_at) >= cutoff);
+    }, [driverAssignments, periodFilter]);
+
+    // Calculate stats per manager (both processed requests AND driver assignments)
     const managerStats = useMemo(() => {
         const stats = {};
 
+        // Count processed requests
         filteredRequests.forEach(req => {
             const managerId = req.processed_by_id || 'unknown';
             const managerName = req.processed_by_name || 'Nepoznat';
@@ -38,16 +52,19 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                 stats[managerId] = {
                     id: managerId,
                     name: managerName,
-                    count: 0,
+                    processedCount: 0,
+                    assignedCount: 0,
                     totalWeight: 0,
                     wasteTypes: {},
                     clients: new Set(),
                     lastProcessed: null,
-                    requests: []
+                    lastAssigned: null,
+                    requests: [],
+                    assignments: []
                 };
             }
 
-            stats[managerId].count++;
+            stats[managerId].processedCount++;
             stats[managerId].totalWeight += parseFloat(req.weight) || 0;
 
             // Track waste types
@@ -67,19 +84,60 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
             stats[managerId].requests.push(req);
         });
 
+        // Count driver assignments (who assigned drivers)
+        filteredAssignments.forEach(assignment => {
+            const assignerId = assignment.assigned_by || 'unknown';
+            // Find assigner name from members
+            const assigner = members.find(m => m.id === assignerId);
+            const assignerName = assigner?.name || 'Nepoznat';
+
+            if (!stats[assignerId]) {
+                stats[assignerId] = {
+                    id: assignerId,
+                    name: assignerName,
+                    processedCount: 0,
+                    assignedCount: 0,
+                    totalWeight: 0,
+                    wasteTypes: {},
+                    clients: new Set(),
+                    lastProcessed: null,
+                    lastAssigned: null,
+                    requests: [],
+                    assignments: []
+                };
+            }
+
+            stats[assignerId].assignedCount++;
+
+            // Track latest assignment
+            const assignedAt = new Date(assignment.assigned_at);
+            if (!stats[assignerId].lastAssigned || assignedAt > stats[assignerId].lastAssigned) {
+                stats[assignerId].lastAssigned = assignedAt;
+            }
+
+            // Store assignment for details
+            stats[assignerId].assignments.push(assignment);
+        });
+
         // Convert to array and sort
         let result = Object.values(stats).map(s => ({
             ...s,
-            clients: s.clients.size
+            clients: s.clients.size,
+            count: s.processedCount // Keep count for backward compatibility
         }));
 
         // Sort
-        if (sortBy === 'count') result.sort((a, b) => b.count - a.count);
+        if (sortBy === 'count') result.sort((a, b) => b.processedCount - a.processedCount);
         else if (sortBy === 'weight') result.sort((a, b) => b.totalWeight - a.totalWeight);
-        else if (sortBy === 'recent') result.sort((a, b) => (b.lastProcessed || 0) - (a.lastProcessed || 0));
+        else if (sortBy === 'recent') result.sort((a, b) => {
+            const aDate = Math.max(a.lastProcessed || 0, a.lastAssigned || 0);
+            const bDate = Math.max(b.lastProcessed || 0, b.lastAssigned || 0);
+            return bDate - aDate;
+        });
+        else if (sortBy === 'assignments') result.sort((a, b) => b.assignedCount - a.assignedCount);
 
         return result;
-    }, [filteredRequests, sortBy]);
+    }, [filteredRequests, filteredAssignments, members, sortBy]);
 
     // Find manager info from members
     const getManagerInfo = (managerId) => {
@@ -107,9 +165,10 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
     // Calculate totals
     const totals = useMemo(() => ({
         requests: filteredRequests.length,
+        assignments: filteredAssignments.length,
         weight: filteredRequests.reduce((sum, r) => sum + (parseFloat(r.weight) || 0), 0),
         managers: managerStats.filter(m => m.id !== 'unknown').length
-    }), [filteredRequests, managerStats]);
+    }), [filteredRequests, filteredAssignments, managerStats]);
 
     // Export to Excel
     const handleExportExcel = () => {
@@ -197,7 +256,8 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                         onChange={(e) => setSortBy(e.target.value)}
                         className="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                     >
-                        <option value="count">Po broju zahteva</option>
+                        <option value="count">Po broju obrada</option>
+                        <option value="assignments">Po broju dodela</option>
                         <option value="weight">Po težini</option>
                         <option value="recent">Po aktivnosti</option>
                     </select>
@@ -214,15 +274,26 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
                             <Package className="w-6 h-6 text-indigo-600" />
                         </div>
                         <div>
-                            <p className="text-sm text-slate-500">Ukupno obrađeno</p>
+                            <p className="text-sm text-slate-500">Obrađeno</p>
                             <p className="text-2xl font-bold text-slate-800">{totals.requests}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                            <Truck className="w-6 h-6 text-amber-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-slate-500">Dodela</p>
+                            <p className="text-2xl font-bold text-slate-800">{totals.assignments}</p>
                         </div>
                     </div>
                 </div>
@@ -243,7 +314,7 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                             <Users className="w-6 h-6 text-blue-600" />
                         </div>
                         <div>
-                            <p className="text-sm text-slate-500">Aktivnih menadžera</p>
+                            <p className="text-sm text-slate-500">Menadžera</p>
                             <p className="text-2xl font-bold text-slate-800">{totals.managers}</p>
                         </div>
                     </div>
@@ -296,17 +367,21 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                                     </div>
 
                                     {/* Stats */}
-                                    <div className="hidden sm:flex items-center gap-6 text-center">
+                                    <div className="hidden sm:flex items-center gap-4 text-center">
                                         <div>
-                                            <p className="text-2xl font-bold text-indigo-600">{manager.count}</p>
-                                            <p className="text-xs text-slate-500">zahteva</p>
+                                            <p className="text-xl font-bold text-indigo-600">{manager.processedCount}</p>
+                                            <p className="text-xs text-slate-500">obrada</p>
                                         </div>
                                         <div>
-                                            <p className="text-2xl font-bold text-emerald-600">{formatWeight(manager.totalWeight)}</p>
+                                            <p className="text-xl font-bold text-amber-600">{manager.assignedCount}</p>
+                                            <p className="text-xs text-slate-500">dodela</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xl font-bold text-emerald-600">{formatWeight(manager.totalWeight)}</p>
                                             <p className="text-xs text-slate-500">težina</p>
                                         </div>
                                         <div>
-                                            <p className="text-2xl font-bold text-blue-600">{manager.clients}</p>
+                                            <p className="text-xl font-bold text-blue-600">{manager.clients}</p>
                                             <p className="text-xs text-slate-500">klijenata</p>
                                         </div>
                                     </div>
@@ -331,10 +406,14 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                                 </div>
 
                                 {/* Mobile stats */}
-                                <div className="sm:hidden flex items-center gap-4 mt-3 pt-3 border-t border-slate-100">
+                                <div className="sm:hidden flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
                                     <div className="flex-1 text-center">
-                                        <p className="text-lg font-bold text-indigo-600">{manager.count}</p>
-                                        <p className="text-xs text-slate-500">zahteva</p>
+                                        <p className="text-lg font-bold text-indigo-600">{manager.processedCount}</p>
+                                        <p className="text-xs text-slate-500">obrada</p>
+                                    </div>
+                                    <div className="flex-1 text-center">
+                                        <p className="text-lg font-bold text-amber-600">{manager.assignedCount}</p>
+                                        <p className="text-xs text-slate-500">dodela</p>
                                     </div>
                                     <div className="flex-1 text-center">
                                         <p className="text-lg font-bold text-emerald-600">{formatWeight(manager.totalWeight)}</p>
@@ -342,7 +421,7 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                                     </div>
                                     <div className="flex-1 text-center">
                                         <p className="text-lg font-bold text-blue-600">{manager.clients}</p>
-                                        <p className="text-xs text-slate-500">klijenata</p>
+                                        <p className="text-xs text-slate-500">klijent</p>
                                     </div>
                                 </div>
                             </div>
