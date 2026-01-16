@@ -1311,7 +1311,7 @@ export default function Dashboard() {
                     // Requests will auto-refresh via realtime subscription
                 }}
             />
-            <ClientDetailsModal client={selectedClient} equipment={equipment} onClose={() => setSelectedClient(null)} />
+            <ClientDetailsModal client={selectedClient} equipment={equipment} wasteTypes={wasteTypes} onClose={() => setSelectedClient(null)} />
             {editingClientLocation && (
                 <Modal open={!!editingClientLocation} onClose={() => setEditingClientLocation(null)} title="Podesi lokaciju klijenta">
                     <LocationPicker
