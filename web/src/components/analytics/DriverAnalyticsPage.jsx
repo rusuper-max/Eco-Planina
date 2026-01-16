@@ -7,10 +7,12 @@ import * as XLSX from 'xlsx';
  * Driver Analytics Page - Shows performance metrics for each driver
  * Used by Company Admin to track which drivers completed the most deliveries
  */
-export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wasteTypes = [], processedRequests = [] }) => {
+export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wasteTypes = [], processedRequests = [], onResetStats = null }) => {
     const [expandedDriver, setExpandedDriver] = useState(null);
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetting, setResetting] = useState(false);
 
     // Filter by period - use processed_requests as primary source with driver_assignment data
     // After migration 025: driver_assignments.request_id becomes NULL after processing
@@ -205,6 +207,19 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
         return <EmptyState icon={Truck} title="Nema podataka" desc="Kada vozači završe dostave, ovde ćete videti njihovu statistiku" />;
     }
 
+    const handleResetStats = async () => {
+        if (!onResetStats) return;
+        setResetting(true);
+        try {
+            await onResetStats();
+            setShowResetModal(false);
+        } catch (err) {
+            console.error('Error resetting driver stats:', err);
+        } finally {
+            setResetting(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -239,6 +254,15 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                         <Download size={16} />
                         <span className="hidden sm:inline">Excel</span>
                     </button>
+                    {onResetStats && (
+                        <button
+                            onClick={() => setShowResetModal(true)}
+                            className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm hover:bg-red-100 flex items-center gap-1.5"
+                        >
+                            <RotateCcw size={16} />
+                            <span className="hidden sm:inline">Reset</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -458,6 +482,34 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                     );
                 })}
             </div>
+
+            {showResetModal && (
+                <Modal
+                    open={showResetModal}
+                    onClose={() => setShowResetModal(false)}
+                    title="Resetuj statistiku vozača"
+                >
+                    <p className="text-sm text-slate-600">
+                        Ovo će obrisati obrađene zahteve i statistikа će se vratiti na nulu. Da li ste sigurni?
+                    </p>
+                    <div className="mt-4 flex gap-2 justify-end">
+                        <button
+                            onClick={() => setShowResetModal(false)}
+                            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm text-slate-700"
+                            disabled={resetting}
+                        >
+                            Otkaži
+                        </button>
+                        <button
+                            onClick={handleResetStats}
+                            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold disabled:opacity-60"
+                            disabled={resetting}
+                        >
+                            {resetting ? 'Resetujem...' : 'Resetuj'}
+                        </button>
+                    </div>
+                </Modal>
+            )}
         </div>
     );
 };

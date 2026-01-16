@@ -1103,6 +1103,12 @@ export default function Dashboard() {
                     drivers={companyDrivers}
                     wasteTypes={wasteTypes}
                     processedRequests={processedRequests}
+                    onResetStats={async () => {
+                        await resetManagerAnalytics();
+                        const fresh = await fetchProcessedRequests();
+                        setProcessedRequests(fresh);
+                        toast.success('Statistika je resetovana');
+                    }}
                 />
             );
             if (activeTab === 'history') return (

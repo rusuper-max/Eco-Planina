@@ -261,13 +261,20 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                         <option value="weight">Po težini</option>
                         <option value="recent">Po aktivnosti</option>
                     </select>
+                    <button
+                        onClick={handleExportExcel}
+                        className="px-3 py-2 border border-emerald-200 text-emerald-600 rounded-xl text-sm bg-white hover:bg-emerald-50 flex items-center gap-1.5"
+                    >
+                        <Download size={16} />
+                        <span className="hidden sm:inline">Excel</span>
+                    </button>
                     {onResetStats && (
                         <button
                             onClick={() => setShowResetModal(true)}
-                            className="px-3 py-2 border border-red-200 text-red-600 rounded-xl text-sm bg-white hover:bg-red-50 flex items-center gap-1.5"
+                            className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm hover:bg-red-100 flex items-center gap-1.5"
                         >
                             <RotateCcw size={16} />
-                            <span className="hidden sm:inline">Restart</span>
+                            <span className="hidden sm:inline">Reset</span>
                         </button>
                     )}
                 </div>

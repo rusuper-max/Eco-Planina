@@ -13,14 +13,14 @@ import {
     AlertCircle, Phone, RefreshCw, List, Map as MapIcon, User,
     MessageCircle, History, Send, ArrowLeft, Check, CheckCheck,
     Package, PackageCheck, Filter, Users, Plus, ChevronDown, ChevronUp,
-    FileText, Scale, Image as ImageIcon, X
+    FileText, Scale, Image as ImageIcon, X, Route, MapPinned
 } from 'lucide-react';
 
-// Import shared utilities
 import {
     createCustomIcon, getRemainingTime, getCurrentUrgency,
     WASTE_TYPES, CountdownTimer, FitBounds, FillLevelBar
 } from './DashboardComponents';
+import { openOptimizedRoute } from '../utils/routeOptimization';
 
 // Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
@@ -362,6 +362,53 @@ export default function DriverDashboard() {
     const [assignments, setAssignments] = useState([]);
     const [todayStats, setTodayStats] = useState({ picked: 0, delivered: 0 });
     const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', '24h', '48h', '72h'
+
+    // Route optimization - multi-select
+    const [selectedForRoute, setSelectedForRoute] = useState(new Set());
+
+    // Toggle request selection for route
+    const toggleRouteSelection = (requestId) => {
+        setSelectedForRoute(prev => {
+            const next = new Set(prev);
+            if (next.has(requestId)) {
+                next.delete(requestId);
+            } else {
+                next.add(requestId);
+            }
+            return next;
+        });
+    };
+
+    // Select/deselect all requests with valid coordinates
+    const toggleSelectAllForRoute = () => {
+        const validIds = pendingRequests
+            .filter(r => r.latitude && r.longitude)
+            .map(r => r.id);
+        const allSelected = validIds.every(id => selectedForRoute.has(id));
+
+        if (allSelected) {
+            setSelectedForRoute(new Set());
+        } else {
+            setSelectedForRoute(new Set(validIds));
+        }
+    };
+
+    // Open optimized route in Google Maps
+    const handleOpenOptimizedRoute = () => {
+        const selectedRequests = pendingRequests.filter(r => selectedForRoute.has(r.id));
+        const result = openOptimizedRoute(selectedRequests);
+
+        if (result.error) {
+            toast.error(result.error);
+            return;
+        }
+
+        // Show distance info
+        toast.success(`Ruta: ${result.waypointCount} lokacija, ~${result.distance.toFixed(1)} km`);
+
+        // Open in new tab
+        window.open(result.url, '_blank');
+    };
 
     // Use user.id directly from AuthContext instead of fetching separately
     const myUserId = user?.id;
@@ -985,13 +1032,12 @@ export default function DriverDashboard() {
                     <button
                         onClick={() => setUrgencyFilter(urgencyFilter === '24h' ? 'all' : '24h')}
                         disabled={urgentCount === 0}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
-                            urgencyFilter === '24h'
-                                ? 'bg-red-600 text-white ring-2 ring-red-300'
-                                : urgentCount > 0
-                                    ? 'bg-red-100 hover:bg-red-200 cursor-pointer'
-                                    : 'bg-red-50 opacity-50 cursor-not-allowed'
-                        }`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${urgencyFilter === '24h'
+                            ? 'bg-red-600 text-white ring-2 ring-red-300'
+                            : urgentCount > 0
+                                ? 'bg-red-100 hover:bg-red-200 cursor-pointer'
+                                : 'bg-red-50 opacity-50 cursor-not-allowed'
+                            }`}
                     >
                         <AlertCircle size={16} className={urgencyFilter === '24h' ? 'text-white' : 'text-red-600'} />
                         <span className={`font-bold ${urgencyFilter === '24h' ? 'text-white' : 'text-red-700'}`}>{urgentCount}</span>
@@ -1001,13 +1047,12 @@ export default function DriverDashboard() {
                     <button
                         onClick={() => setUrgencyFilter(urgencyFilter === '48h' ? 'all' : '48h')}
                         disabled={mediumCount === 0}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
-                            urgencyFilter === '48h'
-                                ? 'bg-amber-600 text-white ring-2 ring-amber-300'
-                                : mediumCount > 0
-                                    ? 'bg-amber-100 hover:bg-amber-200 cursor-pointer'
-                                    : 'bg-amber-50 opacity-50 cursor-not-allowed'
-                        }`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${urgencyFilter === '48h'
+                            ? 'bg-amber-600 text-white ring-2 ring-amber-300'
+                            : mediumCount > 0
+                                ? 'bg-amber-100 hover:bg-amber-200 cursor-pointer'
+                                : 'bg-amber-50 opacity-50 cursor-not-allowed'
+                            }`}
                     >
                         <Clock size={16} className={urgencyFilter === '48h' ? 'text-white' : 'text-amber-600'} />
                         <span className={`font-bold ${urgencyFilter === '48h' ? 'text-white' : 'text-amber-700'}`}>{mediumCount}</span>
@@ -1017,13 +1062,12 @@ export default function DriverDashboard() {
                     <button
                         onClick={() => setUrgencyFilter(urgencyFilter === '72h' ? 'all' : '72h')}
                         disabled={normalCount === 0}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
-                            urgencyFilter === '72h'
-                                ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
-                                : normalCount > 0
-                                    ? 'bg-emerald-100 hover:bg-emerald-200 cursor-pointer'
-                                    : 'bg-emerald-50 opacity-50 cursor-not-allowed'
-                        }`}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${urgencyFilter === '72h'
+                            ? 'bg-emerald-600 text-white ring-2 ring-emerald-300'
+                            : normalCount > 0
+                                ? 'bg-emerald-100 hover:bg-emerald-200 cursor-pointer'
+                                : 'bg-emerald-50 opacity-50 cursor-not-allowed'
+                            }`}
                     >
                         <CheckCircle2 size={16} className={urgencyFilter === '72h' ? 'text-white' : 'text-emerald-600'} />
                         <span className={`font-bold ${urgencyFilter === '72h' ? 'text-white' : 'text-emerald-700'}`}>{normalCount}</span>
@@ -1208,18 +1252,55 @@ export default function DriverDashboard() {
                             </div>
                         ) : (
                             <div className="space-y-3 max-w-2xl mx-auto">
+                                {/* Route Planning Header */}
+                                <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl text-white">
+                                    <div className="flex items-center gap-3">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={pendingRequests.filter(r => r.latitude && r.longitude).length > 0 &&
+                                                    pendingRequests.filter(r => r.latitude && r.longitude).every(r => selectedForRoute.has(r.id))}
+                                                onChange={toggleSelectAllForRoute}
+                                                className="w-5 h-5 rounded border-white/50 text-white focus:ring-white/50"
+                                            />
+                                            <span className="text-sm font-medium">Odaberi sve</span>
+                                        </label>
+                                        {selectedForRoute.size > 0 && (
+                                            <span className="px-2 py-1 bg-white/20 rounded-full text-xs font-bold">
+                                                {selectedForRoute.size} odabrano
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={handleOpenOptimizedRoute}
+                                        disabled={selectedForRoute.size < 2}
+                                        className="flex items-center gap-2 px-4 py-2 bg-white text-purple-700 rounded-lg font-bold text-sm hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Route size={18} />
+                                        Otvori Rutu
+                                    </button>
+                                </div>
+
                                 {pendingRequests.map(request => (
                                     <div
                                         key={request.id}
-                                        className={`bg-white rounded-xl border-l-4 shadow-sm overflow-hidden ${
-                                            request.assignmentStatus === 'picked_up' ? 'border-l-amber-500' :
+                                        className={`bg-white rounded-xl border-l-4 shadow-sm overflow-hidden ${selectedForRoute.has(request.id) ? 'ring-2 ring-purple-400' : ''} ${request.assignmentStatus === 'picked_up' ? 'border-l-amber-500' :
                                             request.currentUrgency === '24h' ? 'border-l-red-500' :
-                                            request.currentUrgency === '48h' ? 'border-l-amber-500' : 'border-l-emerald-500'
-                                        }`}
+                                                request.currentUrgency === '48h' ? 'border-l-amber-500' : 'border-l-emerald-500'
+                                            }`}
                                     >
                                         <div className="p-4">
                                             <div className="flex items-start justify-between mb-3">
                                                 <div className="flex items-center gap-3">
+                                                    {/* Route Selection Checkbox */}
+                                                    {request.latitude && request.longitude && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedForRoute.has(request.id)}
+                                                            onChange={() => toggleRouteSelection(request.id)}
+                                                            className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500 shrink-0"
+                                                        />
+                                                    )}
                                                     <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-2xl">
                                                         {getWasteIcon(request.waste_type)}
                                                     </div>
@@ -1237,10 +1318,9 @@ export default function DriverDashboard() {
                                                             Preuzeto
                                                         </span>
                                                     )}
-                                                    <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${
-                                                        request.currentUrgency === '24h' ? 'bg-red-100 text-red-700' :
+                                                    <div className={`px-3 py-1.5 rounded-lg text-xs font-bold ${request.currentUrgency === '24h' ? 'bg-red-100 text-red-700' :
                                                         request.currentUrgency === '48h' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                                    }`}>
+                                                        }`}>
                                                         <CountdownTimer createdAt={request.created_at} urgency={request.urgency} />
                                                     </div>
                                                 </div>
@@ -1425,11 +1505,10 @@ export default function DriverDashboard() {
                                                 className={`flex ${msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
                                             >
                                                 <div
-                                                    className={`max-w-[75%] px-4 py-2 rounded-2xl ${
-                                                        msg.sender_id === user?.id
-                                                            ? 'bg-emerald-600 text-white rounded-br-md'
-                                                            : 'bg-slate-200 text-slate-800 rounded-bl-md'
-                                                    }`}
+                                                    className={`max-w-[75%] px-4 py-2 rounded-2xl ${msg.sender_id === user?.id
+                                                        ? 'bg-emerald-600 text-white rounded-br-md'
+                                                        : 'bg-slate-200 text-slate-800 rounded-bl-md'
+                                                        }`}
                                                 >
                                                     <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                                                     <div className={`flex items-center justify-end gap-1 mt-1 ${msg.sender_id === user?.id ? 'text-emerald-200' : 'text-slate-400'}`}>
