@@ -61,7 +61,7 @@ const NotificationBell = () => {
 
             {/* Dropdown */}
             {isOpen && (
-                <div className="absolute right-2 sm:right-0 mt-2 w-[92vw] max-w-md sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden sm:translate-x-0 translate-x-[-8%]">
+                <div className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-16 sm:top-auto sm:mt-2 w-auto sm:w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b">
                         <h3 className="font-semibold text-gray-900">Notifikacije</h3>
@@ -108,9 +108,8 @@ const NotificationBell = () => {
                                 {notifications.map((notification) => (
                                     <div
                                         key={notification.id}
-                                        className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                                            !notification.is_read ? 'bg-blue-50/50' : ''
-                                        }`}
+                                        className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${!notification.is_read ? 'bg-blue-50/50' : ''
+                                            }`}
                                         onClick={() => handleNotificationClick(notification)}
                                     >
                                         {/* Icon */}
