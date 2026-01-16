@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context';
 import { supabase } from '../config/supabase';
+import { EmptyState } from '../components/common';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -352,7 +353,7 @@ export default function DriverDashboard() {
     const {
         user, logout, companyCode, companyName, pickupRequests, fetchCompanyWasteTypes,
         fetchMessages, sendMessage, markMessagesAsRead, getConversations, subscribeToMessages, unreadCount,
-        fetchCompanyMembers
+        fetchCompanyMembers, exitImpersonation, originalUser
     } = useAuth();
     const [view, setView] = useState('map'); // 'map', 'list', 'messages', 'history'
     const [wasteTypes, setWasteTypes] = useState(WASTE_TYPES);
@@ -413,6 +414,32 @@ export default function DriverDashboard() {
             setLoading(false);
         }
     }, [myUserId, isDriver, user]);
+
+    // Realtime updates for driver assignments (auto-refresh without page reload)
+    useEffect(() => {
+        if (!myUserId || !isDriver) return;
+
+        const channel = supabase
+            .channel(`driver_assignments_${myUserId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'driver_assignments',
+                    filter: `driver_id=eq.${myUserId}`
+                },
+                async () => {
+                    await fetchMyAssignments();
+                    await fetchTodayStats();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [myUserId, isDriver]);
 
     const fetchMyAssignments = async () => {
         try {
@@ -875,6 +902,16 @@ export default function DriverDashboard() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Exit impersonation (if active) */}
+                    {originalUser && (
+                        <button
+                            onClick={() => { exitImpersonation(); window.location.reload(); }}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded-lg font-semibold shadow-sm flex items-center gap-1"
+                        >
+                            <ArrowLeft size={14} />
+                            Nazad
+                        </button>
+                    )}
                     {/* Today stats badge */}
                     {isDriver && (todayStats.picked > 0 || todayStats.delivered > 0) && (
                         <div className="hidden md:flex items-center gap-3 px-3 py-1.5 bg-slate-700 rounded-lg">
@@ -1010,19 +1047,16 @@ export default function DriverDashboard() {
                 {view === 'map' && (
                     <div className="flex-1 relative">
                         {pendingRequests.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4">
-                                <Truck size={64} className="mb-4 opacity-50" />
-                                <p className="text-xl font-medium text-center">
-                                    {urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
-                                </p>
-                                <p className="text-sm mt-2 text-center">
-                                    {urgencyFilter !== 'all'
-                                        ? 'Promenite filter ili prikažite sve zahteve'
-                                        : isDriver
-                                            ? 'Sačekajte da vam menadžer dodeli zahteve za preuzimanje'
-                                            : 'Trenutno nema zahteva za prikaz'
-                                    }
-                                </p>
+                            <div className="flex items-center justify-center h-full p-4">
+                                <EmptyState
+                                    icon={Truck}
+                                    title={urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : 'Nemate dodeljenih zahteva'}
+                                    desc={urgencyFilter !== 'all'
+                                        ? 'Promenite filter da vidite sve zahteve'
+                                        : 'Sacekajte da vam menadzer dodeli zahteve za preuzimanje'}
+                                    actionLabel={urgencyFilter !== 'all' ? 'Prikazi sve' : null}
+                                    onAction={urgencyFilter !== 'all' ? () => setUrgencyFilter('all') : null}
+                                />
                             </div>
                         ) : (
                             <MapContainer
@@ -1088,7 +1122,7 @@ export default function DriverDashboard() {
                                                             href={`https://www.google.com/maps/dir/?api=1&destination=${position[0]},${position[1]}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 text-center font-semibold shadow-sm"
+                                                            className="flex-1 px-3 py-2.5 min-h-[44px] bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 active:bg-blue-800 text-center font-semibold shadow-md flex items-center justify-center touch-manipulation"
                                                             style={{ color: '#fff' }}
                                                         >
                                                             Google Maps
@@ -1097,7 +1131,7 @@ export default function DriverDashboard() {
                                                             href={`https://waze.com/ul?ll=${position[0]},${position[1]}&navigate=yes`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-3 py-2 bg-cyan-600 text-white text-xs rounded-lg hover:bg-cyan-700 text-center font-semibold shadow-sm"
+                                                            className="flex-1 px-3 py-2.5 min-h-[44px] bg-cyan-600 text-white text-sm rounded-xl hover:bg-cyan-700 active:bg-cyan-800 text-center font-semibold shadow-md flex items-center justify-center touch-manipulation"
                                                             style={{ color: '#fff' }}
                                                         >
                                                             Waze
@@ -1107,18 +1141,18 @@ export default function DriverDashboard() {
                                                         <button
                                                             onClick={() => handleDelivery(item)}
                                                             disabled={processing}
-                                                            className="w-full mt-3 px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-sm"
+                                                            className="w-full mt-3 px-4 py-3 min-h-[48px] bg-emerald-600 text-white text-base rounded-xl hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-md touch-manipulation"
                                                         >
-                                                            <PackageCheck size={16} />
+                                                            <PackageCheck size={20} />
                                                             Dostavljeno
                                                         </button>
                                                     ) : (
                                                         <button
                                                             onClick={() => handlePickup(item)}
                                                             disabled={processing}
-                                                            className="w-full mt-3 px-3 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-sm"
+                                                            className="w-full mt-3 px-4 py-3 min-h-[48px] bg-amber-600 text-white text-base rounded-xl hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 font-semibold flex items-center justify-center gap-2 shadow-md touch-manipulation"
                                                         >
-                                                            <Package size={16} />
+                                                            <Package size={20} />
                                                             Preuzeto od klijenta
                                                         </button>
                                                     )}
@@ -1161,11 +1195,16 @@ export default function DriverDashboard() {
                 {view === 'list' && (
                     <div className="flex-1 overflow-y-auto p-4">
                         {pendingRequests.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                                <Truck size={64} className="mb-4 opacity-50" />
-                                <p className="text-xl font-medium">
-                                    {urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : isDriver ? 'Nemate dodeljenih zahteva' : 'Nema aktivnih zahteva'}
-                                </p>
+                            <div className="flex items-center justify-center h-full">
+                                <EmptyState
+                                    icon={Truck}
+                                    title={urgencyFilter !== 'all' ? 'Nema zahteva sa tim prioritetom' : 'Nemate dodeljenih zahteva'}
+                                    desc={urgencyFilter !== 'all'
+                                        ? 'Promenite filter da vidite sve zahteve'
+                                        : 'Sacekajte da vam menadzer dodeli zahteve za preuzimanje'}
+                                    actionLabel={urgencyFilter !== 'all' ? 'Prikazi sve' : null}
+                                    onAction={urgencyFilter !== 'all' ? () => setUrgencyFilter('all') : null}
+                                />
                             </div>
                         ) : (
                             <div className="space-y-3 max-w-2xl mx-auto">
@@ -1244,40 +1283,40 @@ export default function DriverDashboard() {
                                                             href={`https://www.google.com/maps/dir/?api=1&destination=${request.latitude},${request.longitude}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-4 py-2.5 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 text-center font-medium flex items-center justify-center gap-2"
+                                                            className="flex-1 px-4 py-3 min-h-[48px] bg-blue-600 text-white text-base rounded-xl hover:bg-blue-700 active:bg-blue-800 text-center font-semibold flex items-center justify-center gap-2 shadow-md touch-manipulation"
                                                         >
-                                                            <Navigation size={16} /> Google
+                                                            <Navigation size={18} /> Google
                                                         </a>
                                                         <a
                                                             href={`https://waze.com/ul?ll=${request.latitude},${request.longitude}&navigate=yes`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex-1 px-4 py-2.5 bg-cyan-600 text-white text-sm rounded-xl hover:bg-cyan-700 text-center font-medium flex items-center justify-center gap-2"
+                                                            className="flex-1 px-4 py-3 min-h-[48px] bg-cyan-600 text-white text-base rounded-xl hover:bg-cyan-700 active:bg-cyan-800 text-center font-semibold flex items-center justify-center gap-2 shadow-md touch-manipulation"
                                                         >
-                                                            <Navigation size={16} /> Waze
+                                                            <Navigation size={18} /> Waze
                                                         </a>
                                                     </>
                                                 ) : (
-                                                    <div className="flex-1 px-4 py-2.5 bg-amber-100 text-amber-700 text-sm rounded-xl text-center font-medium flex items-center justify-center gap-2">
-                                                        <AlertCircle size={16} /> Nema lokacije
+                                                    <div className="flex-1 px-4 py-3 min-h-[48px] bg-amber-100 text-amber-700 text-base rounded-xl text-center font-medium flex items-center justify-center gap-2">
+                                                        <AlertCircle size={18} /> Nema lokacije
                                                     </div>
                                                 )}
                                                 {request.assignmentStatus === 'picked_up' ? (
                                                     <button
                                                         onClick={() => handleDelivery(request)}
                                                         disabled={processing}
-                                                        className="px-4 py-2.5 bg-emerald-600 text-white text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                                        className="px-5 py-3 min-h-[48px] bg-emerald-600 text-white text-base rounded-xl hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 font-semibold flex items-center gap-2 shadow-md touch-manipulation"
                                                     >
-                                                        <PackageCheck size={16} />
+                                                        <PackageCheck size={20} />
                                                         <span className="hidden sm:inline">Dostavljeno</span>
                                                     </button>
                                                 ) : (
                                                     <button
                                                         onClick={() => handlePickup(request)}
                                                         disabled={processing}
-                                                        className="px-4 py-2.5 bg-amber-600 text-white text-sm rounded-xl hover:bg-amber-700 disabled:opacity-50 font-medium flex items-center gap-2"
+                                                        className="px-5 py-3 min-h-[48px] bg-amber-600 text-white text-base rounded-xl hover:bg-amber-700 active:bg-amber-800 disabled:opacity-50 font-semibold flex items-center gap-2 shadow-md touch-manipulation"
                                                     >
-                                                        <Package size={16} />
+                                                        <Package size={20} />
                                                         <span className="hidden sm:inline">Preuzeto</span>
                                                     </button>
                                                 )}
@@ -1483,10 +1522,12 @@ export default function DriverDashboard() {
                                 <RefreshCw className="animate-spin text-emerald-600" size={32} />
                             </div>
                         ) : historyRequests.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                                <History size={48} className="mb-3 opacity-50" />
-                                <p className="text-lg font-medium">Nema završenih dostava</p>
-                                <p className="text-sm">Vaša istorija će se pojaviti ovde</p>
+                            <div className="flex items-center justify-center h-64">
+                                <EmptyState
+                                    icon={History}
+                                    title="Nema zavrsenih dostava"
+                                    desc="Vasa istorija ce se pojaviti ovde nakon sto zavrsavate dostave"
+                                />
                             </div>
                         ) : (
                             <div className="p-4 space-y-3 max-w-2xl mx-auto">

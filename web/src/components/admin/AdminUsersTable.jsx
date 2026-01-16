@@ -1,12 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Trash2, Eye, LogIn, Edit3, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Lock, Unlock, AlertTriangle, Users, Loader2 } from 'lucide-react';
+import { Trash2, Eye, LogIn, Edit3, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Lock, Unlock, AlertTriangle, Users, Loader2, Key } from 'lucide-react';
 import { EmptyState } from '../common';
 import { UserDetailsModal } from './UserDetailsModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { ResetPasswordModal } from './ResetPasswordModal';
 
-export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser, isAdmin }) => {
+export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, onChangeRole, onRefresh, onEditUser, isAdmin, onResetPassword }) => {
     // State
     const [searchQuery, setSearchQuery] = useState('');
+    const [resetPasswordModal, setResetPasswordModal] = useState(null);
     const [sortConfig, setSortConfig] = useState({ key: 'role', direction: 'asc' });
     const [selectedUsers, setSelectedUsers] = useState(new Set());
     const [deleteModal, setDeleteModal] = useState(null);
@@ -262,6 +264,16 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
                                                     {changingRole === u.id ? <Loader2 size={18} className="animate-spin" /> : <ArrowDown size={18} />}
                                                 </button>
                                             )}
+                                            {/* Reset password button - for admin/developer */}
+                                            {isAdmin && !isProtected(u.role) && u.role !== 'admin' && onResetPassword && (
+                                                <button
+                                                    onClick={() => setResetPasswordModal(u)}
+                                                    className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                    title="Resetuj lozinku"
+                                                >
+                                                    <Key size={18} />
+                                                </button>
+                                            )}
                                             {/* Delete button - for admin/developer */}
                                             {isAdmin && !isProtected(u.role) && (
                                                 <button
@@ -327,6 +339,13 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
                     onClose={() => setDeleteModal(null)}
                     onConfirm={confirmDelete}
                     loading={isDeleting}
+                />
+            )}
+            {resetPasswordModal && onResetPassword && (
+                <ResetPasswordModal
+                    user={resetPasswordModal}
+                    onClose={() => setResetPasswordModal(null)}
+                    onReset={onResetPassword}
                 />
             )}
         </div>

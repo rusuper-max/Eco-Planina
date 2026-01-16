@@ -17,3 +17,11 @@ export {
     matchesSearch,
     getSearchVariants
 } from './transliterate';
+export {
+    COUNTRY_CODES,
+    normalizePhone,
+    parsePhone,
+    formatPhoneForDisplay,
+    validatePhone,
+    phonesMatch
+} from './phoneUtils';

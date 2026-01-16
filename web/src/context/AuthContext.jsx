@@ -370,7 +370,10 @@ export const AuthProvider = ({ children }) => {
 
     const impersonateUser = async (userId) => {
         const currentRole = user?.role;
-        if (currentRole !== 'developer' && currentRole !== 'admin') {
+        const isDevOrAdmin = currentRole === 'developer' || currentRole === 'admin';
+        const isCompanyAdminRole = currentRole === 'company_admin' || user?.is_owner;
+
+        if (!isDevOrAdmin && !isCompanyAdminRole) {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
         try {
@@ -394,6 +397,16 @@ export const AuthProvider = ({ children }) => {
             if (!targetUser) {
                 console.error('[Impersonate] User not found for id:', userId);
                 throw new Error('Korisnik nije pronađen');
+            }
+
+            // Company admin sme samo korisnike svoje firme i niže role
+            if (isCompanyAdminRole) {
+                if (targetUser.company_code !== companyCode) {
+                    throw new Error('Možete impersonirati samo korisnike svoje firme');
+                }
+                if (['developer', 'admin', 'company_admin'].includes(targetUser.role)) {
+                    throw new Error('Možete impersonirati samo menadžere, vozače i klijente');
+                }
             }
 
             // Save original user session (only if not already impersonating)
@@ -501,6 +514,122 @@ export const AuthProvider = ({ children }) => {
     const isDeveloper = () => user?.role === 'developer';
     const isCompanyAdmin = () => user?.role === 'company_admin' || user?.is_owner === true;
 
+    // Reset user password (admin function)
+    const resetUserPassword = async (targetUserId, newPassword) => {
+        const currentRole = user?.role;
+        const canReset = currentRole === 'developer' || currentRole === 'admin' ||
+            currentRole === 'company_admin' || user?.is_owner;
+
+        if (!canReset) {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData?.session?.access_token) {
+            throw new Error('Niste ulogovani');
+        }
+
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        if (!supabaseUrl) {
+            throw new Error('Supabase konfiguracija nije postavljena');
+        }
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/reset-user-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionData.session.access_token}`
+            },
+            body: JSON.stringify({ targetUserId, newPassword })
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.error || 'Greska pri resetovanju lozinke');
+        }
+
+        return result;
+    };
+
+    /**
+     * Create shadow clients (users with auth_id = NULL)
+     * These can be "claimed" when real users register with the same phone
+     * @param {Array} clients - Array of { name, phone, address?, note? }
+     * @returns {Promise<{ created: number, skipped: number, errors: string[] }>}
+     */
+    const createShadowClients = async (clients) => {
+        if (!companyCode) {
+            throw new Error('Niste povezani sa firmom');
+        }
+
+        const currentRole = user?.role;
+        const canCreate = currentRole === 'manager' || currentRole === 'company_admin' || user?.is_owner;
+
+        if (!canCreate) {
+            throw new Error('Nemate dozvolu za ovu akciju');
+        }
+
+        // Get first region of this company for new clients
+        const { data: regions } = await supabase
+            .from('regions')
+            .select('id')
+            .eq('company_code', companyCode)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: true })
+            .limit(1);
+
+        const regionId = regions?.[0]?.id || null;
+
+        let created = 0;
+        let skipped = 0;
+        const errors = [];
+
+        for (const client of clients) {
+            try {
+                // Check if phone already exists
+                const { data: existing } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('phone', client.phone)
+                    .is('deleted_at', null)
+                    .single();
+
+                if (existing) {
+                    skipped++;
+                    continue;
+                }
+
+                // Insert shadow contact (no auth_id)
+                const { error } = await supabase
+                    .from('users')
+                    .insert({
+                        auth_id: null,  // Shadow contact - no login
+                        name: client.name,
+                        phone: client.phone,
+                        address: client.address || null,
+                        manager_note: client.note || null,
+                        role: 'client',
+                        company_code: companyCode,
+                        region_id: regionId,
+                        is_owner: false
+                    });
+
+                if (error) {
+                    errors.push(`${client.name}: ${error.message}`);
+                    skipped++;
+                } else {
+                    created++;
+                }
+            } catch (err) {
+                errors.push(`${client.name}: ${err.message}`);
+                skipped++;
+            }
+        }
+
+        return { created, skipped, errors };
+    };
+
     const value = {
         user,
         authUser,
@@ -521,6 +650,8 @@ export const AuthProvider = ({ children }) => {
         impersonateUser,
         exitImpersonation,
         changeUserRole,
+        resetUserPassword,
+        createShadowClients,
         isAdmin,
         isDeveloper,
         isCompanyAdmin,

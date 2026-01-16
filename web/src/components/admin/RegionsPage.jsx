@@ -40,7 +40,7 @@ const ROLE_LABELS = {
  */
 export const RegionsPage = () => {
     const { companyCode, isCompanyAdmin, isAdmin } = useAuth();
-    const { fetchCompanyRegions, createRegion, updateRegion, deleteRegion, assignUsersToRegion, fetchUsersByAddressPattern } = useData();
+    const { fetchCompanyRegions, createRegion, updateRegion, deleteRegion, assignUsersToRegion, fetchUsersByAddressPattern, fetchUsersGroupedByRegion } = useData();
 
     const [activeTab, setActiveTab] = useState('regions'); // 'regions' | 'assign' | 'visual'
     const [regions, setRegions] = useState([]);
@@ -49,6 +49,7 @@ export const RegionsPage = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingRegion, setEditingRegion] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [groupedUsers, setGroupedUsers] = useState({ regions: [], unassigned: [] });
 
     // Load regions
     const fetchRegions = async () => {
@@ -64,9 +65,19 @@ export const RegionsPage = () => {
         }
     };
 
+    const refreshGroupedUsers = async () => {
+        try {
+            const data = await fetchUsersGroupedByRegion();
+            setGroupedUsers(data);
+        } catch (error) {
+            console.error('Error fetching users grouped by region:', error);
+        }
+    };
+
     useEffect(() => {
         if (companyCode) {
             fetchRegions();
+            refreshGroupedUsers();
         }
     }, [companyCode]);
 
@@ -197,6 +208,14 @@ export const RegionsPage = () => {
                     onEdit={setEditingRegion}
                     onDelete={setDeleteConfirm}
                     totalRegions={regions.length}
+                    groupedUsers={groupedUsers}
+                    onMoveUser={async (userId, targetRegionId) => {
+                        await assignUsersToRegion([userId], targetRegionId);
+                        toast.success('Korisnik prebačen');
+                        refreshGroupedUsers();
+                        fetchRegions();
+                    }}
+                    onRefreshUsers={refreshGroupedUsers}
                 />
             )}
 
@@ -245,7 +264,9 @@ export const RegionsPage = () => {
 /**
  * Regions List Tab - Grid view of all regions
  */
-const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete, totalRegions }) => {
+const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete, totalRegions, groupedUsers, onMoveUser }) => {
+    const [expanded, setExpanded] = useState(null);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-12">
@@ -296,6 +317,13 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setExpanded(expanded === region.id ? null : region.id)}
+                                className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                title="Prikaži korisnike"
+                            >
+                                {expanded === region.id ? <X size={18} /> : <Users size={18} />}
+                            </button>
                                     <button
                                         onClick={() => onEdit(region)}
                                         className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
@@ -323,12 +351,103 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Expanded user list */}
+                            {expanded === region.id && (
+                                <RegionUsersPanel
+                                    regionId={region.id}
+                                    regions={regions}
+                                    groupedUsers={groupedUsers}
+                                    onMoveUser={onMoveUser}
+                                />
+                            )}
                         </div>
                     ))}
                 </div>
             )}
         </div>
     );
+};
+
+const ROLE_ORDER = ['manager', 'driver', 'client', 'company_admin'];
+const MAX_PER_ROLE = 200;
+
+const RegionUsersPanel = ({ regionId, regions, groupedUsers, onMoveUser }) => {
+    const users = getUsersForRegion(groupedUsers, regionId);
+    if (users.length === 0) {
+        return <p className="text-sm text-slate-500 mt-3">Nema korisnika u ovoj filijali.</p>;
+    }
+
+    const grouped = groupUsersByRole(users);
+
+    return (
+        <div className="mt-4 space-y-3 border-t pt-3">
+            {ROLE_ORDER.filter(role => grouped[role] && grouped[role].length > 0).map(role => {
+                const list = grouped[role];
+                const sliced = list.slice(0, MAX_PER_ROLE);
+                const truncated = list.length > MAX_PER_ROLE;
+                return (
+                    <div key={role} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[role] || 'bg-slate-100 text-slate-700'}`}>
+                                    {ROLE_LABELS[role] || role}
+                                </span>
+                                <span className="text-xs text-slate-500">{list.length} korisnika</span>
+                            </div>
+                        </div>
+                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {sliced.map(u => (
+                                <div key={u.id} className="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
+                                            <p className="text-xs text-slate-500 truncate">{u.phone || u.email || 'Bez kontakta'}</p>
+                                        </div>
+                                    </div>
+                                    <select
+                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
+                                        value={regionId}
+                                        onChange={(e) => onMoveUser(u.id, e.target.value)}
+                                    >
+                                        {regions.map(r => (
+                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ))}
+                        </div>
+                        {truncated && (
+                            <p className="text-xs text-slate-400">Prikazano prvih {MAX_PER_ROLE} korisnika za ovu rolu.</p>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const getUsersForRegion = (groupedUsers, regionId) => {
+    if (!groupedUsers?.regions) return [];
+    const region = groupedUsers.regions.find(r => r.id === regionId);
+    if (!region) return [];
+    return (region.users || []).map(u => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        phone: u.phone,
+        email: u.email,
+        region_id: u.region_id
+    }));
+};
+
+const groupUsersByRole = (users = []) => {
+    return users.reduce((acc, u) => {
+        const role = u.role || 'client';
+        if (!acc[role]) acc[role] = [];
+        acc[role].push(u);
+        return acc;
+    }, {});
 };
 
 // Pagination constants
@@ -341,6 +460,7 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
     const { assignUsersToRegion, fetchUsersByAddressPattern } = useData();
 
     const [selectedRegion, setSelectedRegion] = useState(null);
+    const [sourceRegionFilter, setSourceRegionFilter] = useState('all');
     const [addressFilter, setAddressFilter] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
     const [allUsers, setAllUsers] = useState([]); // All filtered users
@@ -360,13 +480,17 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
     useEffect(() => {
         setCurrentPage(1); // Reset to page 1 when filter changes
         fetchUsers();
-    }, [addressFilter, roleFilter]);
+    }, [addressFilter, roleFilter, sourceRegionFilter]);
 
     const fetchUsers = async () => {
         setLoading(true);
         try {
             const data = await fetchUsersByAddressPattern(addressFilter, roleFilter);
-            setAllUsers(data);
+            let filtered = data || [];
+            if (sourceRegionFilter !== 'all') {
+                filtered = filtered.filter(u => (u.region_id || null) === (sourceRegionFilter || null));
+            }
+            setAllUsers(filtered);
         } catch (err) {
             console.error('Error fetching users:', err);
         }
@@ -559,6 +683,17 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                         {ROLE_OPTIONS.map(opt => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
+                    </select>
+                    <select
+                        value={sourceRegionFilter}
+                        onChange={(e) => setSourceRegionFilter(e.target.value)}
+                        className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                    >
+                        <option value="all">Sve filijale</option>
+                        {regions.map(r => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                        <option value="">Bez filijale</option>
                     </select>
                 </div>
 

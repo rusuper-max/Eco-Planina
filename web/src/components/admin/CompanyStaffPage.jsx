@@ -5,9 +5,10 @@ import {
     Users, Search, Filter, ChevronDown, Edit3, Trash2, MapPin,
     UserPlus, Loader2, X, AlertTriangle, ArrowUp, ArrowDown,
     Shield, Truck as TruckIcon, User as UserIcon, Building2,
-    LogIn, Eye, Package
+    LogIn, Eye, Package, Key
 } from 'lucide-react';
 import { EmptyState } from '../common';
+import { ResetPasswordModal } from './ResetPasswordModal';
 import toast from 'react-hot-toast';
 
 // Role configuration
@@ -22,7 +23,7 @@ const ROLE_CONFIG = {
  * For company_admin only
  */
 export const CompanyStaffPage = () => {
-    const { companyCode, user, isCompanyAdmin, isAdmin, impersonateUser } = useAuth();
+    const { companyCode, user, isCompanyAdmin, isAdmin, impersonateUser, resetUserPassword } = useAuth();
     const [staff, setStaff] = useState([]);
     const [regions, setRegions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -35,6 +36,7 @@ export const CompanyStaffPage = () => {
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [changingRole, setChangingRole] = useState(null);
     const [impersonating, setImpersonating] = useState(null);
+    const [resetPasswordModal, setResetPasswordModal] = useState(null);
 
     // Fetch staff and regions
     const fetchData = async () => {
@@ -461,6 +463,15 @@ export const CompanyStaffPage = () => {
                                                         </button>
                                                     )}
 
+                                                    {/* Reset password button */}
+                                                    <button
+                                                        onClick={() => setResetPasswordModal(member)}
+                                                        className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                        title="Resetuj lozinku"
+                                                    >
+                                                        <Key size={18} />
+                                                    </button>
+
                                                     {/* Delete button */}
                                                     <button
                                                         onClick={() => setDeleteConfirm(member)}
@@ -517,6 +528,18 @@ export const CompanyStaffPage = () => {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Reset Password Modal */}
+            {resetPasswordModal && (
+                <ResetPasswordModal
+                    user={resetPasswordModal}
+                    onClose={() => setResetPasswordModal(null)}
+                    onReset={async (userId, newPassword) => {
+                        await resetUserPassword(userId, newPassword);
+                        toast.success('Lozinka uspesno resetovana');
+                    }}
+                />
             )}
         </div>
     );

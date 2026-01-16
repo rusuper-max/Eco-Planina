@@ -13,7 +13,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck,
+    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -21,7 +21,7 @@ import {
     NewRequestForm, ClientRequestsView, ClientHistoryView, ManagerRequestsTable,
     PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement, NotificationBell, HelpButton, HelpOverlay,
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
-    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ProcessRequestModal, CreateRequestModal,
+    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ImportClientsModal, ProcessRequestModal, CreateRequestModal,
     AdminCompaniesTable, AdminUsersTable, MasterCodesTable, ChatInterface,
     UserDetailsModal, CompanyEditModal, UserEditModal, DeleteConfirmationModal,
     AnalyticsPage,
@@ -34,10 +34,11 @@ import {
     ActivityLogPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
+import DriverDashboard from './DriverDashboard';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
+    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients } = useAuth();
     const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, hideClientHistoryItem } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -83,6 +84,7 @@ export default function Dashboard() {
     const [companyMembers, setCompanyMembers] = useState([]);
     const [showRegionSelectModal, setShowRegionSelectModal] = useState(false);
     const [selectedRegionId, setSelectedRegionId] = useState('');
+    const [showImportClientsModal, setShowImportClientsModal] = useState(false);
     const [savingRegion, setSavingRegion] = useState(false);
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role === 'company_admin' ? 'company_admin' : user?.role || 'client';
@@ -100,10 +102,64 @@ export default function Dashboard() {
         return labels[role] || 'Korisnik';
     };
 
+    // Driver ima svoj odvojeni UI (DriverDashboard)
+    if (userRole === 'driver') {
+        return <DriverDashboard />;
+    }
+
     // Save activeTab to localStorage
     useEffect(() => {
         localStorage.setItem('ecomountaint_activeTab', activeTab);
     }, [activeTab]);
+
+    // Realtime driver assignment updates (manager/company_admin)
+    useEffect(() => {
+        if (!companyCode) return;
+        const channel = supabase
+            .channel(`driver_assignments_company_${companyCode}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'driver_assignments',
+                    filter: `company_code=eq.${companyCode}`
+                },
+                async () => {
+                    await fetchDriverAssignments();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [companyCode]);
+
+    // Realtime processed requests updates (manager/company_admin)
+    useEffect(() => {
+        if (!companyCode) return;
+        const channel = supabase
+            .channel(`processed_requests_company_${companyCode}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'processed_requests',
+                    filter: `company_code=eq.${companyCode}`
+                },
+                async () => {
+                    const updated = await fetchProcessedRequests();
+                    setProcessedRequests(updated || []);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [companyCode]);
 
     // Load equipment from database (with one-time migration from localStorage)
     useEffect(() => {
@@ -410,6 +466,14 @@ export default function Dashboard() {
     };
     const refreshUsers = async () => { setUsers(await fetchAllUsers()); };
     const refreshCompanies = async () => { setCompanies(await fetchAllCompanies()); };
+    const handleResetPassword = async (userId, newPassword) => {
+        try {
+            await resetUserPassword(userId, newPassword);
+            toast.success('Lozinka uspesno resetovana');
+        } catch (err) {
+            throw err; // Re-throw so modal can display error
+        }
+    };
 
     // Equipment handlers (connected to Supabase)
     const handleAddEquipment = async (newEq) => {
@@ -608,11 +672,68 @@ export default function Dashboard() {
         }
     };
 
+    // Bulk update waste types for multiple clients (Enterprise feature)
+    const handleBulkWasteTypeUpdate = async ({ mode, wasteTypeIds, clientIds }) => {
+        try {
+            // Process clients in batches to avoid overwhelming the database
+            const batchSize = 50;
+            const batches = [];
+            for (let i = 0; i < clientIds.length; i += batchSize) {
+                batches.push(clientIds.slice(i, i + batchSize));
+            }
+
+            for (const batch of batches) {
+                const updates = batch.map(async (clientId) => {
+                    const client = clients.find(c => c.id === clientId);
+                    if (!client) return;
+
+                    // Current allowed waste types (null/empty = all types)
+                    let currentAllowed = client.allowed_waste_types || [];
+                    // If empty, start with all types
+                    if (currentAllowed.length === 0) {
+                        currentAllowed = wasteTypes.map(wt => wt.id);
+                    }
+
+                    let newAllowed;
+                    if (mode === 'add') {
+                        // Add selected types (merge)
+                        newAllowed = [...new Set([...currentAllowed, ...wasteTypeIds])];
+                    } else {
+                        // Remove selected types
+                        newAllowed = currentAllowed.filter(id => !wasteTypeIds.includes(id));
+                    }
+
+                    // Update in database
+                    await updateClientDetails(
+                        clientId,
+                        client.equipment_types || [],
+                        client.manager_note || '',
+                        client.pib || '',
+                        newAllowed
+                    );
+
+                    return { clientId, newAllowed };
+                });
+
+                await Promise.all(updates);
+            }
+
+            // Refresh clients from server
+            const refreshed = await fetchCompanyClients(companyCode);
+            setClients(refreshed || []);
+            toast.success(`Uspešno ažurirano ${clientIds.length} klijenata`);
+        } catch (err) {
+            toast.error('Greška pri ažuriranju: ' + err.message);
+            throw err;
+        }
+    };
+
     const getMenu = () => {
         if (userRole === 'admin') return [{ id: 'dashboard', icon: LayoutDashboard, label: 'Pregled' }, { id: 'companies', icon: Building2, label: 'Firme' }, { id: 'users', icon: Users, label: 'Korisnici' }, { id: 'codes', icon: FileText, label: 'Master Kodovi' }, { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null }];
         if (userRole === 'company_admin') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
             { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
+            { id: 'requests', icon: ClipboardList, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length, helpKey: 'sidebar-requests' },
             { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
             { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
             { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' },
@@ -904,10 +1025,10 @@ export default function Dashboard() {
             }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} />;
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
-            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} onImport={() => setShowImportClientsModal(true)} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
-            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />;
+            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} onBulkUpdate={handleBulkWasteTypeUpdate} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">
                     <div className="flex gap-2 p-3 bg-white border-b shrink-0">
@@ -940,6 +1061,23 @@ export default function Dashboard() {
         }
         // Company Admin - bird's eye view of company (no operations)
         if (userRole === 'company_admin') {
+            if (activeTab === 'requests') return (
+                <div className="space-y-4">
+                    <div>
+                        <h1 className="text-2xl font-bold">Aktivni zahtevi</h1>
+                        <p className="text-slate-500">Pregled svih aktivnih zahteva u firmi (samo za čitanje)</p>
+                    </div>
+                    <ManagerRequestsTable
+                        requests={pending}
+                        wasteTypes={wasteTypes}
+                        onView={setSelectedRequest}
+                        onClientClick={handleClientClick}
+                        assignments={driverAssignments}
+                        drivers={companyDrivers}
+                        readOnly={true}
+                    />
+                </div>
+            );
             if (activeTab === 'staff') return <CompanyStaffPage />;
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
@@ -1023,7 +1161,7 @@ export default function Dashboard() {
                     <CompanySettingsPage />
                     <div className="border-t pt-8">
                         <h2 className="text-xl font-bold mb-6">Vrste otpada i oprema</h2>
-                        <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />
+                        <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} onBulkUpdate={handleBulkWasteTypeUpdate} />
                     </div>
                     <div className="border-t pt-8">
                         <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />
@@ -1114,7 +1252,7 @@ export default function Dashboard() {
         }
         if (userRole === 'admin') {
             if (activeTab === 'companies') return <AdminCompaniesTable companies={companies} onEdit={setEditingCompany} />;
-            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} isAdmin={true} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
+            if (activeTab === 'users') return <AdminUsersTable users={users} onDelete={handleDeleteUser} isDeveloper={isDeveloper()} isAdmin={true} onImpersonate={handleImpersonateUser} onChangeRole={changeUserRole} onResetPassword={handleResetPassword} onRefresh={refreshUsers} onEditUser={setEditingUser} />;
             if (activeTab === 'codes') return <MasterCodesTable codes={masterCodes} onGenerate={handleGenerateCode} onCopy={handleCopyCode} onDelete={handleDeleteCode} onUpdatePrice={handleUpdateCodePrice} isDeveloper={isDeveloper()} isAdmin={true} />;
             return <div className="space-y-8"><div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Brze akcije</h2><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">{[{ icon: FileText, label: 'Generiši kod', onClick: handleGenerateCode }, { icon: Building2, label: 'Firme', onClick: () => setActiveTab('companies') }, { icon: Users, label: 'Korisnici', onClick: () => setActiveTab('users') }, { icon: BarChart3, label: 'Kodovi', onClick: () => setActiveTab('codes') }].map((a, i) => <button key={i} onClick={a.onClick} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left"><a.icon size={20} className="mb-3 text-slate-500" /><p className="font-semibold">{a.label}</p></button>)}</div></div><div className="bg-white rounded-2xl border p-6"><h2 className="font-bold mb-4">Export podataka</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"><button onClick={handleExportUsers} className="p-4 bg-blue-50 rounded-xl hover:bg-blue-100 text-left flex items-center gap-3"><Download size={20} className="text-blue-600" /><div><p className="font-semibold text-blue-900">Korisnici</p><p className="text-xs text-blue-600">Export u CSV</p></div></button><button onClick={handleExportCompanies} className="p-4 bg-emerald-50 rounded-xl hover:bg-emerald-100 text-left flex items-center gap-3"><Download size={20} className="text-emerald-600" /><div><p className="font-semibold text-emerald-900">Firme</p><p className="text-xs text-emerald-600">Export u CSV</p></div></button></div></div></div>;
         }
@@ -1352,6 +1490,23 @@ export default function Dashboard() {
                     onClose={() => setEditingClientEquipment(null)}
                 />
             )}
+            {/* Import Clients Modal */}
+            <ImportClientsModal
+                open={showImportClientsModal}
+                onClose={() => setShowImportClientsModal(false)}
+                companyCode={companyCode}
+                existingPhones={clients.map(c => c.phone)}
+                onImport={async (clientsToImport) => {
+                    const result = await createShadowClients(clientsToImport);
+                    // Refresh clients after import
+                    if (result.created > 0) {
+                        const refreshed = await fetchCompanyClients(companyCode);
+                        setClients(refreshed || []);
+                        toast.success(`Uspešno importovano ${result.created} klijent${result.created === 1 ? '' : 'a'}`);
+                    }
+                    return result;
+                }}
+            />
             {processedNotification && <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 z-50"><CheckCircle2 size={24} /><div><p className="font-semibold">{language === 'sr' ? 'Zahtev obrađen!' : 'Request processed!'}</p><p className="text-sm opacity-90">"{processedNotification.wasteLabel}" {language === 'sr' ? 'preuzet' : 'picked up'}</p></div><button onClick={clearProcessedNotification} className="p-1 hover:bg-white/20 rounded-lg"><X size={20} /></button></div>}
             {/* Settings Modal */}
             <Modal open={showSettings} onClose={() => setShowSettings(false)} title={language === 'sr' ? 'Podešavanja' : 'Settings'}>

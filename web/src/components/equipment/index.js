@@ -2,3 +2,4 @@
 export { EquipmentManagement } from './EquipmentManagement';
 export { WasteTypesManagement } from './WasteTypesManagement';
 export { WasteTypeClientsModal } from './WasteTypeClientsModal';
+export { BulkWasteTypeModal } from './BulkWasteTypeModal';

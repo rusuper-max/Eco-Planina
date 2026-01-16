@@ -200,7 +200,8 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
         XLSX.writeFile(wb, filename);
     };
 
-    if (!driverAssignments?.length || driverStats.length === 0) {
+    // Show empty state only if there are no driver stats calculated from processed requests
+    if (driverStats.length === 0) {
         return <EmptyState icon={Truck} title="Nema podataka" desc="Kada vozači završe dostave, ovde ćete videti njihovu statistiku" />;
     }
 
@@ -296,12 +297,11 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                             >
                                 <div className="flex items-center gap-4">
                                     {/* Rank badge */}
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                                        index === 0 ? 'bg-amber-100 text-amber-700' :
-                                        index === 1 ? 'bg-slate-200 text-slate-600' :
-                                        index === 2 ? 'bg-orange-100 text-orange-700' :
-                                        'bg-slate-100 text-slate-500'
-                                    }`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${index === 0 ? 'bg-amber-100 text-amber-700' :
+                                            index === 1 ? 'bg-slate-200 text-slate-600' :
+                                                index === 2 ? 'bg-orange-100 text-orange-700' :
+                                                    'bg-slate-100 text-slate-500'
+                                        }`}>
                                         {index + 1}
                                     </div>
 

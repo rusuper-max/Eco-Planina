@@ -101,7 +101,8 @@ export const ManagerRequestsTable = ({
     onUrgencyFilterChange,
     assignments = [],
     drivers = [],
-    onQuickAssign
+    onQuickAssign,
+    readOnly = false
 }) => {
     // DEBUG: Log assignments and requests to see matching
     // console.log('DEBUG ManagerRequestsTable: assignments count:', assignments?.length, 'requests count:', requests?.length);
@@ -248,121 +249,127 @@ export const ManagerRequestsTable = ({
 
             {/* Table */}
             <div className="bg-white rounded-2xl border overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-500 border-b">
-                        <tr>
-                            <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
-                            <th className="px-3 md:px-4 py-3 text-left">
-                                <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Klijent <SortIcon column="client" />
-                                </button>
-                            </th>
-                            <th className="px-3 md:px-4 py-3 text-left">
-                                <button onClick={() => handleSort('type')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Tip <SortIcon column="type" />
-                                </button>
-                            </th>
-                            <th className="hidden lg:table-cell px-2 py-3 text-left text-xs">Status</th>
-                            <th className="hidden md:table-cell px-4 py-3 text-left">
-                                <button onClick={() => handleSort('fill')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    % <SortIcon column="fill" />
-                                </button>
-                            </th>
-                            <th className="px-3 md:px-4 py-3 text-left">
-                                <button onClick={() => handleSort('remaining')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    <span className="hidden sm:inline">Preostalo</span>
-                                    <span className="sm:hidden">Vreme</span>
-                                    <SortIcon column="remaining" />
-                                </button>
-                            </th>
-                            <th className="hidden md:table-cell px-4 py-3 text-left">
-                                <button onClick={() => handleSort('date')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Datum <SortIcon column="date" />
-                                </button>
-                            </th>
-                            <th className="px-2 md:px-4 py-3 text-center">Akcije</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y relative">
-                        {filtered.length === 0 ? (
-                            <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
-                        ) : filtered.map(req => {
-                            const rem = getRemainingTime(req.created_at, req.urgency);
-                            const assignment = assignments.find(a => a.request_id === req.id);
-                            const assignmentStatus = assignment?.status || 'not_assigned';
-                            const driverName = assignment?.driver?.name;
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[900px]">
+                        <thead className="bg-slate-50 text-slate-500 border-b">
+                            <tr>
+                                <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
+                                <th className="px-3 md:px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Klijent <SortIcon column="client" />
+                                    </button>
+                                </th>
+                                <th className="px-3 md:px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('type')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Tip <SortIcon column="type" />
+                                    </button>
+                                </th>
+                                <th className="hidden lg:table-cell px-2 py-3 text-left text-xs">Status</th>
+                                <th className="hidden md:table-cell px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('fill')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        % <SortIcon column="fill" />
+                                    </button>
+                                </th>
+                                <th className="px-3 md:px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('remaining')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        <span className="hidden sm:inline">Preostalo</span>
+                                        <span className="sm:hidden">Vreme</span>
+                                        <SortIcon column="remaining" />
+                                    </button>
+                                </th>
+                                <th className="hidden md:table-cell px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('date')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Datum <SortIcon column="date" />
+                                    </button>
+                                </th>
+                                <th className="px-2 md:px-4 py-3 text-center">Akcije</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y relative">
+                            {filtered.length === 0 ? (
+                                <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            ) : filtered.map(req => {
+                                const rem = getRemainingTime(req.created_at, req.urgency);
+                                const assignment = assignments.find(a => a.request_id === req.id);
+                                const assignmentStatus = assignment?.status || 'not_assigned';
+                                const driverName = assignment?.driver?.name;
 
-                            return (
-                                <tr key={req.id} className="hover:bg-slate-50">
-                                    <td className="px-2 md:px-3 py-3">
-                                        <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                            {req.request_code || '-'}
-                                        </span>
-                                    </td>
-                                    <td className="px-3 md:px-4 py-3">
-                                        <button
-                                            onClick={() => onClientClick?.(req.user_id)}
-                                            className="font-medium text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
-                                        >
-                                            {req.client_name}
-                                        </button>
-                                    </td>
-                                    <td className="px-3 md:px-4 py-3">
-                                        <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
-                                        <span className="hidden sm:inline ml-1">{req.waste_label}</span>
-                                    </td>
-                                    <td className="hidden lg:table-cell px-2 py-3">
-                                        <RequestStatusBadge status={assignmentStatus} driverName={driverName} assignment={assignment} />
-                                    </td>
-                                    <td className="hidden md:table-cell px-4 py-3">
-                                        <FillLevelBar fillLevel={req.fill_level} />
-                                    </td>
-                                    <td className="px-3 md:px-4 py-3">
-                                        <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${rem.bg}`}>
-                                            <CountdownTimer createdAt={req.created_at} urgency={req.urgency} />
-                                        </span>
-                                    </td>
-                                    <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
-                                    <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
-                                        <div className="inline-flex items-center gap-0.5 relative">
-                                            <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
-                                            {/* Quick Assign button - only show if not assigned and we have drivers */}
-                                            {assignmentStatus === 'not_assigned' && drivers.length > 0 && onQuickAssign && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        // Close if already open for this id
-                                                        if (activeDropdown.id === req.id) {
-                                                            setActiveDropdown({ id: null, rect: null, position: 'bottom' });
-                                                            return;
-                                                        }
+                                return (
+                                    <tr key={req.id} className="hover:bg-slate-50">
+                                        <td className="px-2 md:px-3 py-3">
+                                            <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                {req.request_code || '-'}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 md:px-4 py-3">
+                                            <button
+                                                onClick={() => onClientClick?.(req.user_id)}
+                                                className="font-medium text-sm text-blue-600 hover:text-blue-800 hover:underline text-left"
+                                            >
+                                                {req.client_name}
+                                            </button>
+                                        </td>
+                                        <td className="px-3 md:px-4 py-3">
+                                            <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
+                                            <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                        </td>
+                                        <td className="hidden lg:table-cell px-2 py-3">
+                                            <RequestStatusBadge status={assignmentStatus} driverName={driverName} assignment={assignment} />
+                                        </td>
+                                        <td className="hidden md:table-cell px-4 py-3">
+                                            <FillLevelBar fillLevel={req.fill_level} />
+                                        </td>
+                                        <td className="px-3 md:px-4 py-3">
+                                            <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${rem.bg}`}>
+                                                <CountdownTimer createdAt={req.created_at} urgency={req.urgency} />
+                                            </span>
+                                        </td>
+                                        <td className="hidden md:table-cell px-4 py-3 text-xs text-slate-500">{new Date(req.created_at).toLocaleDateString('sr-RS')}</td>
+                                        <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
+                                            <div className="inline-flex items-center gap-0.5 relative">
+                                                <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
+                                                {/* Quick Assign button - only show if not assigned, we have drivers, and not readOnly */}
+                                                {!readOnly && assignmentStatus === 'not_assigned' && drivers.length > 0 && onQuickAssign && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            // Close if already open for this id
+                                                            if (activeDropdown.id === req.id) {
+                                                                setActiveDropdown({ id: null, rect: null, position: 'bottom' });
+                                                                return;
+                                                            }
 
-                                                        const rect = e.currentTarget.getBoundingClientRect();
-                                                        const spaceBelow = window.innerHeight - rect.bottom;
-                                                        // Increased threshold from 220 to 300 for safer flip
-                                                        const position = spaceBelow < 300 ? 'top' : 'bottom';
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            const spaceBelow = window.innerHeight - rect.bottom;
+                                                            // Increased threshold from 220 to 300 for safer flip
+                                                            const position = spaceBelow < 300 ? 'top' : 'bottom';
 
-                                                        setActiveDropdown({
-                                                            id: req.id,
-                                                            rect,
-                                                            position
-                                                        });
-                                                    }}
-                                                    className={`p-1.5 md:p-2 rounded-lg transition-colors ${activeDropdown.id === req.id ? 'bg-purple-100 text-purple-700' : 'text-purple-600 hover:bg-purple-50'}`}
-                                                    title="Dodeli vozaču"
-                                                >
-                                                    <UserPlus size={18} />
-                                                </button>
-                                            )}
-                                            <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
-                                            <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                                                            setActiveDropdown({
+                                                                id: req.id,
+                                                                rect,
+                                                                position
+                                                            });
+                                                        }}
+                                                        className={`p-1.5 md:p-2 rounded-lg transition-colors ${activeDropdown.id === req.id ? 'bg-purple-100 text-purple-700' : 'text-purple-600 hover:bg-purple-50'}`}
+                                                        title="Dodeli vozaču"
+                                                    >
+                                                        <UserPlus size={18} />
+                                                    </button>
+                                                )}
+                                                {!readOnly && onProcess && (
+                                                    <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
+                                                )}
+                                                {!readOnly && onDelete && (
+                                                    <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Render Dropdown using Portal or simple Fixed Overlay at the end */}

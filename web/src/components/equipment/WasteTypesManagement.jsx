@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { Plus, Recycle, Edit3, Trash2, Users } from 'lucide-react';
+import { Plus, Recycle, Edit3, Trash2, Users, UserPlus } from 'lucide-react';
 import { EmptyState, ImageUploader } from '../common';
 import { WasteTypeClientsModal } from './WasteTypeClientsModal';
+import { BulkWasteTypeModal } from './BulkWasteTypeModal';
 
 /**
  * Waste Types Management - CRUD for waste types
  */
-export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clients = [], onUpdateClientWasteTypes }) => {
+export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clients = [], onUpdateClientWasteTypes, onBulkUpdate }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingType, setEditingType] = useState(null);
     const [newType, setNewType] = useState({ label: '', icon: '📦', customImage: null });
     const [managingClientsFor, setManagingClientsFor] = useState(null); // waste type for client management
+    const [showBulkModal, setShowBulkModal] = useState(false);
 
     // Izračunaj koliko klijenata ima pristup svakoj vrsti robe
     const getClientCountForWasteType = (wasteTypeId) => {
@@ -56,9 +58,14 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                     <h2 className="text-lg font-bold">Vrste robe (otpada)</h2>
                     <p className="text-sm text-slate-500">Upravljajte vrstama otpada koje vaši klijenti mogu da prijavljuju</p>
                 </div>
-                <button onClick={() => { setShowAddForm(true); setEditingType(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
-                    <Plus size={18} /> Dodaj vrstu
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowBulkModal(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
+                        <UserPlus size={18} /> Grupno dodeljivanje
+                    </button>
+                    <button onClick={() => { setShowAddForm(true); setEditingType(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 text-sm">
+                        <Plus size={18} /> Dodaj vrstu
+                    </button>
+                </div>
             </div>
 
             {/* Add Form */}
@@ -217,6 +224,15 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                     onSave={onUpdateClientWasteTypes}
                 />
             )}
+
+            {/* Bulk Update Modal */}
+            <BulkWasteTypeModal
+                open={showBulkModal}
+                onClose={() => setShowBulkModal(false)}
+                wasteTypes={wasteTypes}
+                clients={clients}
+                onBulkUpdate={onBulkUpdate}
+            />
         </div>
     );
 };

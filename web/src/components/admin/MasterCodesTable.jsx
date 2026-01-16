@@ -77,7 +77,7 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
 
             {!codes?.length ? <EmptyState icon={FileText} title="Nema kodova" desc="Generiši prvi kod" /> : (
                 <div className="bg-white rounded-2xl border overflow-hidden overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm min-w-[700px]">
                         <thead className="bg-slate-50 text-slate-500 border-b">
                             <tr>
                                 <th className="px-4 py-4 text-left">Kod</th>

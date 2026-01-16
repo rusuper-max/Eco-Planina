@@ -436,170 +436,172 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
 
             {/* Table */}
             <div className="bg-white rounded-2xl border overflow-hidden">
-                <table className="w-full text-sm">
-                    <thead className="bg-slate-50 text-slate-500 border-b">
-                        <tr>
-                            <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
-                            <th className="px-3 md:px-4 py-3 text-left">
-                                <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Klijent <SortIcon column="client" />
-                                </button>
-                            </th>
-                            <th className="px-3 md:px-4 py-3 text-left">Tip</th>
-                            <th className="hidden md:table-cell px-4 py-3 text-left">
-                                <button onClick={() => handleSort('created_at')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Podneto <SortIcon column="created_at" />
-                                </button>
-                            </th>
-                            <th className="px-3 md:px-4 py-3 text-left">
-                                <button onClick={() => handleSort('processed_at')} className="flex items-center gap-1.5 hover:text-slate-700">
-                                    Obrađeno <SortIcon column="processed_at" />
-                                </button>
-                            </th>
-                            <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
-                            <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
-                            <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>
-                            <th className="px-2 py-3 text-center w-20">Akcije</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {filtered.length === 0 ? (
-                            <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
-                        ) : filtered.map((req, idx) => {
-                            // Find assignment by driver_assignment_id (direct link stored in processed_requests after migration 025)
-                            const assignment = driverAssignments[req.driver_assignment_id];
-                            const isExpanded = expandedRow === req.id;
-                            return (
-                            <React.Fragment key={req.id || idx}>
-                            <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
-                                <td className="px-2 md:px-3 py-3">
-                                    <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                        {req.request_code || '-'}
-                                    </span>
-                                </td>
-                                <td className="px-3 md:px-4 py-3">
-                                    <div className="font-medium text-sm">{req.client_name}</div>
-                                    <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
-                                </td>
-                                <td className="px-3 md:px-4 py-3">
-                                    <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
-                                    <span className="hidden sm:inline ml-1">{req.waste_label}</span>
-                                </td>
-                                <td className="hidden md:table-cell px-4 py-3">
-                                    <div className="flex items-center gap-2 text-slate-600">
-                                        <Calendar size={14} />
-                                        <span>{formatDateTime(req.created_at)}</span>
-                                    </div>
-                                </td>
-                                <td className="px-3 md:px-4 py-3">
-                                    <div className="flex items-center gap-2 text-emerald-600">
-                                        <CheckCircle2 size={14} />
-                                        <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
-                                    </div>
-                                </td>
-                                <td className="hidden sm:table-cell px-4 py-3 text-center">
-                                    {req.weight ? (
-                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
-                                            {req.weight} {req.weight_unit || 'kg'}
-                                        </span>
-                                    ) : (
-                                        <span className="text-slate-300 text-xs">-</span>
-                                    )}
-                                </td>
-                                <td className="hidden xs:table-cell px-2 py-3">
-                                    <div className="flex items-center justify-center">
-                                        {req.proof_image_url ? (
-                                            <button
-                                                onClick={() => setViewingProof(req)}
-                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                                title="Pogledaj dokaz"
-                                            >
-                                                <Image size={18} />
-                                            </button>
-                                        ) : (
-                                            <span className="text-slate-300"><Image size={18} /></span>
-                                        )}
-                                    </div>
-                                </td>
-                                {/* Driver column - visible for all users */}
-                                <td className="hidden md:table-cell px-4 py-3">
-                                    {/* First try driver_name from processed_requests, fallback to assignment lookup */}
-                                    {req.driver_name ? (
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
-                                                <Truck size={14} className="text-amber-600" />
-                                            </div>
-                                            <span className="text-sm text-slate-700">{req.driver_name}</span>
-                                        </div>
-                                    ) : loadingAssignments ? (
-                                        <Loader2 size={16} className="animate-spin text-slate-400" />
-                                    ) : assignment?.driver ? (
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
-                                                <Truck size={14} className="text-amber-600" />
-                                            </div>
-                                            <span className="text-sm text-slate-700">{assignment.driver.name}</span>
-                                        </div>
-                                    ) : (
-                                        <span className="text-xs text-slate-400">-</span>
-                                    )}
-                                </td>
-                                <td className="px-2 py-3">
-                                    <div className="flex items-center justify-center gap-1">
-                                        {/* Expand button for detailed view */}
-                                        {showDetailedView && (
-                                            <button
-                                                onClick={() => setExpandedRow(isExpanded ? null : req.id)}
-                                                className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
-                                                title="Prikaži timeline"
-                                            >
-                                                {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                            </button>
-                                        )}
-                                        {/* On very small screens, show proof button in actions if dokaz column is hidden */}
-                                        <button
-                                            onClick={() => req.proof_image_url && setViewingProof(req)}
-                                            className={`xs:hidden p-1.5 rounded-lg ${req.proof_image_url ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-default'}`}
-                                            title={req.proof_image_url ? "Pogledaj dokaz" : "Nema dokaza"}
-                                        >
-                                            <Image size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => setEditingRequest(req)}
-                                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
-                                            title="Dopuni podatke"
-                                        >
-                                            <Edit3 size={18} />
-                                        </button>
-                                        {onDelete && (
-                                            <button
-                                                onClick={() => setDeletingRequest(req)}
-                                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
-                                                title="Obriši iz istorije"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[800px]">
+                        <thead className="bg-slate-50 text-slate-500 border-b">
+                            <tr>
+                                <th className="px-2 md:px-3 py-3 text-left text-xs">ID</th>
+                                <th className="px-3 md:px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('client')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Klijent <SortIcon column="client" />
+                                    </button>
+                                </th>
+                                <th className="px-3 md:px-4 py-3 text-left">Tip</th>
+                                <th className="hidden md:table-cell px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('created_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Podneto <SortIcon column="created_at" />
+                                    </button>
+                                </th>
+                                <th className="px-3 md:px-4 py-3 text-left">
+                                    <button onClick={() => handleSort('processed_at')} className="flex items-center gap-1.5 hover:text-slate-700">
+                                        Obrađeno <SortIcon column="processed_at" />
+                                    </button>
+                                </th>
+                                <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
+                                <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
+                                <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>
+                                <th className="px-2 py-3 text-center w-20">Akcije</th>
                             </tr>
-                            {/* Expanded row with timeline */}
-                            {showDetailedView && isExpanded && (
-                                <tr>
-                                    <td colSpan={9} className="px-4 py-3 bg-white border-t">
-                                        <TimelineView
-                                            assignment={assignment}
-                                            request={req}
-                                            logs={activityLogs[req.request_id] || []}
-                                        />
-                                    </td>
-                                </tr>
-                            )}
-                            </React.Fragment>
-                        );
-                        })}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y">
+                            {filtered.length === 0 ? (
+                                <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            ) : filtered.map((req, idx) => {
+                                // Find assignment by driver_assignment_id (direct link stored in processed_requests after migration 025)
+                                const assignment = driverAssignments[req.driver_assignment_id];
+                                const isExpanded = expandedRow === req.id;
+                                return (
+                                    <React.Fragment key={req.id || idx}>
+                                        <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                                            <td className="px-2 md:px-3 py-3">
+                                                <span className="text-xs font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                    {req.request_code || '-'}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 md:px-4 py-3">
+                                                <div className="font-medium text-sm">{req.client_name}</div>
+                                                <div className="text-xs text-slate-500 md:hidden mt-0.5">{formatDateTime(req.created_at)}</div>
+                                            </td>
+                                            <td className="px-3 md:px-4 py-3">
+                                                <span className="text-lg">{wasteTypes.find(w => w.id === req.waste_type)?.icon || '📦'}</span>
+                                                <span className="hidden sm:inline ml-1">{req.waste_label}</span>
+                                            </td>
+                                            <td className="hidden md:table-cell px-4 py-3">
+                                                <div className="flex items-center gap-2 text-slate-600">
+                                                    <Calendar size={14} />
+                                                    <span>{formatDateTime(req.created_at)}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-3 md:px-4 py-3">
+                                                <div className="flex items-center gap-2 text-emerald-600">
+                                                    <CheckCircle2 size={14} />
+                                                    <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
+                                                </div>
+                                            </td>
+                                            <td className="hidden sm:table-cell px-4 py-3 text-center">
+                                                {req.weight ? (
+                                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+                                                        {req.weight} {req.weight_unit || 'kg'}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-300 text-xs">-</span>
+                                                )}
+                                            </td>
+                                            <td className="hidden xs:table-cell px-2 py-3">
+                                                <div className="flex items-center justify-center">
+                                                    {req.proof_image_url ? (
+                                                        <button
+                                                            onClick={() => setViewingProof(req)}
+                                                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                            title="Pogledaj dokaz"
+                                                        >
+                                                            <Image size={18} />
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-slate-300"><Image size={18} /></span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            {/* Driver column - visible for all users */}
+                                            <td className="hidden md:table-cell px-4 py-3">
+                                                {/* First try driver_name from processed_requests, fallback to assignment lookup */}
+                                                {req.driver_name ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                                                            <Truck size={14} className="text-amber-600" />
+                                                        </div>
+                                                        <span className="text-sm text-slate-700">{req.driver_name}</span>
+                                                    </div>
+                                                ) : loadingAssignments ? (
+                                                    <Loader2 size={16} className="animate-spin text-slate-400" />
+                                                ) : assignment?.driver ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                                                            <Truck size={14} className="text-amber-600" />
+                                                        </div>
+                                                        <span className="text-sm text-slate-700">{assignment.driver.name}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-2 py-3">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {/* Expand button for detailed view */}
+                                                    {showDetailedView && (
+                                                        <button
+                                                            onClick={() => setExpandedRow(isExpanded ? null : req.id)}
+                                                            className={`p-1.5 rounded-lg transition-colors ${isExpanded ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                                                            title="Prikaži timeline"
+                                                        >
+                                                            {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                                        </button>
+                                                    )}
+                                                    {/* On very small screens, show proof button in actions if dokaz column is hidden */}
+                                                    <button
+                                                        onClick={() => req.proof_image_url && setViewingProof(req)}
+                                                        className={`xs:hidden p-1.5 rounded-lg ${req.proof_image_url ? 'text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-default'}`}
+                                                        title={req.proof_image_url ? "Pogledaj dokaz" : "Nema dokaza"}
+                                                    >
+                                                        <Image size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditingRequest(req)}
+                                                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg"
+                                                        title="Dopuni podatke"
+                                                    >
+                                                        <Edit3 size={18} />
+                                                    </button>
+                                                    {onDelete && (
+                                                        <button
+                                                            onClick={() => setDeletingRequest(req)}
+                                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg"
+                                                            title="Obriši iz istorije"
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {/* Expanded row with timeline */}
+                                        {showDetailedView && isExpanded && (
+                                            <tr>
+                                                <td colSpan={9} className="px-4 py-3 bg-white border-t">
+                                                    <TimelineView
+                                                        assignment={assignment}
+                                                        request={req}
+                                                        logs={activityLogs[req.request_id] || []}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Proof Image/PDF Modal */}
