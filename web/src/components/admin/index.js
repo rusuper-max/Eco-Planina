@@ -11,3 +11,4 @@ export { RegionsPage } from './RegionsPage';
 export { RegionNodeEditor } from './RegionNodeEditor';
 export { CompanyStaffPage } from './CompanyStaffPage';
 export { CompanySettingsPage } from './CompanySettingsPage';
+export { ActivityLogPage } from './ActivityLogPage';

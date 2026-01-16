@@ -41,6 +41,7 @@ export const exportToExcel = async ({
     wasteTypes,
     clients,
     drivers = [],
+    pickupRequests = [],
     fileName = 'izvestaj',
     sheets = {}
 }) => {
@@ -50,6 +51,7 @@ export const exportToExcel = async ({
         poVrsti: sheets.poVrsti !== false,
         poKlijentu: sheets.poKlijentu !== false,
         dnevniTrend: sheets.dnevniTrend !== false,
+        kreiraниVsObradeni: sheets.kreiraниVsObradeni !== false,
         detaljno: sheets.detaljno !== false,
         sviZahtevi: sheets.sviZahtevi !== false,
         grafici: sheets.grafici !== false,
@@ -382,7 +384,91 @@ export const exportToExcel = async ({
         ];
     }
 
-    // ===== SHEET 5: DETALJAN PREGLED =====
+    // ===== SHEET 5: KREIRANI VS OBRAĐENI =====
+    if (enabledSheets.kreiraниVsObradeni) {
+        const comparisonSheet = workbook.addWorksheet('Kreirani vs Obradjeni', {
+            properties: { tabColor: { argb: 'FF22C55E' } }
+        });
+
+        comparisonSheet.mergeCells('A1:D1');
+        comparisonSheet.getCell('A1').value = 'Poređenje kreiranih i obrađenih zahteva';
+        comparisonSheet.getCell('A1').font = { bold: true, size: 16 };
+
+        // Prepare daily comparison data
+        const createdByDate = {};
+        const processedByDate = {};
+        const comparisonDates = new Set();
+
+        // Count created requests per day (from pickupRequests)
+        pickupRequests.forEach(r => {
+            if (!r.created_at) return;
+            const dateKey = new Date(r.created_at).toISOString().split('T')[0];
+            comparisonDates.add(dateKey);
+            createdByDate[dateKey] = (createdByDate[dateKey] || 0) + 1;
+        });
+
+        // Count processed requests per day (from data)
+        data.forEach(r => {
+            if (!r.processed_at) return;
+            const dateKey = new Date(r.processed_at).toISOString().split('T')[0];
+            comparisonDates.add(dateKey);
+            processedByDate[dateKey] = (processedByDate[dateKey] || 0) + 1;
+        });
+
+        const sortedComparisonDates = Array.from(comparisonDates).sort();
+
+        // Headers
+        const compHeaders = ['Datum', 'Kreirani zahtevi', 'Obrađeni zahtevi', 'Razlika'];
+        compHeaders.forEach((h, idx) => {
+            const cell = comparisonSheet.getCell(3, idx + 1);
+            cell.value = h;
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: idx === 1 ? 'FF3B82F6' : idx === 2 ? 'FF22C55E' : 'FF64748B' } };
+            cell.alignment = { horizontal: 'center' };
+        });
+
+        let totalCreated = 0;
+        let totalProcessed = 0;
+
+        sortedComparisonDates.forEach((date, idx) => {
+            const rowNum = 4 + idx;
+            const formattedDate = new Date(date).toLocaleDateString('sr-RS');
+            const created = createdByDate[date] || 0;
+            const processed = processedByDate[date] || 0;
+            const diff = created - processed;
+
+            totalCreated += created;
+            totalProcessed += processed;
+
+            comparisonSheet.getCell(rowNum, 1).value = formattedDate;
+            comparisonSheet.getCell(rowNum, 2).value = created;
+            comparisonSheet.getCell(rowNum, 2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
+            comparisonSheet.getCell(rowNum, 3).value = processed;
+            comparisonSheet.getCell(rowNum, 3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+            comparisonSheet.getCell(rowNum, 4).value = diff;
+            comparisonSheet.getCell(rowNum, 4).font = { color: { argb: diff > 0 ? 'FFDC2626' : diff < 0 ? 'FF16A34A' : 'FF64748B' } };
+        });
+
+        // Total row
+        const compTotalRow = 4 + sortedComparisonDates.length;
+        comparisonSheet.getCell(compTotalRow, 1).value = 'UKUPNO';
+        comparisonSheet.getCell(compTotalRow, 1).font = { bold: true };
+        comparisonSheet.getCell(compTotalRow, 2).value = totalCreated;
+        comparisonSheet.getCell(compTotalRow, 2).font = { bold: true };
+        comparisonSheet.getCell(compTotalRow, 3).value = totalProcessed;
+        comparisonSheet.getCell(compTotalRow, 3).font = { bold: true };
+        comparisonSheet.getCell(compTotalRow, 4).value = totalCreated - totalProcessed;
+        comparisonSheet.getCell(compTotalRow, 4).font = { bold: true, color: { argb: (totalCreated - totalProcessed) > 0 ? 'FFDC2626' : 'FF16A34A' } };
+
+        comparisonSheet.columns = [
+            { width: 15 },
+            { width: 18 },
+            { width: 18 },
+            { width: 12 },
+        ];
+    }
+
+    // ===== SHEET 6: DETALJAN PREGLED =====
     if (enabledSheets.detaljno) {
         const detailSheet = workbook.addWorksheet('Detaljan pregled', {
             properties: { tabColor: { argb: 'FF06B6D4' } }

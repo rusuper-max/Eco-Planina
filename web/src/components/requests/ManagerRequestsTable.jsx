@@ -11,25 +11,47 @@ const DEFAULT_WASTE_TYPES = [
 
 /**
  * Quick Assign Dropdown for selecting a driver
+ * Uses fixed positioning to avoid clipping by parent overflow:hidden
  */
-const QuickAssignDropdown = ({ request, drivers, onAssign, onClose, position }) => {
+const QuickAssignDropdown = ({ request, drivers, onAssign, onClose, position, triggerRect }) => {
     const dropdownRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-                onClose();
+                // Check if click was on the trigger button (to avoid immediate reopen)
+                const isTrigger = triggerRect &&
+                    e.clientX >= triggerRect.left &&
+                    e.clientX <= triggerRect.right &&
+                    e.clientY >= triggerRect.top &&
+                    e.clientY <= triggerRect.bottom;
+
+                if (!isTrigger) onClose();
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [onClose]);
+        // Use capture to handle event before other clicks
+        document.addEventListener('mousedown', handleClickOutside, true);
+        return () => document.removeEventListener('mousedown', handleClickOutside, true);
+    }, [onClose, triggerRect]);
+
+    // Calculate fixed position
+    const style = {
+        position: 'fixed',
+        zIndex: 9999,
+        right: window.innerWidth - triggerRect.right,
+    };
+
+    if (position === 'top') {
+        style.bottom = window.innerHeight - triggerRect.top + 5;
+    } else {
+        style.top = triggerRect.bottom + 5;
+    }
 
     return (
         <div
             ref={dropdownRef}
-            className={`absolute z-50 bg-white rounded-xl shadow-2xl border border-slate-200 py-2 min-w-56 ${position === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}
-            style={{ right: 0 }}
+            className="bg-white rounded-xl shadow-2xl border border-slate-200 py-2 min-w-56 animate-in fade-in zoom-in-95 duration-100"
+            style={style}
         >
             <div className="px-3 pb-2 border-b border-slate-100 flex items-center justify-between">
                 <p className="text-xs font-medium text-slate-500">Izaberi vozača:</p>
@@ -81,13 +103,17 @@ export const ManagerRequestsTable = ({
     drivers = [],
     onQuickAssign
 }) => {
+    // DEBUG: Log assignments and requests to see matching
+    // console.log('DEBUG ManagerRequestsTable: assignments count:', assignments?.length, 'requests count:', requests?.length);
+
     const [sortBy, setSortBy] = useState('remaining'); // remaining, client, type, fill, date
     const [sortDir, setSortDir] = useState('asc'); // asc, desc
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all'); // all, or waste type id
     const [filterFill, setFilterFill] = useState('all'); // all, low, medium, high, full
-    const [quickAssignRequest, setQuickAssignRequest] = useState(null); // request id for quick assign dropdown
-    const [dropdownPosition, setDropdownPosition] = useState('bottom');
+
+    // Dropdown state
+    const [activeDropdown, setActiveDropdown] = useState({ id: null, rect: null, position: 'bottom' });
 
     // Sync with external filter (legacy support)
     useEffect(() => {
@@ -96,6 +122,15 @@ export const ManagerRequestsTable = ({
             // Legacy: just ignore old urgency filter
         }
     }, [initialUrgencyFilter]);
+
+    // Close dropdown on scroll
+    useEffect(() => {
+        const handleScroll = () => {
+            if (activeDropdown.id) setActiveDropdown({ id: null, rect: null, position: 'bottom' });
+        };
+        window.addEventListener('scroll', handleScroll, true);
+        return () => window.removeEventListener('scroll', handleScroll, true);
+    }, [activeDropdown.id]);
 
     const handleFillChange = (value) => {
         setFilterFill(value);
@@ -248,7 +283,7 @@ export const ManagerRequestsTable = ({
                             <th className="px-2 md:px-4 py-3 text-center">Akcije</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y">
+                    <tbody className="divide-y relative">
                         {filtered.length === 0 ? (
                             <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map(req => {
@@ -256,6 +291,7 @@ export const ManagerRequestsTable = ({
                             const assignment = assignments.find(a => a.request_id === req.id);
                             const assignmentStatus = assignment?.status || 'not_assigned';
                             const driverName = assignment?.driver?.name;
+
                             return (
                                 <tr key={req.id} className="hover:bg-slate-50">
                                     <td className="px-2 md:px-3 py-3">
@@ -292,30 +328,31 @@ export const ManagerRequestsTable = ({
                                             <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
                                             {/* Quick Assign button - only show if not assigned and we have drivers */}
                                             {assignmentStatus === 'not_assigned' && drivers.length > 0 && onQuickAssign && (
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            const rect = e.currentTarget.getBoundingClientRect();
-                                                            const spaceBelow = window.innerHeight - rect.bottom;
-                                                            setDropdownPosition(spaceBelow < 220 ? 'top' : 'bottom');
-                                                            setQuickAssignRequest(quickAssignRequest === req.id ? null : req.id);
-                                                        }}
-                                                        className="p-1.5 md:p-2 text-purple-600 hover:bg-purple-50 rounded-lg"
-                                                        title="Dodeli vozaču"
-                                                    >
-                                                        <UserPlus size={18} />
-                                                    </button>
-                                                    {quickAssignRequest === req.id && (
-                                                        <QuickAssignDropdown
-                                                            request={req}
-                                                            drivers={drivers}
-                                                            onAssign={onQuickAssign}
-                                                            onClose={() => setQuickAssignRequest(null)}
-                                                            position={dropdownPosition}
-                                                        />
-                                                    )}
-                                                </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // Close if already open for this id
+                                                        if (activeDropdown.id === req.id) {
+                                                            setActiveDropdown({ id: null, rect: null, position: 'bottom' });
+                                                            return;
+                                                        }
+
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        const spaceBelow = window.innerHeight - rect.bottom;
+                                                        // Increased threshold from 220 to 300 for safer flip
+                                                        const position = spaceBelow < 300 ? 'top' : 'bottom';
+
+                                                        setActiveDropdown({
+                                                            id: req.id,
+                                                            rect,
+                                                            position
+                                                        });
+                                                    }}
+                                                    className={`p-1.5 md:p-2 rounded-lg transition-colors ${activeDropdown.id === req.id ? 'bg-purple-100 text-purple-700' : 'text-purple-600 hover:bg-purple-50'}`}
+                                                    title="Dodeli vozaču"
+                                                >
+                                                    <UserPlus size={18} />
+                                                </button>
                                             )}
                                             <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
                                             <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
@@ -327,6 +364,18 @@ export const ManagerRequestsTable = ({
                     </tbody>
                 </table>
             </div>
+
+            {/* Render Dropdown using Portal or simple Fixed Overlay at the end */}
+            {activeDropdown.id && activeDropdown.rect && (
+                <QuickAssignDropdown
+                    request={requests.find(r => r.id === activeDropdown.id)}
+                    drivers={drivers}
+                    onAssign={onQuickAssign}
+                    onClose={() => setActiveDropdown({ id: null, rect: null, position: 'bottom' })}
+                    position={activeDropdown.position}
+                    triggerRect={activeDropdown.rect}
+                />
+            )}
         </div>
     );
 };

@@ -70,7 +70,7 @@ export const DataProvider = ({ children }) => {
                 const requestIds = requests.map(r => r.id);
                 const { data: assignments, error: assignError } = await supabase
                     .from('driver_assignments')
-                    .select('request_id, status, driver:driver_id(id, name, phone), assigned_at')
+                    .select('request_id, status, assigned_by, driver:driver_id(id, name, phone), assigner:assigned_by(id, name), assigned_at')
                     .in('request_id', requestIds)
                     .is('deleted_at', null);
 
@@ -84,6 +84,8 @@ export const DataProvider = ({ children }) => {
                                 status: assignment.status,
                                 driver_name: assignment.driver?.name,
                                 driver_phone: assignment.driver?.phone,
+                                assigned_by_id: assignment.assigned_by,
+                                assigned_by_name: assignment.assigner?.name,
                                 assigned_at: assignment.assigned_at
                             } : null
                         };
@@ -161,6 +163,20 @@ export const DataProvider = ({ children }) => {
 
     const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
         try {
+            // Get driver info if assigned
+            let driverInfo = null;
+            if (request.id) {
+                const { data: assignment } = await supabase
+                    .from('driver_assignments')
+                    .select('driver_id, driver:driver_id(id, name)')
+                    .eq('request_id', request.id)
+                    .is('deleted_at', null)
+                    .single();
+                if (assignment?.driver) {
+                    driverInfo = assignment.driver;
+                }
+            }
+
             const processedRecord = {
                 company_code: request.company_code,
                 client_id: request.user_id,
@@ -175,9 +191,12 @@ export const DataProvider = ({ children }) => {
                 created_at: request.created_at,
                 proof_image_url: proofImageUrl,
                 request_id: request.id, // Store original request ID for linking with driver history
+                request_code: request.request_code, // Copy request code for display in history
                 region_id: request.region_id, // Copy region from pickup_request for RLS filtering
                 processed_by_id: user?.id || null, // Track who processed the request
                 processed_by_name: user?.name || null, // Store name for easier display
+                driver_id: driverInfo?.id || null, // Store driver who handled this request
+                driver_name: driverInfo?.name || null, // Store driver name for easier display
             };
 
             if (weightData) {
@@ -193,11 +212,14 @@ export const DataProvider = ({ children }) => {
 
             // Update driver assignment status to 'completed' if exists
             // This preserves driver history after manager processes the request
+            // Set both delivered_at and completed_at so it appears in driver's history
+            const now = new Date().toISOString();
             await supabase
                 .from('driver_assignments')
                 .update({
                     status: 'completed',
-                    completed_at: new Date().toISOString()
+                    delivered_at: now,
+                    completed_at: now
                 })
                 .eq('request_id', request.id)
                 .is('deleted_at', null);

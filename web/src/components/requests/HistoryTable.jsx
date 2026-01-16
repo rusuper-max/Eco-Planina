@@ -321,13 +321,13 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                             {showDetailedView && <th className="hidden lg:table-cell px-4 py-3 text-left">Obradio</th>}
                             <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
                             <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
-                            {showDetailedView && <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>}
+                            <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>
                             <th className="px-2 py-3 text-center w-20">Akcije</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan={showDetailedView ? 10 : 8} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
+                            <tr><td colSpan={showDetailedView ? 10 : 9} className="px-4 py-8 text-center text-slate-500">Nema rezultata za ovu pretragu</td></tr>
                         ) : filtered.map((req, idx) => {
                             const assignment = driverAssignments[req.request_id];
                             const isExpanded = expandedRow === req.id;
@@ -398,23 +398,29 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                         )}
                                     </div>
                                 </td>
-                                {/* Driver column for detailed view */}
-                                {showDetailedView && (
-                                    <td className="hidden md:table-cell px-4 py-3">
-                                        {loadingAssignments ? (
-                                            <Loader2 size={16} className="animate-spin text-slate-400" />
-                                        ) : assignment?.driver ? (
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
-                                                    <Truck size={14} className="text-amber-600" />
-                                                </div>
-                                                <span className="text-sm text-slate-700">{assignment.driver.name}</span>
+                                {/* Driver column - visible for all users */}
+                                <td className="hidden md:table-cell px-4 py-3">
+                                    {/* First try driver_name from processed_requests, fallback to assignment lookup */}
+                                    {req.driver_name ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                                                <Truck size={14} className="text-amber-600" />
                                             </div>
-                                        ) : (
-                                            <span className="text-xs text-slate-400">-</span>
-                                        )}
-                                    </td>
-                                )}
+                                            <span className="text-sm text-slate-700">{req.driver_name}</span>
+                                        </div>
+                                    ) : loadingAssignments ? (
+                                        <Loader2 size={16} className="animate-spin text-slate-400" />
+                                    ) : assignment?.driver ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
+                                                <Truck size={14} className="text-amber-600" />
+                                            </div>
+                                            <span className="text-sm text-slate-700">{assignment.driver.name}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-slate-400">-</span>
+                                    )}
+                                </td>
                                 <td className="px-2 py-3">
                                     <div className="flex items-center justify-center gap-1">
                                         {/* Expand button for detailed view */}

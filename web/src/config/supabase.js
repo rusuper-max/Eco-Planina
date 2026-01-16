@@ -10,7 +10,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
     );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+        persistSession: true,           // Čuva sesiju u localStorage
+        autoRefreshToken: true,         // Automatski osvežava token pre isteka
+        detectSessionInUrl: true,       // Detektuje sesiju iz URL-a (za OAuth)
+        storageKey: 'ecologistics-auth', // Custom key za localStorage
+    }
+});
 
 // Expose for debugging in console
 if (typeof window !== 'undefined') {

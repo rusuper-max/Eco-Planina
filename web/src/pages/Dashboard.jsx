@@ -30,7 +30,8 @@ import {
     RegionsPage,
     CompanyStaffPage,
     RegionNodeEditor,
-    CompanySettingsPage
+    CompanySettingsPage,
+    ActivityLogPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 
@@ -219,6 +220,7 @@ export default function Dashboard() {
     const fetchDriverAssignments = async () => {
         if (!companyCode) return;
         try {
+            console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
             const { data, error } = await supabase
                 .from('driver_assignments')
                 .select('*, driver:driver_id(id, name)')
@@ -226,6 +228,7 @@ export default function Dashboard() {
                 .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
                 .is('deleted_at', null);
             if (error) throw error;
+            console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments', data);
             setDriverAssignments(data || []);
         } catch (err) {
             console.error('Error fetching driver assignments:', err);
@@ -260,15 +263,18 @@ export default function Dashboard() {
             });
 
             if (error) throw error;
-            if (data === false) {
-                throw new Error('Nemate dozvolu za ovu akciju');
+
+            // RPC returns JSON object with success and assigned_count
+            const result = typeof data === 'string' ? JSON.parse(data) : data;
+            if (!result?.success) {
+                throw new Error(result?.error || 'Nemate dozvolu za ovu akciju');
             }
 
             // Refresh assignments
             await fetchDriverAssignments();
 
             const driver = companyDrivers.find(d => d.id === driverId);
-            toast.success(`${requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
+            toast.success(`${result.assigned_count || requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
         } catch (err) {
             console.error('Error assigning driver:', err);
             throw err;
@@ -278,18 +284,34 @@ export default function Dashboard() {
     // Quick assign single request to driver (from requests table)
     const handleQuickAssignDriver = async (requestId, driverId) => {
         try {
+            console.log('DEBUG handleQuickAssignDriver: calling RPC with', { requestId, driverId, companyCode });
             const { data, error } = await supabase.rpc('assign_requests_to_driver', {
                 p_request_ids: [requestId],
                 p_driver_id: driverId,
                 p_company_code: companyCode
             });
 
+            console.log('DEBUG handleQuickAssignDriver: RPC response', { data, error });
+
             if (error) throw error;
-            if (data === false) {
-                throw new Error('Nemate dozvolu za ovu akciju');
+
+            // RPC returns JSON object with success and assigned_count
+            const result = typeof data === 'string' ? JSON.parse(data) : data;
+            console.log('DEBUG handleQuickAssignDriver: parsed result', result);
+
+            // VAŽNO: Proveri da li je assigned_count > 0
+            if (!result?.success) {
+                throw new Error(result?.error || 'Nemate dozvolu za ovu akciju');
             }
 
+            if (result?.assigned_count === 0) {
+                throw new Error('Zahtev nije pronađen ili ne pripada vašoj firmi');
+            }
+
+            console.log('DEBUG handleQuickAssignDriver: assigned_count =', result?.assigned_count);
+
             // Refresh assignments
+            console.log('DEBUG handleQuickAssignDriver: refreshing assignments...');
             await fetchDriverAssignments();
 
             const driver = companyDrivers.find(d => d.id === driverId);
@@ -591,11 +613,12 @@ export default function Dashboard() {
             { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
             { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
             { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
-            { id: 'visual', icon: Network, label: 'Vizuelni Editor' },
+            { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
-            { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera' },
-            { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača' },
+            { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera', helpKey: 'sidebar-manager-analytics' },
+            { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača', helpKey: 'sidebar-driver-analytics' },
             { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
+            { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
         ];
@@ -604,12 +627,13 @@ export default function Dashboard() {
             { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length, helpKey: 'sidebar-requests' },
             { id: 'drivers', icon: Users, label: 'Vozači', helpKey: 'sidebar-drivers' },
             { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
+            { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
             { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
             { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' },
             { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
-            { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-equipment' },
+            { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' },
             { id: 'map', icon: MapPin, label: 'Mapa', helpKey: 'sidebar-map' }
         ];
         // Default: client menu - "Novi zahtev" is the main/home page for clients
@@ -710,7 +734,7 @@ export default function Dashboard() {
 
             console.log('[Client WasteTypes] Filtered result:', clientWasteTypes?.length, 'types');
 
-            if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} />;
+            if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} onDeleteRequest={removePickupRequest} />;
             if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
             if (activeTab === 'info') {
                 // Informacije tab - overview of client's activity
@@ -862,7 +886,8 @@ export default function Dashboard() {
                 try { await deleteProcessedRequest(id); }
                 catch { setProcessedRequests(previous); } // Rollback
             }} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} />;
+            if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
@@ -902,7 +927,7 @@ export default function Dashboard() {
             if (activeTab === 'staff') return <CompanyStaffPage />;
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} equipment={equipment} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} equipment={equipment} pickupRequests={pending} />;
             if (activeTab === 'manager-analytics') return (
                 <ManagerAnalyticsPage
                     processedRequests={processedRequests}
@@ -939,6 +964,7 @@ export default function Dashboard() {
                     />
                 </div>
             );
+            if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">
                     <MapView

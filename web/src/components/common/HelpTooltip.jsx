@@ -62,6 +62,26 @@ const HELP_DEFINITIONS = {
         title: 'Filijale (regioni)',
         description: 'Kreirajte i upravljajte filijalama vaše firme. Svaka filijala ima svoje menadžere, vozače i klijente koji su međusobno izolovani.'
     },
+    'sidebar-activity-log': {
+        title: 'Evidencija aktivnosti',
+        description: 'Audit trail - pregled svih akcija u sistemu: ko je kreirao zahtev, ko je obradio, ko je dodelio vozaču. Koristi za praćenje rada i rešavanje sporova.'
+    },
+    'sidebar-visual-editor': {
+        title: 'Vizuelni editor',
+        description: 'Grafički prikaz strukture firme - filijale, menadžeri i vozači u obliku dijagrama. Korisno za brzi pregled organizacione hijerarhije.'
+    },
+    'sidebar-manager-analytics': {
+        title: 'Učinak menadžera',
+        description: 'Statistike po menadžerima: koliko zahteva je svaki obradio, prosečno vreme obrade, uporedna analiza produktivnosti.'
+    },
+    'sidebar-driver-analytics': {
+        title: 'Učinak vozača',
+        description: 'Statistike po vozačima: koliko dostava je završio, ukupna težina, prosečno vreme. Korisno za evaluaciju i planiranje resursa.'
+    },
+    'sidebar-wastetypes': {
+        title: 'Vrste robe',
+        description: 'Definišite koje vrste sekundarnih sirovina firma sakuplja (plastika, karton, staklo, metal...). Možete dodati nove i prilagoditi cene.'
+    },
     // Header elements
     'header-notifications': {
         title: 'Obaveštenja',

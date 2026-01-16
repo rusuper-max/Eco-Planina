@@ -95,8 +95,15 @@ export const ChatProvider = ({ children }) => {
             });
             const partnerIds = Object.keys(conversationMap);
             if (partnerIds.length === 0) return [];
-            const { data: partners } = await supabase.from('users').select('id, name, role, phone').in('id', partnerIds);
-            const partnerMap = (partners || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
+            // Dohvati partnere - uključi i obrisane korisnike da ne prikazuje "Nepoznato"
+            const { data: partners } = await supabase.from('users').select('id, name, role, phone, deleted_at').in('id', partnerIds);
+            const partnerMap = (partners || []).reduce((acc, p) => {
+                acc[p.id] = {
+                    ...p,
+                    name: p.deleted_at ? `${p.name} (obrisan)` : p.name
+                };
+                return acc;
+            }, {});
             return Object.values(conversationMap).map(c => ({
                 ...c,
                 partner: partnerMap[c.partnerId] || { name: 'Nepoznato', role: 'unknown' }

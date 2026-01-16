@@ -78,7 +78,8 @@ export {
     RegionsPage,
     CompanyStaffPage,
     RegionNodeEditor,
-    CompanySettingsPage
+    CompanySettingsPage,
+    ActivityLogPage
 } from '../components/admin';
 
 // Re-export analytics components

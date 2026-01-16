@@ -120,6 +120,35 @@ src/context/
 
 ---
 
+---
+
+## 8. Driver Assignment (Januar 2026) - ZAVRSENO
+
+### 8.1 Manager funkcionalnosti
+- [x] Quick assign dropdown u tabeli zahteva
+- [x] RequestStatusBadge komponenta sa popup detaljima
+- [x] Prikaz statusa: N/D, Čeka, U toku, Preuzeto, Dostavljeno
+
+### 8.2 RPC funkcija
+- [x] `assign_requests_to_driver` sa SECURITY DEFINER
+- [x] Denormalizacija podataka u driver_assignments
+- [x] Upsert logika (reassign ako vec postoji)
+
+### 8.3 Dashboard integracija
+- [x] `handleQuickAssignDriver` funkcija
+- [x] `fetchDriverAssignments` sa driver join-om
+- [x] Real-time refresh nakon dodele
+
+---
+
+## 9. Preostali zadaci
+
+- [ ] Realtime subscription za vozace (novi zadaci)
+- [ ] Chat: ispraviti "Nepoznato" problem
+- [ ] Notification preferences UI
+
+---
+
 ## Tehnicke napomene
 
 - React 19 + Vite + TailwindCSS v4

@@ -20,7 +20,7 @@ const WASTE_TYPE_COLORS = [
 /**
  * Analytics Page with Charts - Displays waste collection statistics
  */
-export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [] }) => {
+export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [] }) => {
     const [dateRange, setDateRange] = useState('month');
     const [selectedWasteType, setSelectedWasteType] = useState('all');
     const [selectedClient, setSelectedClient] = useState('all');
@@ -39,6 +39,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
         poVrsti: true,
         poKlijentu: true,
         dnevniTrend: true,
+        kreiraниVsObradeni: true,
         detaljno: true,
         sviZahtevi: true,
         grafici: true,
@@ -54,6 +55,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
         { key: 'poVrsti', label: 'Po vrsti otpada', icon: '♻️' },
         { key: 'poKlijentu', label: 'Po klijentu', icon: '👥' },
         { key: 'dnevniTrend', label: 'Dnevni trend', icon: '📈' },
+        { key: 'kreiraниVsObradeni', label: 'Kreirani vs Obrađeni', icon: '⚖️' },
         { key: 'detaljno', label: 'Detaljan pregled', icon: '📋' },
         { key: 'sviZahtevi', label: 'Svi zahtevi', icon: '📝' },
         { key: 'grafici', label: 'Grafici (slike)', icon: '🎨' },
@@ -199,11 +201,76 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
             .slice(-14);
     };
 
+    // Uporedni dijagram: Kreirani vs Obrađeni zahtevi po danu
+    const getCreatedVsProcessedByDate = () => {
+        const now = new Date();
+        let startDate = null;
+
+        switch (dateRange) {
+            case 'week':
+                startDate = new Date(new Date().setDate(now.getDate() - 7));
+                break;
+            case 'month':
+                startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+                break;
+            case 'year':
+                startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+                break;
+            default:
+                startDate = null;
+        }
+
+        const byDate = {};
+        const countedRequestIds = new Set();
+
+        // Kreirani zahtevi iz aktivnih pickup_requests
+        pickupRequests.forEach(r => {
+            if (!r.created_at) return;
+            const dateObj = new Date(r.created_at);
+            if (startDate && dateObj < startDate) return;
+            const dateKey = dateObj.toISOString().split('T')[0];
+            const dateLabel = dateObj.toLocaleDateString('sr-RS', { day: 'numeric', month: 'numeric' });
+            if (!byDate[dateKey]) byDate[dateKey] = { dateKey, date: dateLabel, created: 0, processed: 0 };
+            byDate[dateKey].created++;
+            if (r.id) countedRequestIds.add(r.id);
+        });
+
+        // Kreirani zahtevi iz processed_requests (koji su već obrađeni)
+        (processedRequests || []).forEach(r => {
+            if (!r.created_at) return;
+            // Izbegni duplikate ako imamo original_request_id
+            if (r.original_request_id && countedRequestIds.has(r.original_request_id)) return;
+            const dateObj = new Date(r.created_at);
+            if (startDate && dateObj < startDate) return;
+            const dateKey = dateObj.toISOString().split('T')[0];
+            const dateLabel = dateObj.toLocaleDateString('sr-RS', { day: 'numeric', month: 'numeric' });
+            if (!byDate[dateKey]) byDate[dateKey] = { dateKey, date: dateLabel, created: 0, processed: 0 };
+            byDate[dateKey].created++;
+        });
+
+        // Obrađeni zahtevi (processed_requests)
+        (processedRequests || []).forEach(r => {
+            if (!r.processed_at) return;
+            const dateObj = new Date(r.processed_at);
+            if (startDate && dateObj < startDate) return;
+            const dateKey = dateObj.toISOString().split('T')[0];
+            const dateLabel = dateObj.toLocaleDateString('sr-RS', { day: 'numeric', month: 'numeric' });
+            if (!byDate[dateKey]) byDate[dateKey] = { dateKey, date: dateLabel, created: 0, processed: 0 };
+            byDate[dateKey].processed++;
+        });
+
+        return Object.entries(byDate)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([, data]) => data)
+            .slice(-14);
+    };
+
     const totalWeight = calculateTotalWeight(filteredRequests);
     const weightByType = getWeightByWasteType();
     const weightByClient = getWeightByClient();
     const requestsByDate = getRequestsByDate();
     const weightByDate = getWeightByDate();
+    const createdVsProcessed = getCreatedVsProcessedByDate();
     const requestsWithWeight = filteredRequests.filter(r => r.weight).length;
 
     const calculateAverageTime = () => {
@@ -467,6 +534,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                 wasteTypes,
                 clients: uniqueClients,
                 drivers,
+                pickupRequests,
                 fileName: fileNameParts.join('_'),
                 sheets: excelSheets
             });
@@ -668,6 +736,116 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                     )}
                 </div>
             </div>
+
+            {/* Created vs Processed Comparison Chart */}
+            {createdVsProcessed.length > 0 && (
+                <div className="bg-white rounded-2xl border p-5 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                        <div>
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <BarChart3 className="text-indigo-600" size={20} />
+                                Kreirani vs Obrađeni zahtevi
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-1">Uporedni pregled broja zahteva po danu</p>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 rounded bg-indigo-500" />
+                                <span className="text-slate-600">Kreirani</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 rounded bg-emerald-500" />
+                                <span className="text-slate-600">Obrađeni</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex">
+                        {/* Y-axis */}
+                        <div className="flex flex-col justify-between pr-2 text-right w-10" style={{ height: '180px' }}>
+                            {(() => {
+                                const maxVal = Math.max(...createdVsProcessed.map(d => Math.max(d.created, d.processed)), 1);
+                                return (
+                                    <>
+                                        <span className="text-[10px] text-slate-500">{maxVal}</span>
+                                        <span className="text-[10px] text-slate-500">{Math.round(maxVal / 2)}</span>
+                                        <span className="text-[10px] text-slate-500">0</span>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                        {/* Chart */}
+                        <div className="flex-1 flex items-end justify-between gap-2 border-l border-slate-200 pl-2" style={{ height: '180px' }}>
+                            {createdVsProcessed.map((item, idx) => {
+                                const maxVal = Math.max(...createdVsProcessed.map(d => Math.max(d.created, d.processed)), 1);
+                                const createdHeight = Math.max((item.created / maxVal) * 160, item.created > 0 ? 4 : 0);
+                                const processedHeight = Math.max((item.processed / maxVal) * 160, item.processed > 0 ? 4 : 0);
+                                return (
+                                    <div key={idx} className="flex-1 flex items-end justify-center gap-0.5 group" style={{ height: '180px' }}>
+                                        {/* Kreirani */}
+                                        <div
+                                            className="w-[45%] bg-gradient-to-t from-indigo-600 to-indigo-400 rounded-t transition-all duration-300 cursor-pointer hover:from-indigo-500 hover:to-indigo-300 relative"
+                                            style={{ height: `${createdHeight}px` }}
+                                            title={`Kreirani: ${item.created}`}
+                                        >
+                                            {item.created > 0 && (
+                                                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-indigo-800 text-white text-[9px] px-1 py-0.5 rounded whitespace-nowrap z-10">
+                                                    {item.created}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Obrađeni */}
+                                        <div
+                                            className="w-[45%] bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t transition-all duration-300 cursor-pointer hover:from-emerald-500 hover:to-emerald-300 relative"
+                                            style={{ height: `${processedHeight}px` }}
+                                            title={`Obrađeni: ${item.processed}`}
+                                        >
+                                            {item.processed > 0 && (
+                                                <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-emerald-800 text-white text-[9px] px-1 py-0.5 rounded whitespace-nowrap z-10">
+                                                    {item.processed}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    {/* X-axis labels */}
+                    <div className="flex ml-10 mt-2">
+                        {createdVsProcessed.map((item, idx) => (
+                            <span key={idx} className="flex-1 text-[10px] text-slate-400 text-center truncate">
+                                {item.date}
+                            </span>
+                        ))}
+                    </div>
+                    {/* Summary stats */}
+                    <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-slate-100">
+                        <div className="text-center">
+                            <span className="text-lg font-bold text-indigo-600">{createdVsProcessed.reduce((sum, d) => sum + d.created, 0)}</span>
+                            <p className="text-[10px] text-slate-500">ukupno kreirano</p>
+                        </div>
+                        <div className="text-center">
+                            <span className="text-lg font-bold text-emerald-600">{createdVsProcessed.reduce((sum, d) => sum + d.processed, 0)}</span>
+                            <p className="text-[10px] text-slate-500">ukupno obrađeno</p>
+                        </div>
+                        <div className="text-center">
+                            {(() => {
+                                const created = createdVsProcessed.reduce((sum, d) => sum + d.created, 0);
+                                const processed = createdVsProcessed.reduce((sum, d) => sum + d.processed, 0);
+                                const diff = created - processed;
+                                return (
+                                    <>
+                                        <span className={`text-lg font-bold ${diff > 0 ? 'text-amber-600' : diff < 0 ? 'text-green-600' : 'text-slate-600'}`}>
+                                            {diff > 0 ? '+' : ''}{diff}
+                                        </span>
+                                        <p className="text-[10px] text-slate-500">razlika</p>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Charts Row 2 */}
             <div className="grid md:grid-cols-2 gap-6">

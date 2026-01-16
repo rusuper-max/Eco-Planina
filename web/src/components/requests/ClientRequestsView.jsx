@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, ArrowUp, ArrowDown, Calendar, Clock, Truck, Phone, User } from 'lucide-react';
+import { CheckCircle2, ArrowUp, ArrowDown, Calendar, Clock, Truck, Phone, User, Trash2, MessageCircle, Loader2, X } from 'lucide-react';
 import { CountdownTimer, FillLevelBar } from '../common';
 
 // Helper to get status label and color
@@ -19,7 +19,9 @@ const getAssignmentStatus = (status) => {
 /**
  * Client Requests View - Shows active pending requests
  */
-export const ClientRequestsView = ({ requests, wasteTypes }) => {
+export const ClientRequestsView = ({ requests, wasteTypes, onDeleteRequest, onContactManager }) => {
+    const [deletingId, setDeletingId] = useState(null);
+    const [showContactModal, setShowContactModal] = useState(null); // request with assignment info
     const [sortBy, setSortBy] = useState('date'); // date, urgency, type
     const [sortDir, setSortDir] = useState('desc');
 
@@ -48,7 +50,78 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
         else { setSortBy(key); setSortDir('asc'); }
     };
 
+    const handleDeleteClick = async (request) => {
+        // Check if assigned to driver
+        if (request.driver_assignment) {
+            setShowContactModal(request);
+            return;
+        }
+
+        // Confirm deletion
+        if (!window.confirm(`Da li ste sigurni da želite da obrišete zahtev za "${request.waste_label}"?`)) {
+            return;
+        }
+
+        setDeletingId(request.id);
+        try {
+            await onDeleteRequest?.(request.id);
+        } catch (error) {
+            alert('Greška pri brisanju zahteva. Pokušajte ponovo.');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     return (
+        <>
+        {/* Contact Manager Modal */}
+        {showContactModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-slate-800">Zahtev dodeljen vozaču</h3>
+                        <button onClick={() => setShowContactModal(null)} className="p-1 hover:bg-slate-100 rounded-lg">
+                            <X size={20} className="text-slate-500" />
+                        </button>
+                    </div>
+                    <div className="bg-blue-50 rounded-xl p-4 mb-4">
+                        <div className="flex items-center gap-3 mb-2">
+                            <Truck size={24} className="text-blue-600" />
+                            <div>
+                                <p className="font-medium text-slate-800">
+                                    {showContactModal.driver_assignment?.driver_name || 'Vozač'}
+                                </p>
+                                <p className="text-sm text-slate-500">je preuzeo vaš zahtev</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-slate-600 mb-4">
+                        Vaš zahtev za <strong>{showContactModal.waste_label}</strong> je već dodeljen vozaču.
+                        Kontaktirajte menadžera ako želite da otkažete.
+                    </p>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowContactModal(null)}
+                            className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 font-medium hover:bg-slate-50"
+                        >
+                            Zatvori
+                        </button>
+                        {showContactModal.driver_assignment?.assigned_by_id && onContactManager && (
+                            <button
+                                onClick={() => {
+                                    onContactManager(showContactModal.driver_assignment.assigned_by_id);
+                                    setShowContactModal(null);
+                                }}
+                                className="flex-1 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 flex items-center justify-center gap-2"
+                            >
+                                <MessageCircle size={18} />
+                                Kontaktiraj menadžera
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        )}
         <div className="bg-white rounded-2xl border overflow-hidden">
             <div className="p-4 border-b bg-slate-50 flex items-center justify-between">
                 <h2 className="font-bold text-lg">Aktivni zahtevi ({requests.length})</h2>
@@ -146,11 +219,40 @@ export const ClientRequestsView = ({ requests, wasteTypes }) => {
                                     )}
                                 </div>
                             )}
+                            {/* Delete/Cancel button */}
+                            {onDeleteRequest && (
+                                <div className="mt-4 pt-4 border-t border-slate-100">
+                                    <button
+                                        onClick={() => handleDeleteClick(r)}
+                                        disabled={deletingId === r.id}
+                                        className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-colors ${
+                                            assignment
+                                                ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                                : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                        }`}
+                                    >
+                                        {deletingId === r.id ? (
+                                            <Loader2 size={18} className="animate-spin" />
+                                        ) : assignment ? (
+                                            <>
+                                                <MessageCircle size={18} />
+                                                Kontaktiraj menadžera za otkazivanje
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Trash2 size={18} />
+                                                Obriši zahtev
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
         </div>
+        </>
     );
 };
 

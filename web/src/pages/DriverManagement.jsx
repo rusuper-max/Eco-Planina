@@ -356,14 +356,17 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
             });
 
             if (error) throw error;
-            if (data === false) {
-                throw new Error('Nemate dozvolu za ovu akciju');
+
+            // RPC returns JSON object with success and assigned_count
+            const result = typeof data === 'string' ? JSON.parse(data) : data;
+            if (!result?.success) {
+                throw new Error(result?.error || 'Nemate dozvolu za ovu akciju');
             }
 
             // Refresh data
             await fetchAssignments();
             setSelectedRequests(new Set());
-            toast.success(`${requestIds.length} zahteva dodeljeno vozaču ${selectedDriver.name}`);
+            toast.success(`${result.assigned_count || requestIds.length} zahteva dodeljeno vozaču ${selectedDriver.name}`);
         } catch (err) {
             console.error('Error assigning requests:', err);
             toast.error('Greška pri dodeljivanju: ' + err.message);
