@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { History, Loader2, Search, X, ArrowUp, ArrowDown, Send, CheckCircle2, Image, ChevronDown, Download } from 'lucide-react';
+import { History, Loader2, Search, X, ArrowUp, ArrowDown, Send, CheckCircle2, Image, ChevronDown, Download, EyeOff } from 'lucide-react';
 import { Modal, FillLevelBar } from '../common';
 
 /**
  * Client History View - Shows past processed requests with pagination and search
  */
-export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
+export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortBy, setSortBy] = useState('processed_at'); // processed_at, created_at, type
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [hidingId, setHidingId] = useState(null);
     const itemsPerPage = 10;
 
     // Reset to page 1 when search changes
@@ -153,6 +154,31 @@ export const ClientHistoryView = ({ history, loading, wasteTypes }) => {
                                             className="px-3 py-1.5 text-xs font-medium rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1"
                                         >
                                             <Image size={14} /> Dokaz
+                                        </button>
+                                    )}
+                                    {onHide && (
+                                        <button
+                                            onClick={async () => {
+                                                if (!window.confirm('Sakriti ovaj zahtev iz istorije? Možete ga ponovo videti samo kontaktiranjem podrške.')) return;
+                                                setHidingId(r.id);
+                                                try {
+                                                    await onHide(r.id);
+                                                } catch (err) {
+                                                    alert('Greška: ' + (err.message || 'Pokušajte ponovo'));
+                                                } finally {
+                                                    setHidingId(null);
+                                                }
+                                            }}
+                                            disabled={hidingId === r.id}
+                                            className="px-3 py-1.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 flex items-center gap-1 disabled:opacity-50"
+                                            title="Sakrij iz istorije"
+                                        >
+                                            {hidingId === r.id ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <EyeOff size={14} />
+                                            )}
+                                            Sakrij
                                         </button>
                                     )}
                                 </div>

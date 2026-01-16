@@ -68,8 +68,11 @@ const HistoryCard = ({ item, wasteTypes }) => {
 
     const wasteIcon = wasteTypes?.find(w => w.id === item.waste_type)?.icon || '📦';
 
-    // Timeline steps
-    const steps = [
+    // Check if this is a "retroactive assignment" (driver assigned after processing, not before)
+    const isRetroactiveAssignment = item.source === 'processed_request' || (!item.assigned_at && !item.picked_up_at);
+
+    // Timeline steps - only show if driver actually worked on this request
+    const steps = isRetroactiveAssignment ? [] : [
         {
             key: 'assigned',
             label: 'Dodeljeno',
@@ -169,24 +172,34 @@ const HistoryCard = ({ item, wasteTypes }) => {
                 {/* Mini timeline preview (collapsed) */}
                 {!expanded && (
                     <div className="flex items-center gap-1 mt-3">
-                        {steps.map((step, idx) => (
-                            <div key={step.key} className="flex items-center">
-                                <div className={`w-2 h-2 rounded-full ${step.completed ? step.color : 'bg-slate-200'}`} />
-                                {idx < steps.length - 1 && (
-                                    <div className={`w-8 h-0.5 ${step.completed && steps[idx + 1].completed ? 'bg-slate-300' : 'bg-slate-200'}`} />
-                                )}
-                            </div>
-                        ))}
-                        {/* Show processed (purple) dot if status is 'completed' */}
-                        {item.status === 'completed' && (
+                        {isRetroactiveAssignment ? (
+                            // Show special badge for retroactive assignments
+                            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                                Evidentirano naknadno
+                            </span>
+                        ) : (
+                            // Normal timeline dots
                             <>
-                                <div className="w-8 h-0.5 bg-slate-300" />
-                                <div className="w-2 h-2 rounded-full bg-purple-500" />
+                                {steps.map((step, idx) => (
+                                    <div key={step.key} className="flex items-center">
+                                        <div className={`w-2 h-2 rounded-full ${step.completed ? step.color : 'bg-slate-200'}`} />
+                                        {idx < steps.length - 1 && (
+                                            <div className={`w-8 h-0.5 ${step.completed && steps[idx + 1].completed ? 'bg-slate-300' : 'bg-slate-200'}`} />
+                                        )}
+                                    </div>
+                                ))}
+                                {/* Show processed (purple) dot if status is 'completed' */}
+                                {item.status === 'completed' && (
+                                    <>
+                                        <div className="w-8 h-0.5 bg-slate-300" />
+                                        <div className="w-2 h-2 rounded-full bg-purple-500" />
+                                    </>
+                                )}
+                                <span className="text-xs text-slate-400 ml-2">
+                                    Ukupno: {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
+                                </span>
                             </>
                         )}
-                        <span className="text-xs text-slate-400 ml-2">
-                            Ukupno: {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
-                        </span>
                     </div>
                 )}
             </div>
@@ -194,115 +207,139 @@ const HistoryCard = ({ item, wasteTypes }) => {
             {/* Expanded content */}
             {expanded && (
                 <div className="px-4 pb-4 border-t bg-slate-50">
-                    {/* Timeline */}
-                    <div className="py-4">
-                        <div className="relative">
-                            {steps.map((step, idx) => {
-                                const Icon = step.icon;
-                                const nextStep = steps[idx + 1];
-                                const timeDiff = nextStep ? getTimeDiff(step.time, nextStep.time) : null;
+                    {/* Show different content for retroactive assignments */}
+                    {isRetroactiveAssignment ? (
+                        <div className="py-4">
+                            <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shrink-0">
+                                        <FileText size={20} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium text-purple-800">Evidentirano naknadno</p>
+                                        <p className="text-sm text-purple-600 mt-1">
+                                            Ovaj zahtev je obrađen od strane menadžera, a vi ste evidentirani kao vozač naknadno.
+                                        </p>
+                                        <p className="text-xs text-purple-500 mt-2">
+                                            Obrađeno: {formatDateTime(item.delivered_at || item.completed_at)}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Normal timeline */
+                        <div className="py-4">
+                            <div className="relative">
+                                {steps.map((step, idx) => {
+                                    const Icon = step.icon;
+                                    const nextStep = steps[idx + 1];
+                                    const timeDiff = nextStep ? getTimeDiff(step.time, nextStep.time) : null;
 
-                                return (
-                                    <div key={step.key} className="flex items-start mb-0">
-                                        {/* Icon and line */}
-                                        <div className="flex flex-col items-center mr-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step.completed ? step.color : 'bg-slate-200'}`}>
-                                                <Icon size={16} className="text-white" />
-                                            </div>
-                                            {idx < steps.length - 1 && (
-                                                <div className="relative w-0.5 h-12 bg-slate-200 my-1">
-                                                    {step.completed && nextStep?.completed && (
-                                                        <div className="absolute inset-0 bg-slate-400" />
-                                                    )}
-                                                    {/* Time diff badge */}
-                                                    {timeDiff && (
-                                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap">
-                                                            <span className="text-[10px] text-slate-400 bg-white px-1.5 py-0.5 rounded border">
-                                                                {timeDiff}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                    return (
+                                        <div key={step.key} className="flex items-start mb-0">
+                                            {/* Icon and line */}
+                                            <div className="flex flex-col items-center mr-3">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step.completed ? step.color : 'bg-slate-200'}`}>
+                                                    <Icon size={16} className="text-white" />
                                                 </div>
-                                            )}
-                                        </div>
+                                                {idx < steps.length - 1 && (
+                                                    <div className="relative w-0.5 h-12 bg-slate-200 my-1">
+                                                        {step.completed && nextStep?.completed && (
+                                                            <div className="absolute inset-0 bg-slate-400" />
+                                                        )}
+                                                        {/* Time diff badge */}
+                                                        {timeDiff && (
+                                                            <div className="absolute left-3 top-1/2 -translate-y-1/2 whitespace-nowrap">
+                                                                <span className="text-[10px] text-slate-400 bg-white px-1.5 py-0.5 rounded border">
+                                                                    {timeDiff}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
 
-                                        {/* Content */}
-                                        <div className="flex-1 pb-4">
-                                            <div className="flex items-center justify-between">
-                                                <p className={`font-medium ${step.completed ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                    {step.label}
-                                                </p>
-                                                <span className="text-xs text-slate-500">
-                                                    {formatDateTime(step.time)}
-                                                </span>
+                                            {/* Content */}
+                                            <div className="flex-1 pb-4">
+                                                <div className="flex items-center justify-between">
+                                                    <p className={`font-medium ${step.completed ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                        {step.label}
+                                                    </p>
+                                                    <span className="text-xs text-slate-500">
+                                                        {formatDateTime(step.time)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
 
-                            {/* Processed step (if data exists) */}
-                            {processedData && (
-                                <div className="flex items-start">
-                                    <div className="flex flex-col items-center mr-3">
-                                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-500">
-                                            <FileText size={16} className="text-white" />
+                                {/* Processed step (if data exists) */}
+                                {processedData && (
+                                    <div className="flex items-start">
+                                        <div className="flex flex-col items-center mr-3">
+                                            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-purple-500">
+                                                <FileText size={16} className="text-white" />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center justify-between">
-                                            <p className="font-medium text-slate-800">Obrađeno</p>
-                                            <span className="text-xs text-slate-500">
-                                                {formatDateTime(processedData.processed_at)}
-                                            </span>
-                                        </div>
-
-                                        {/* Weight and proof */}
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                            {processedData.weight && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
-                                                    <Scale size={12} />
-                                                    {processedData.weight} {processedData.weight_unit || 'kg'}
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between">
+                                                <p className="font-medium text-slate-800">Obrađeno</p>
+                                                <span className="text-xs text-slate-500">
+                                                    {formatDateTime(processedData.processed_at)}
                                                 </span>
-                                            )}
-                                            {processedData.proof_url && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setShowProofModal(true); }}
-                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors"
-                                                >
-                                                    <ImageIcon size={12} />
-                                                    Dokaznica
-                                                </button>
+                                            </div>
+
+                                            {/* Weight and proof */}
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {processedData.weight && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                                                        <Scale size={12} />
+                                                        {processedData.weight} {processedData.weight_unit || 'kg'}
+                                                    </span>
+                                                )}
+                                                {processedData.proof_url && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setShowProofModal(true); }}
+                                                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors"
+                                                    >
+                                                        <ImageIcon size={12} />
+                                                        Dokaznica
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {processedData.notes && (
+                                                <p className="mt-2 text-xs text-slate-500 italic">
+                                                    "{processedData.notes}"
+                                                </p>
                                             )}
                                         </div>
-
-                                        {processedData.notes && (
-                                            <p className="mt-2 text-xs text-slate-500 italic">
-                                                "{processedData.notes}"
-                                            </p>
-                                        )}
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {loadingProcessed && (
-                                <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
-                                    <RefreshCw size={12} className="animate-spin" />
-                                    Učitavanje podataka...
-                                </div>
-                            )}
+                                {loadingProcessed && (
+                                    <div className="flex items-center gap-2 text-xs text-slate-400 mt-2">
+                                        <RefreshCw size={12} className="animate-spin" />
+                                        Učitavanje podataka...
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
-                    {/* Summary footer */}
-                    <div className="pt-3 border-t border-slate-200">
-                        <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-500">Ukupno vreme:</span>
-                            <span className="font-medium text-slate-700">
-                                {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
-                            </span>
+                    {/* Summary footer - only for normal timeline */}
+                    {!isRetroactiveAssignment && (
+                        <div className="pt-3 border-t border-slate-200">
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-slate-500">Ukupno vreme:</span>
+                                <span className="font-medium text-slate-700">
+                                    {getTimeDiff(item.assigned_at, item.delivered_at) || '-'}
+                                </span>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
@@ -510,9 +547,8 @@ export default function DriverDashboard() {
     const loadHistory = async () => {
         setLoadingHistory(true);
         try {
-            // Get delivered/completed assignments - data is stored in the assignment itself
-            // Include both 'delivered' and 'completed' status to show full history
-            const { data, error } = await supabase
+            // 1. Get delivered/completed assignments from driver_assignments
+            const { data: assignments, error: assignmentsError } = await supabase
                 .from('driver_assignments')
                 .select('*')
                 .eq('driver_id', myUserId)
@@ -521,17 +557,57 @@ export default function DriverDashboard() {
                 .order('delivered_at', { ascending: false, nullsFirst: false })
                 .limit(50);
 
-            if (error) throw error;
-            console.log('[Driver History] Loaded:', data?.length, 'items for driver:', myUserId);
+            if (assignmentsError) throw assignmentsError;
 
-            // Debug: Also check ALL assignments for this driver (any status)
-            const { data: allData } = await supabase
-                .from('driver_assignments')
-                .select('id, status, deleted_at, client_name')
-                .eq('driver_id', myUserId);
-            console.log('[Driver History] ALL assignments (any status):', allData);
+            // 2. Get processed requests where driver was assigned after processing
+            const { data: processedRequests, error: processedError } = await supabase
+                .from('processed_requests')
+                .select('*')
+                .eq('driver_id', myUserId)
+                .is('deleted_at', null)
+                .order('processed_at', { ascending: false })
+                .limit(50);
 
-            setHistoryRequests(data || []);
+            if (processedError) {
+                console.error('[Driver History] processed_requests error:', processedError);
+                // Don't throw - just continue with assignments only
+            }
+
+            console.log('[Driver History] driver_assignments:', assignments?.length || 0, 'processed_requests:', processedRequests?.length || 0);
+
+            // Map processed_requests to same format as assignments
+            const mappedProcessed = (processedRequests || []).map(p => ({
+                id: p.id,
+                request_id: p.id,
+                status: 'completed',
+                source: 'processed_request',
+                client_name: p.client_name,
+                client_address: p.client_address,
+                waste_type: p.waste_type,
+                waste_label: p.waste_label,
+                latitude: p.latitude,
+                longitude: p.longitude,
+                assigned_at: null,
+                picked_up_at: null,
+                delivered_at: p.processed_at,
+                completed_at: p.processed_at,
+                created_at: p.created_at
+            }));
+
+            // Combine and deduplicate (prefer driver_assignment if both exist)
+            const assignmentRequestIds = new Set((assignments || []).map(a => a.request_id));
+            const uniqueProcessed = mappedProcessed.filter(p => !assignmentRequestIds.has(p.id));
+
+            const combined = [...(assignments || []), ...uniqueProcessed];
+
+            // Sort by most recent timestamp
+            combined.sort((a, b) => {
+                const dateA = new Date(a.delivered_at || a.completed_at || a.created_at);
+                const dateB = new Date(b.delivered_at || b.completed_at || b.created_at);
+                return dateB - dateA;
+            });
+
+            setHistoryRequests(combined);
         } catch (err) {
             console.error('Error loading history:', err);
         } finally {

@@ -38,7 +38,7 @@ import DriverManagement from './DriverManagement';
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests } = useData();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, hideClientHistoryItem } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -323,28 +323,30 @@ export default function Dashboard() {
     };
 
     // Retroactively assign driver to processed request (from history table)
+    // Updates driver_id and driver_name directly in processed_requests table
     const handleAssignDriverToProcessed = async (requestId, driverId) => {
         try {
-            // Get the processed request to find the processed_at timestamp
-            const processedRequest = processedRequests.find(r => r.request_id === requestId || r.id === requestId);
+            const driver = companyDrivers.find(d => d.id === driverId);
 
-            // Create driver assignment with completed status
+            // Update processed_requests directly with driver info
             const { error } = await supabase
-                .from('driver_assignments')
-                .upsert({
-                    request_id: requestId,
+                .from('processed_requests')
+                .update({
                     driver_id: driverId,
-                    company_code: companyCode,
-                    status: 'completed',
-                    assigned_at: processedRequest?.processed_at || new Date().toISOString(),
-                    completed_at: processedRequest?.processed_at || new Date().toISOString()
-                }, {
-                    onConflict: 'request_id'
-                });
+                    driver_name: driver?.name || null
+                })
+                .eq('id', requestId)
+                .eq('company_code', companyCode);
 
             if (error) throw error;
 
-            const driver = companyDrivers.find(d => d.id === driverId);
+            // Update local state
+            setProcessedRequests(prev => prev.map(r =>
+                r.id === requestId
+                    ? { ...r, driver_id: driverId, driver_name: driver?.name || null }
+                    : r
+            ));
+
             toast.success(`Vozač ${driver?.name || 'Nepoznato'} evidentiran za zahtev`);
         } catch (err) {
             console.error('Error assigning driver to processed request:', err);
@@ -735,7 +737,16 @@ export default function Dashboard() {
             console.log('[Client WasteTypes] Filtered result:', clientWasteTypes?.length, 'types');
 
             if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} onDeleteRequest={removePickupRequest} />;
-            if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} />;
+            if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} onHide={async (id) => {
+                const previous = clientHistory;
+                setClientHistory(prev => prev.filter(r => r.id !== id)); // Optimistic
+                try {
+                    await hideClientHistoryItem(id);
+                } catch (err) {
+                    setClientHistory(previous); // Rollback
+                    throw err;
+                }
+            }} />;
             if (activeTab === 'info') {
                 // Informacije tab - overview of client's activity
                 return (
@@ -893,7 +904,7 @@ export default function Dashboard() {
             }} />;
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} />;
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
-            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} />;

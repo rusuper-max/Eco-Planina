@@ -13,7 +13,7 @@ const DEFAULT_WASTE_TYPES = [
 /**
  * Edit Processed Request Modal (for adding proof/weight later)
  */
-export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onSave, onClose, drivers = [], currentDriverId = null, onAssignDriver }) => {
+export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onSave, onClose, drivers = [], currentDriverId = null, onAssignDriver, driverAssignment = null }) => {
     const [proofFile, setProofFile] = useState(request?.proof_image_url || null);
     const [proofType, setProofType] = useState(request?.proof_image_url?.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image');
     const [weight, setWeight] = useState(request?.weight?.toString() || '');
@@ -22,6 +22,10 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
     const [selectedDriverId, setSelectedDriverId] = useState(currentDriverId || '');
     const [uploading, setUploading] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // Check if driver actually worked on this request (has picked_up_at or delivered_at)
+    // If so, we should NOT allow changing the driver
+    const driverActuallyWorked = driverAssignment && (driverAssignment.picked_up_at || driverAssignment.delivered_at);
 
     if (!request) return null;
 
@@ -64,7 +68,8 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
             await onSave(updates);
 
             // If driver was changed and we have the handler
-            if (onAssignDriver && selectedDriverId !== (currentDriverId || '')) {
+            // But ONLY if driver didn't actually work on this request
+            if (onAssignDriver && !driverActuallyWorked && selectedDriverId !== (currentDriverId || '')) {
                 if (selectedDriverId) {
                     await onAssignDriver(request.request_id || request.id, selectedDriverId);
                 }
@@ -76,11 +81,14 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
         }
     };
 
+    // Only count driver change if driver didn't actually work
+    const driverChanged = !driverActuallyWorked && selectedDriverId !== (currentDriverId || '');
+
     const hasChanges = proofFile !== request?.proof_image_url ||
         note !== (request?.processing_note || '') ||
         weight !== (request?.weight?.toString() || '') ||
         weightUnit !== (request?.weight_unit || 'kg') ||
-        selectedDriverId !== (currentDriverId || '');
+        driverChanged;
 
     return (
         <Modal open={!!request} onClose={onClose} title="Dopuni podatke o obradi">
@@ -123,27 +131,55 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
 
                 {/* Driver selection (retroactive assignment) */}
                 {drivers.length > 0 && (
-                    <div className="p-4 bg-purple-50 rounded-xl">
+                    <div className={`p-4 rounded-xl ${driverActuallyWorked ? 'bg-amber-50 border border-amber-200' : 'bg-purple-50'}`}>
                         <p className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-2">
-                            <Truck size={18} className="text-purple-600" />
+                            <Truck size={18} className={driverActuallyWorked ? 'text-amber-600' : 'text-purple-600'} />
                             Vozač koji je obradio zahtev
                         </p>
-                        <select
-                            value={selectedDriverId}
-                            onChange={(e) => setSelectedDriverId(e.target.value)}
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm bg-white"
-                        >
-                            <option value="">Bez vozača / Nepoznato</option>
-                            {drivers.map(driver => (
-                                <option key={driver.id} value={driver.id}>
-                                    {driver.name} {driver.phone ? `(${driver.phone})` : ''}
-                                </option>
-                            ))}
-                        </select>
-                        {!currentDriverId && selectedDriverId && (
-                            <p className="text-xs text-purple-600 mt-2">
-                                Vozač će biti naknadno evidentiran za ovaj zahtev
-                            </p>
+
+                        {driverActuallyWorked ? (
+                            /* Driver actually worked - show locked info */
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-amber-200">
+                                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                                        <Truck size={20} className="text-amber-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium text-slate-800">
+                                            {driverAssignment?.driver?.name || drivers.find(d => d.id === currentDriverId)?.name || 'Vozač'}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            Preuzeto: {driverAssignment?.picked_up_at ? new Date(driverAssignment.picked_up_at).toLocaleString('sr-RS', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                                            {driverAssignment?.delivered_at && ` • Dovezeno: ${new Date(driverAssignment.delivered_at).toLocaleString('sr-RS', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-amber-700 flex items-center gap-1">
+                                    <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
+                                    Vozač je zaista vozio ovaj zahtev. Promena vozača nije moguća jer bi se izgubili podaci o preuzimanju i dostavi.
+                                </p>
+                            </div>
+                        ) : (
+                            /* No actual work done - allow driver change */
+                            <>
+                                <select
+                                    value={selectedDriverId}
+                                    onChange={(e) => setSelectedDriverId(e.target.value)}
+                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 outline-none text-sm bg-white"
+                                >
+                                    <option value="">Bez vozača / Nepoznato</option>
+                                    {drivers.map(driver => (
+                                        <option key={driver.id} value={driver.id}>
+                                            {driver.name} {driver.phone ? `(${driver.phone})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                {!currentDriverId && selectedDriverId && (
+                                    <p className="text-xs text-purple-600 mt-2">
+                                        Vozač će biti naknadno evidentiran za ovaj zahtev
+                                    </p>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

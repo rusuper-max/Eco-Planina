@@ -110,12 +110,40 @@ export const DataProvider = ({ children }) => {
                 .select('*')
                 .eq('client_id', user.id)
                 .is('deleted_at', null)
+                .is('client_hidden_at', null) // Client's own hide filter
                 .order('processed_at', { ascending: false });
             if (error) throw error;
             return data || [];
         } catch (error) {
             console.error('Error fetching client history:', error);
             return [];
+        }
+    };
+
+    // Client can hide processed request from their own history
+    const hideClientHistoryItem = async (id) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        try {
+            const { data, error } = await supabase
+                .from('processed_requests')
+                .update({ client_hidden_at: new Date().toISOString() })
+                .eq('id', id)
+                .eq('client_id', user.id) // Security: only own requests
+                .select();
+
+            if (error) {
+                console.error('Hide client history error:', error);
+                throw error;
+            }
+
+            if (!data || data.length === 0) {
+                throw new Error('Zahtev nije pronađen');
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('hideClientHistoryItem failed:', error);
+            throw error;
         }
     };
 
@@ -905,6 +933,7 @@ export const DataProvider = ({ children }) => {
         clearProcessedNotification,
         fetchClientRequests,
         fetchClientHistory,
+        hideClientHistoryItem,
         removePickupRequest,
         markRequestAsProcessed,
         updateProcessedRequest,

@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     History, Filter, Search, ChevronDown, ChevronUp, RefreshCw,
     User, Truck, Package, CheckCircle2, UserPlus, Shield, XCircle,
-    Calendar, Clock, Building2, X, Eye, ExternalLink, Users
+    Calendar, Clock, Building2, X, Eye, ExternalLink, Users,
+    ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { supabase } from '../../config/supabase';
 
@@ -50,73 +51,82 @@ export const ActivityLogPage = ({ companyCode, userRole, onUserClick, onClientCl
     const [selectedLog, setSelectedLog] = useState(null);
 
     // Paginacija
-    const [page, setPage] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const PAGE_SIZE = 50;
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const PAGE_SIZE = 20;
+
+    // Build base query filters
+    const buildQueryFilters = (query) => {
+        let q = query;
+
+        // Filter po firmi (osim za developera koji vidi sve)
+        if (userRole !== 'developer' && companyCode) {
+            q = q.eq('company_code', companyCode);
+        }
+
+        // Filter po akciji
+        if (filterAction !== 'all') {
+            q = q.eq('action', filterAction);
+        }
+
+        // Filter po tipu entiteta
+        if (filterEntity !== 'all') {
+            q = q.eq('entity_type', filterEntity);
+        }
+
+        // Filter po datumu
+        if (filterDateRange !== 'all') {
+            const now = new Date();
+            let startDate;
+            switch (filterDateRange) {
+                case 'today':
+                    startDate = new Date(now.setHours(0, 0, 0, 0));
+                    break;
+                case 'week':
+                    startDate = new Date(now.setDate(now.getDate() - 7));
+                    break;
+                case 'month':
+                    startDate = new Date(now.setMonth(now.getMonth() - 1));
+                    break;
+                default:
+                    startDate = null;
+            }
+            if (startDate) {
+                q = q.gte('created_at', startDate.toISOString());
+            }
+        }
+
+        return q;
+    };
 
     // Ucitaj logove
-    const fetchLogs = async (reset = false) => {
+    const fetchLogs = async (page = 1) => {
         setLoading(true);
         setError(null);
 
         try {
-            const currentPage = reset ? 0 : page;
+            // First get total count
+            let countQuery = supabase
+                .from('activity_logs')
+                .select('*', { count: 'exact', head: true });
+            countQuery = buildQueryFilters(countQuery);
+            const { count } = await countQuery;
+            setTotalCount(count || 0);
 
-            let query = supabase
+            // Then get paginated data
+            let dataQuery = supabase
                 .from('activity_logs')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1);
+                .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+            dataQuery = buildQueryFilters(dataQuery);
 
-            // Filter po firmi (osim za developera koji vidi sve)
-            if (userRole !== 'developer' && companyCode) {
-                query = query.eq('company_code', companyCode);
-            }
-
-            // Filter po akciji
-            if (filterAction !== 'all') {
-                query = query.eq('action', filterAction);
-            }
-
-            // Filter po tipu entiteta
-            if (filterEntity !== 'all') {
-                query = query.eq('entity_type', filterEntity);
-            }
-
-            // Filter po datumu
-            if (filterDateRange !== 'all') {
-                const now = new Date();
-                let startDate;
-                switch (filterDateRange) {
-                    case 'today':
-                        startDate = new Date(now.setHours(0, 0, 0, 0));
-                        break;
-                    case 'week':
-                        startDate = new Date(now.setDate(now.getDate() - 7));
-                        break;
-                    case 'month':
-                        startDate = new Date(now.setMonth(now.getMonth() - 1));
-                        break;
-                    default:
-                        startDate = null;
-                }
-                if (startDate) {
-                    query = query.gte('created_at', startDate.toISOString());
-                }
-            }
-
-            const { data, error: fetchError } = await query;
+            const { data, error: fetchError } = await dataQuery;
 
             if (fetchError) throw fetchError;
 
-            if (reset) {
-                setLogs(data || []);
-                setPage(0);
-            } else {
-                setLogs(prev => [...prev, ...(data || [])]);
-            }
-
-            setHasMore((data?.length || 0) === PAGE_SIZE);
+            setLogs(data || []);
+            setCurrentPage(page);
         } catch (err) {
             console.error('Error fetching activity logs:', err);
             setError('Greska pri ucitavanju logova');
@@ -127,8 +137,11 @@ export const ActivityLogPage = ({ companyCode, userRole, onUserClick, onClientCl
 
     // Ucitaj pri mount-u i kad se filteri promene
     useEffect(() => {
-        fetchLogs(true);
+        fetchLogs(1); // Reset to page 1 when filters change
     }, [companyCode, filterAction, filterEntity, filterDateRange]);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
     // Filtrirani logovi (po search term-u)
     const filteredLogs = useMemo(() => {
@@ -226,7 +239,7 @@ export const ActivityLogPage = ({ companyCode, userRole, onUserClick, onClientCl
 
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => fetchLogs(true)}
+                        onClick={() => fetchLogs(currentPage)}
                         className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                         title="Osvezi"
                     >
@@ -424,21 +437,128 @@ export const ActivityLogPage = ({ companyCode, userRole, onUserClick, onClientCl
                     </div>
                 )}
 
-                {/* Load more */}
-                {hasMore && !loading && filteredLogs.length > 0 && (
-                    <div className="p-4 border-t border-slate-100">
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-xl border border-slate-200 p-4">
+                    {/* Info */}
+                    <div className="text-sm text-slate-500">
+                        Prikazano {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, totalCount)} od {totalCount} aktivnosti
+                    </div>
+
+                    {/* Page controls */}
+                    <div className="flex items-center gap-1">
+                        {/* First page */}
                         <button
-                            onClick={() => {
-                                setPage(prev => prev + 1);
-                                fetchLogs(false);
-                            }}
-                            className="w-full py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                            onClick={() => fetchLogs(1)}
+                            disabled={currentPage === 1 || loading}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Prva stranica"
                         >
-                            Ucitaj jos...
+                            <ChevronsLeft className="w-4 h-4" />
+                        </button>
+
+                        {/* Previous page */}
+                        <button
+                            onClick={() => fetchLogs(currentPage - 1)}
+                            disabled={currentPage === 1 || loading}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Prethodna"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        {/* Page numbers */}
+                        <div className="flex items-center gap-1">
+                            {(() => {
+                                const pages = [];
+                                const maxVisible = 5;
+                                let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+                                let end = Math.min(totalPages, start + maxVisible - 1);
+
+                                if (end - start + 1 < maxVisible) {
+                                    start = Math.max(1, end - maxVisible + 1);
+                                }
+
+                                // First page + ellipsis
+                                if (start > 1) {
+                                    pages.push(
+                                        <button
+                                            key={1}
+                                            onClick={() => fetchLogs(1)}
+                                            disabled={loading}
+                                            className="w-9 h-9 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                                        >
+                                            1
+                                        </button>
+                                    );
+                                    if (start > 2) {
+                                        pages.push(<span key="start-dots" className="px-1 text-slate-400">...</span>);
+                                    }
+                                }
+
+                                // Visible pages
+                                for (let i = start; i <= end; i++) {
+                                    pages.push(
+                                        <button
+                                            key={i}
+                                            onClick={() => fetchLogs(i)}
+                                            disabled={loading}
+                                            className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                                                currentPage === i
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                            {i}
+                                        </button>
+                                    );
+                                }
+
+                                // Last page + ellipsis
+                                if (end < totalPages) {
+                                    if (end < totalPages - 1) {
+                                        pages.push(<span key="end-dots" className="px-1 text-slate-400">...</span>);
+                                    }
+                                    pages.push(
+                                        <button
+                                            key={totalPages}
+                                            onClick={() => fetchLogs(totalPages)}
+                                            disabled={loading}
+                                            className="w-9 h-9 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                                        >
+                                            {totalPages}
+                                        </button>
+                                    );
+                                }
+
+                                return pages;
+                            })()}
+                        </div>
+
+                        {/* Next page */}
+                        <button
+                            onClick={() => fetchLogs(currentPage + 1)}
+                            disabled={currentPage === totalPages || loading}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Sledeca"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+
+                        {/* Last page */}
+                        <button
+                            onClick={() => fetchLogs(totalPages)}
+                            disabled={currentPage === totalPages || loading}
+                            className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            title="Poslednja stranica"
+                        >
+                            <ChevronsRight className="w-4 h-4" />
                         </button>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Stats summary */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

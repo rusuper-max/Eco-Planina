@@ -543,8 +543,9 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     }}
                     onClose={() => setEditingRequest(null)}
                     drivers={drivers}
-                    currentDriverId={driverAssignments[editingRequest.request_id]?.driver?.id || null}
+                    currentDriverId={driverAssignments[editingRequest.request_id]?.driver?.id || editingRequest.driver_id || null}
                     onAssignDriver={onAssignDriverToProcessed}
+                    driverAssignment={driverAssignments[editingRequest.request_id]}
                 />
             )}
 
