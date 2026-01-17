@@ -370,28 +370,51 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const fetchProcessedRequests = async () => {
-        if (!companyCode) return [];
+    const fetchProcessedRequests = async ({ page = 1, pageSize = 10, filters = {} } = {}) => {
+        if (!companyCode) return { data: [], count: 0 };
         try {
+            console.log('DEBUG inside fetchProcessedRequests', { page, pageSize, filters });
             let query = supabase
                 .from('processed_requests')
-                .select('*')
+                .select('*', { count: 'exact' })
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('processed_at', { ascending: false });
 
-            // Menadžeri vide samo svoju filijalu
-            // Company admin, admin i developer vide sve filijale
+            // RLS filter is strict, but manual filtering doesn't hurt
             if (user?.role === 'manager' && user?.region_id) {
                 query = query.eq('region_id', user.region_id);
             }
 
-            const { data, error } = await query;
+            // Apply filters
+            if (filters.search) {
+                const s = filters.search.toLowerCase();
+                // Naive client-side search isn't possible with server-side pagination efficiently 
+                // unless we use .or() with ilike.
+                // For now, let's try basic text matching on client_name or waste_label
+                query = query.or(`client_name.ilike.%${filters.search}%,waste_label.ilike.%${filters.search}%`);
+            }
+            if (filters.wasteType && filters.wasteType !== 'all') {
+                query = query.eq('waste_type', filters.wasteType);
+            }
+
+            // Pagination
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+            query = query.range(from, to);
+
+            const { data, error, count } = await query;
+
             if (error) throw error;
-            return data || [];
+
+            return {
+                data: data || [],
+                count: count || 0,
+                totalPages: Math.ceil((count || 0) / pageSize)
+            };
         } catch (error) {
             console.error('Error fetching processed requests:', error);
-            return [];
+            return { data: [], count: 0 };
         }
     };
 

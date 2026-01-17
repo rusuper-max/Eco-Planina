@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
+import ProofsModal from '../common/ProofsModal';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
 import { supabase } from '../../config/supabase';
 
@@ -15,7 +16,7 @@ const DEFAULT_WASTE_TYPES = [
  * History Table (Processed/Rejected Requests)
  * Enhanced version for company_admin with driver/manager info and timeline
  */
-export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false, drivers = [], onAssignDriverToProcessed }) => {
+export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false, drivers = [], onAssignDriverToProcessed, page = 1, totalPages = 1, totalCount = 0, onPageChange, loading = false }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [sortBy, setSortBy] = useState('processed_at');
@@ -458,7 +459,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                     </button>
                                 </th>
                                 <th className="hidden sm:table-cell px-4 py-3 text-center">Težina</th>
-                                <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokaz</th>
+                                <th className="hidden xs:table-cell px-2 py-3 text-center w-16">Dokazi</th>
                                 <th className="hidden md:table-cell px-4 py-3 text-left">Vozač</th>
                                 <th className="px-2 py-3 text-center w-20">Akcije</th>
                             </tr>
@@ -509,11 +510,12 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                             </td>
                                             <td className="hidden xs:table-cell px-2 py-3">
                                                 <div className="flex items-center justify-center">
-                                                    {req.proof_image_url ? (
+                                                    {/* Check for ANY proof: pickup, delivery, or processing */}
+                                                    {(req.proof_image_url || assignment?.pickup_proof_url || assignment?.delivery_proof_url) ? (
                                                         <button
                                                             onClick={() => setViewingProof(req)}
                                                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                                            title="Pogledaj dokaz"
+                                                            title="Pogledaj dokaze"
                                                         >
                                                             <Image size={18} />
                                                         </button>
@@ -603,60 +605,68 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     </table>
                 </div>
             </div>
-
-            {/* Proof Image/PDF Modal */}
-            {viewingProof && (
-                <Modal open={!!viewingProof} onClose={() => setViewingProof(null)} title="Dokaz o izvršenoj usluzi">
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                            <span className="text-2xl">{wasteTypes.find(w => w.id === viewingProof.waste_type)?.icon}</span>
-                            <div>
-                                <p className="font-medium">{viewingProof.client_name}</p>
-                                <p className="text-xs text-slate-500">{viewingProof.waste_label}</p>
-                            </div>
-                        </div>
-
-                        {/* Check if PDF or Image */}
-                        {viewingProof.proof_image_url?.toLowerCase().endsWith('.pdf') ? (
-                            <div className="border rounded-xl overflow-hidden">
-                                <iframe
-                                    src={viewingProof.proof_image_url}
-                                    className="w-full h-96"
-                                    title="PDF Dokaz"
-                                />
-                            </div>
-                        ) : (
-                            <img
-                                src={viewingProof.proof_image_url}
-                                alt="Dokaz o izvršenoj usluzi"
-                                className="w-full rounded-xl"
-                            />
-                        )}
-
-                        {viewingProof.processing_note && (
-                            <div className="p-3 bg-amber-50 rounded-xl">
-                                <p className="text-xs text-amber-600 mb-1">Napomena pri obradi</p>
-                                <p className="text-sm">{viewingProof.processing_note}</p>
-                            </div>
-                        )}
-
-                        <p className="text-xs text-slate-500 text-center">
-                            Obrađeno: {formatDateTime(viewingProof.processed_at)}
-                        </p>
-
-                        {/* Download button */}
-                        <a
-                            href={viewingProof.proof_image_url}
-                            download={`dokaz_${viewingProof.id || Date.now()}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors"
-                        >
-                            <Download size={18} />
-                            Preuzmi dokaz
-                        </a>
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 px-2">
+                    <div className="text-sm text-slate-500">
+                        Prikazano {(page - 1) * 10 + 1} - {Math.min(page * 10, totalCount)} od {totalCount} zahteva
                     </div>
-                </Modal>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => onPageChange(page - 1)}
+                            disabled={page <= 1 || loading}
+                            className="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-1"
+                        >
+                            <ChevronDown className="rotate-90" size={16} />
+                            Prethodna
+                        </button>
+                        <div className="flex items-center gap-1 px-2">
+                            <span className="text-sm font-medium text-slate-700">
+                                {page}
+                            </span>
+                            <span className="text-sm text-slate-400">/</span>
+                            <span className="text-sm text-slate-500">
+                                {totalPages}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => onPageChange(page + 1)}
+                            disabled={page >= totalPages || loading}
+                            className="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-1"
+                        >
+                            Sledeća
+                            <ChevronDown className="-rotate-90" size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
+
+
+            {/* Proofs Modal (Multi-stage) */}
+            {viewingProof && (
+                <ProofsModal
+                    open={!!viewingProof}
+                    onClose={() => setViewingProof(null)}
+                    requestCode={viewingProof.request_code}
+                    clientName={viewingProof.client_name}
+                    // Pickup proof (from driver assignments)
+                    pickupProofUrl={driverAssignments[viewingProof.driver_assignment_id]?.pickup_proof_url}
+                    pickupDriverName={viewingProof.driver_name}
+                    pickupAt={driverAssignments[viewingProof.driver_assignment_id]?.picked_up_at}
+                    // Delivery proof (from driver assignments)
+                    deliveryProofUrl={driverAssignments[viewingProof.driver_assignment_id]?.delivery_proof_url}
+                    deliveryDriverName={viewingProof.driver_name}
+                    deliveryAt={driverAssignments[viewingProof.driver_assignment_id]?.delivered_at}
+                    driverWeight={driverAssignments[viewingProof.driver_assignment_id]?.driver_weight}
+                    driverWeightUnit={driverAssignments[viewingProof.driver_assignment_id]?.driver_weight_unit}
+                    // Processing proof (from processed_requests)
+                    processingProofUrl={viewingProof.proof_image_url}
+                    processingManagerName={viewingProof.processed_by_name}
+                    processedAt={viewingProof.processed_at}
+                    processedWeight={viewingProof.weight}
+                    processedWeightUnit={viewingProof.weight_unit}
+                />
             )}
 
             {/* Edit Processed Request Modal */}

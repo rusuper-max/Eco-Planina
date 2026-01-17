@@ -13,16 +13,19 @@ const DEFAULT_WASTE_TYPES = [
 /**
  * Process Request Modal with Proof of Service photo/PDF upload
  */
-export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onProcess, onClose, hasDriverAssignment = false, drivers = [], onQuickAssign }) => {
+export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES, onProcess, onClose, hasDriverAssignment = false, drivers = [], onQuickAssign, driverAssignment = null }) => {
     const [proofFile, setProofFile] = useState(null);
     const [proofType, setProofType] = useState(null); // 'image' or 'pdf'
     const [uploading, setUploading] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [note, setNote] = useState('');
-    const [weight, setWeight] = useState('');
-    const [weightUnit, setWeightUnit] = useState('kg'); // 'kg' or 't'
+    // Pre-fill weight from driver if available
+    const [weight, setWeight] = useState(driverAssignment?.driver_weight?.toString() || '');
+    const [weightUnit, setWeightUnit] = useState(driverAssignment?.driver_weight_unit || 'kg'); // 'kg' or 't'
     const [showNoDriverWarning, setShowNoDriverWarning] = useState(false);
     const [showDriverPicker, setShowDriverPicker] = useState(false);
+
+    const hasDriverWeight = driverAssignment?.driver_weight != null;
 
     if (!request) return null;
 
@@ -217,6 +220,12 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                             </div>
                             Količina otpada (opciono)
                         </label>
+                        {hasDriverWeight && (
+                            <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-xs text-amber-700">
+                                <Truck size={14} />
+                                <span>Vozač je uneo: <strong>{driverAssignment.driver_weight} {driverAssignment.driver_weight_unit || 'kg'}</strong></span>
+                            </div>
+                        )}
                         <div className="flex gap-3">
                             <div className="relative flex-1">
                                 <input

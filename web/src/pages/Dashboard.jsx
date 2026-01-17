@@ -163,8 +163,12 @@ export default function Dashboard() {
         const intervalId = setInterval(() => {
             // console.log('DEBUG: Polling refresh...');
             fetchDriverAssignments();
-            fetchProcessedRequests().then(data => {
-                if (data) setProcessedRequests(data);
+            fetchProcessedRequests({ page: historyPage }).then(result => {
+                if (result?.data) {
+                    setProcessedRequests(result.data);
+                    setHistoryCount(result.count || 0);
+                    setHistoryTotalPages(result.totalPages || 1);
+                }
             });
         }, 30000); // 30 seconds
 
@@ -185,8 +189,10 @@ export default function Dashboard() {
                     filter: `company_code=eq.${companyCode}`
                 },
                 async () => {
-                    const updated = await fetchProcessedRequests();
-                    setProcessedRequests(updated || []);
+                    const result = await fetchProcessedRequests({ page: historyPage });
+                    setProcessedRequests(result?.data || []);
+                    if (result?.count) setHistoryCount(result.count);
+                    if (result?.totalPages) setHistoryTotalPages(result.totalPages);
                 }
             )
             .subscribe();
@@ -428,6 +434,11 @@ export default function Dashboard() {
         }
     };
 
+    // State for History Pagination
+    const [historyPage, setHistoryPage] = useState(1);
+    const [historyTotalPages, setHistoryTotalPages] = useState(1);
+    const [historyCount, setHistoryCount] = useState(0);
+
     // Load tab-specific data (doesn't block UI with spinner)
     const loadTabData = async () => {
         try {
@@ -436,12 +447,58 @@ export default function Dashboard() {
                 if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
                 if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
             } else if (userRole === 'manager' || userRole === 'company_admin') {
-                if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics' || activeTab === 'driver-analytics') && processedRequests.length === 0) {
-                    setProcessedRequests(await fetchProcessedRequests() || []);
+                if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics' || activeTab === 'driver-analytics')) {
+                    // Only fetch if history is empty OR explicitly refreshed (handled by page change)
+                    // But here we might want to ensure we have data.
+                    if (activeTab === 'history' && (processedRequests.length === 0)) {
+                        await loadHistoryPage(1);
+                    }
+                    else if (processedRequests.length === 0) {
+                        // Fallback for analytics tabs depending on all data? 
+                        // Analytics usually needs ALL data, not paginated.
+                        // WARNING: Analytics pages use processedRequests. If we paginate, analytics might break if they rely on this state.
+                        // Let's check analytics usage.
+                        // If analytics rely on processedRequests, we might need a separate fetch for analytics OR keep fetching all for analytics tab.
+                        if (activeTab === 'analytics' || activeTab === 'manager-analytics' || activeTab === 'driver-analytics') {
+                            const allData = await fetchProcessedRequests({ page: 1, pageSize: 10000 }); // Workaround for analytics
+                            setProcessedRequests(allData.data || []);
+                        }
+                    }
                 }
             }
         } catch (err) { console.error(err); }
     };
+
+    const loadHistoryPage = async (page) => {
+        setHistoryLoading(true);
+        try {
+            const result = await fetchProcessedRequests({ page, pageSize: 10 });
+            setProcessedRequests(result.data || []);
+            setHistoryCount(result.count || 0);
+            setHistoryTotalPages(result.totalPages || 1);
+            setHistoryPage(page);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    // ... (rest of methods)
+
+    // Update refresh interval to use pagination for history tab? No, usually polling refreshes current view.
+    // For now, let's keep polling simple or disable for history tab to avoid jumps.
+
+    // ... (in renderContent for history)
+    // <HistoryTable 
+    //    requests={processedRequests} 
+    //    page={historyPage} 
+    //    totalPages={historyTotalPages} 
+    //    onPageChange={loadHistoryPage} 
+    //    loading={historyLoading}
+    //    ... 
+    // />
+
 
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
     const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { toast.error(err.message); } finally { setSubmitLoading(false); } };
@@ -1025,8 +1082,8 @@ export default function Dashboard() {
                 try {
                     await updateProcessedRequest(id, updates);
                     // Refresh the list
-                    const updated = await fetchProcessedRequests();
-                    setProcessedRequests(updated);
+                    const result = await fetchProcessedRequests({ page: historyPage });
+                    setProcessedRequests(result.data || []);
                 } catch (err) {
                     toast.error('Greška pri ažuriranju: ' + err.message);
                 }
@@ -1035,6 +1092,10 @@ export default function Dashboard() {
                 setProcessedRequests(prev => prev.filter(r => r.id !== id)); // Optimistic
                 try {
                     await deleteProcessedRequest(id);
+                    // Refresh from server to get correct pagination
+                    const result = await fetchProcessedRequests({ page: historyPage });
+                    setProcessedRequests(result.data || []);
+                    setHistoryCount(result.count);
                     toast.success('Zahtev je obrisan iz istorije');
                 } catch (err) {
                     setProcessedRequests(previous); // Rollback
@@ -1143,8 +1204,8 @@ export default function Dashboard() {
                         onEdit={async (id, updates) => {
                             try {
                                 await updateProcessedRequest(id, updates);
-                                const updated = await fetchProcessedRequests();
-                                setProcessedRequests(updated);
+                                const result = await fetchProcessedRequests({ page: historyPage });
+                                setProcessedRequests(result.data || []);
                             } catch (err) {
                                 toast.error('Greška pri ažuriranju: ' + err.message);
                             }
