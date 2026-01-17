@@ -329,7 +329,7 @@ export const DataProvider = ({ children }) => {
         try {
             let query = supabase
                 .from('users')
-                .select('*')
+                .select('*, region:regions(id, name)')
                 .eq('company_code', companyCode)
                 .eq('role', 'client')
                 .is('deleted_at', null)
@@ -357,7 +357,7 @@ export const DataProvider = ({ children }) => {
         try {
             const { data, error } = await supabase
                 .from('users')
-                .select('*')
+                .select('*, region:regions(id, name)')
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('role', { ascending: false });

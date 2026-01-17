@@ -1,4 +1,4 @@
-export { Modal } from './Modal';
+export { Modal, ModalWithFooter } from './Modal';
 export { StatCard } from './StatCard';
 export { EmptyState } from './EmptyState';
 export { SidebarItem } from './SidebarItem';
@@ -8,3 +8,4 @@ export { ImageUploader } from './ImageUploader';
 export { RequestStatusBadge } from './RequestStatusBadge';
 export { default as NotificationBell } from './NotificationBell';
 export { HelpTooltip, HelpButton, HelpOverlay } from './HelpTooltip';
+export { default as ErrorBoundary, MapErrorBoundary, AnalyticsErrorBoundary, TableErrorBoundary } from './ErrorBoundary';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Box, Loader2, CheckCircle2, Package } from 'lucide-react';
-import { Modal } from '../common';
+import { ModalWithFooter } from '../common';
 
 /**
  * Client Equipment Assignment Modal - Assign equipment, PIB, waste types and notes to client
@@ -58,32 +58,55 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
     };
 
     return (
-        <Modal open={!!client} onClose={onClose} title="Podešavanja klijenta">
-            <div className="space-y-4">
+        <ModalWithFooter
+            open={!!client}
+            onClose={onClose}
+            title="Podešavanja klijenta"
+            size="lg"
+            footer={
+                <div className="flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+                    >
+                        Otkaži
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-6 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm shadow-emerald-200"
+                    >
+                        {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                        Sačuvaj
+                    </button>
+                </div>
+            }
+        >
+            <div className="space-y-6">
                 {/* Client Info */}
-                <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                    <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold">{client.name?.charAt(0)}</div>
+                <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-lg">{client.name?.charAt(0)}</div>
                     <div>
-                        <h4 className="font-medium">{client.name}</h4>
-                        <p className="text-xs text-slate-500">{client.phone}</p>
+                        <h4 className="font-bold text-lg text-slate-800">{client.name}</h4>
+                        <p className="text-sm text-slate-500">{client.phone}</p>
                     </div>
                 </div>
 
                 {/* Equipment Selection */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Izaberi opremu</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-3">Izaberi opremu</label>
                     {equipment.length === 0 ? (
                         <p className="text-sm text-slate-500 p-4 bg-slate-50 rounded-xl text-center">
                             Nema definisane opreme. Dodajte opremu u sekciji "Oprema".
                         </p>
                     ) : (
-                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1">
                             {equipment.map(eq => (
                                 <label
                                     key={eq.id}
                                     className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${selectedEquipment.includes(eq.id)
-                                        ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-slate-200 hover:border-slate-300'
+                                        ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/20'
+                                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                         }`}
                                 >
                                     <input
@@ -92,17 +115,17 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                                         onChange={() => toggleEquipment(eq.id)}
                                         className="w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                                     />
-                                    <div className="flex items-center gap-3 flex-1">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
                                         {eq.customImage ? (
-                                            <img src={eq.customImage} alt={eq.name} className="w-10 h-10 rounded-lg object-cover" />
+                                            <img src={eq.customImage} alt={eq.name} className="w-10 h-10 rounded-lg object-cover bg-white border border-slate-100" />
                                         ) : (
-                                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                                            <div className="w-10 h-10 bg-white border border-slate-200 rounded-lg flex items-center justify-center shrink-0">
                                                 <Box size={20} className="text-slate-400" />
                                             </div>
                                         )}
-                                        <div>
-                                            <p className="font-medium text-sm">{eq.name}</p>
-                                            {eq.description && <p className="text-xs text-slate-500">{eq.description}</p>}
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-sm truncate">{eq.name}</p>
+                                            {eq.description && <p className="text-xs text-slate-500 truncate">{eq.description}</p>}
                                         </div>
                                     </div>
                                 </label>
@@ -113,14 +136,14 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
 
                 {/* Waste Types Selection */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-bold text-slate-700 mb-3">
                         Dozvoljene vrste robe
-                        <span className="font-normal text-slate-400 ml-2">
+                        <span className="font-normal text-slate-500 ml-2 text-xs bg-slate-100 px-2 py-0.5 rounded-full">
                             {allWasteTypesSelected
-                                ? '(sve vrste)'
+                                ? 'Sve vrste'
                                 : selectedWasteTypes.length === 0
-                                    ? '(nijedna vrsta!)'
-                                    : `(${selectedWasteTypes.length}/${wasteTypes.length})`
+                                    ? 'Nijedna vrsta'
+                                    : `${selectedWasteTypes.length}/${wasteTypes.length} dodeljeno`
                             }
                         </span>
                     </label>
@@ -129,77 +152,64 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                             Nema definisanih vrsta robe.
                         </p>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[300px] overflow-y-auto p-1">
                             {wasteTypes.map(wt => (
                                 <label
                                     key={wt.id}
-                                    className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${selectedWasteTypes.includes(wt.id)
-                                        ? 'border-blue-500 bg-blue-50'
-                                        : 'border-red-200 bg-red-50 hover:border-red-300'
+                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${selectedWasteTypes.includes(wt.id)
+                                        ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500/20'
+                                        : 'border-red-200 bg-red-50 hover:border-red-300 hover:bg-red-100/50'
                                         }`}
                                 >
                                     <input
                                         type="checkbox"
                                         checked={selectedWasteTypes.includes(wt.id)}
                                         onChange={() => toggleWasteType(wt.id)}
-                                        className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                        className="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                                     />
-                                    <span className="text-xl">{wt.icon}</span>
-                                    <span className="text-sm font-medium truncate">{wt.label}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="text-2xl mb-1">{wt.icon}</div>
+                                        <p className="text-sm font-medium truncate leading-tight">{wt.label}</p>
+                                    </div>
                                 </label>
                             ))}
                         </div>
                     )}
-                    <p className="mt-1.5 text-xs text-slate-500">
-                        Odštiklirajte vrste koje NE želite da klijent vidi
+                    <p className="mt-2 text-xs text-slate-500 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                        Odštiklirajte vrste koje NE želite da klijent vidi (crveno)
                     </p>
                 </div>
 
-                {/* PIB */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">PIB broj (opciono)</label>
-                    <input
-                        type="text"
-                        value={pib}
-                        onChange={(e) => setPib(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                        placeholder="123456789"
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm"
-                        maxLength={9}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">Poreski identifikacioni broj klijenta</p>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* PIB */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">PIB broj (opciono)</label>
+                        <input
+                            type="text"
+                            value={pib}
+                            onChange={(e) => setPib(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                            placeholder="123456789"
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm"
+                            maxLength={9}
+                        />
+                        <p className="mt-1 text-xs text-slate-500">Poreski identifikacioni broj klijenta</p>
+                    </div>
 
-                {/* Note for client */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Napomena za klijenta (opciono)</label>
-                    <textarea
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="Unesite napomenu..."
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none"
-                        rows={3}
-                    />
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-3 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium"
-                    >
-                        Otkaži
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                        Sačuvaj
-                    </button>
+                    {/* Note for client */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Napomena za klijenta (opciono)</label>
+                        <textarea
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="Unesite napomenu..."
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none"
+                            rows={3}
+                        />
+                    </div>
                 </div>
             </div>
-        </Modal>
+        </ModalWithFooter>
     );
 };
 

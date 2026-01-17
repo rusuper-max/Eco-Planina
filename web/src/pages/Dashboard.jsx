@@ -17,7 +17,7 @@ import {
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
-    ImageUploader, StatCard, SidebarItem, Modal, EmptyState, FillLevelBar,
+    ImageUploader, StatCard, SidebarItem, Modal, ModalWithFooter, EmptyState, FillLevelBar,
     NewRequestForm, ClientRequestsView, ClientHistoryView, ManagerRequestsTable,
     PrintExport, HistoryTable, ClientsTable, EquipmentManagement, WasteTypesManagement, NotificationBell, HelpButton, HelpOverlay,
     getStablePosition, DraggableMarker, LocationPicker, FitBounds, MapView,
@@ -1515,70 +1515,119 @@ export default function Dashboard() {
             />
             {processedNotification && <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 z-50"><CheckCircle2 size={24} /><div><p className="font-semibold">{language === 'sr' ? 'Zahtev obrađen!' : 'Request processed!'}</p><p className="text-sm opacity-90">"{processedNotification.wasteLabel}" {language === 'sr' ? 'preuzet' : 'picked up'}</p></div><button onClick={clearProcessedNotification} className="p-1 hover:bg-white/20 rounded-lg"><X size={20} /></button></div>}
             {/* Settings Modal */}
-            <Modal open={showSettings} onClose={() => setShowSettings(false)} title={language === 'sr' ? 'Podešavanja' : 'Settings'}>
-                <div className="space-y-6">
-                    {/* Language Selection */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-3">{language === 'sr' ? 'Jezik' : 'Language'}</label>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setLanguage('sr')}
-                                className={`flex-1 p-4 rounded-xl border-2 text-center transition-all ${language === 'sr' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
-                            >
-                                <span className="text-2xl mb-2 block">🇷🇸</span>
-                                <span className="text-sm font-medium">Srpski</span>
-                            </button>
-                            <button
-                                onClick={() => setLanguage('en')}
-                                className={`flex-1 p-4 rounded-xl border-2 text-center transition-all ${language === 'en' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
-                            >
-                                <span className="text-2xl mb-2 block">🇬🇧</span>
-                                <span className="text-sm font-medium">English</span>
-                            </button>
-                        </div>
+            <ModalWithFooter
+                open={showSettings}
+                onClose={() => setShowSettings(false)}
+                title={language === 'sr' ? 'Podešavanja' : 'Settings'}
+                size="xl"
+                footer={
+                    <div className="flex justify-end gap-3">
+                        <button
+                            onClick={() => setShowSettings(false)}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-medium"
+                        >
+                            {language === 'sr' ? 'Odustani' : 'Cancel'}
+                        </button>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    // Save name if changed
+                                    if (editingProfile.name && editingProfile.name !== user?.name) {
+                                        await updateProfile(editingProfile.name);
+                                    }
+
+                                    // Save location if changed
+                                    if (editingProfile.latitude && editingProfile.longitude && (editingProfile.latitude !== user?.latitude || editingProfile.longitude !== user?.longitude || editingProfile.address !== user?.address)) {
+                                        await updateProfileLocation(editingProfile.latitude, editingProfile.longitude, editingProfile.address);
+                                    }
+                                    toast.success(language === 'sr' ? 'Podešavanja sačuvana' : 'Settings saved');
+                                    setShowSettings(false);
+                                } catch (error) {
+                                    console.error('Error saving settings:', error);
+                                    toast.error(language === 'sr' ? 'Greška pri čuvanju' : 'Error saving settings');
+                                }
+                            }}
+                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors shadow-sm shadow-emerald-200"
+                        >
+                            {language === 'sr' ? 'Sačuvaj izmene' : 'Save Changes'}
+                        </button>
                     </div>
-                    {/* Profile Info */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Ime i prezime' : 'Full name'}</label>
-                        <input
-                            type="text"
-                            value={editingProfile.name}
-                            onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })}
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Broj telefona' : 'Phone number'}</label>
-                        <input
-                            type="tel"
-                            value={editingProfile.phone}
-                            disabled
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 cursor-not-allowed"
-                        />
-                        <p className="text-xs text-slate-400 mt-1">{language === 'sr' ? 'Broj telefona se ne može menjati jer se koristi za prijavu' : 'Phone number cannot be changed as it is used for login'}</p>
-                    </div>
-                    {/* Company Name (for managers only) */}
-                    {userRole === 'manager' && companyCode && (
+                }
+            >
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 h-full">
+                    {/* LEFT COLUMN: Profile & Info */}
+                    <div className="space-y-6">
+                        {/* Language Selection */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Ime firme' : 'Company name'}</label>
+                            <label className="block text-sm font-medium text-slate-700 mb-3">{language === 'sr' ? 'Jezik / Language' : 'Language / Jezik'}</label>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setLanguage('sr')}
+                                    className={`flex-1 p-3 rounded-xl border-2 text-center transition-all ${language === 'sr' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    <span className="text-xl mb-1 block">🇷🇸</span>
+                                    <span className="text-sm font-medium">Srpski</span>
+                                </button>
+                                <button
+                                    onClick={() => setLanguage('en')}
+                                    className={`flex-1 p-3 rounded-xl border-2 text-center transition-all ${language === 'en' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                >
+                                    <span className="text-xl mb-1 block">🇬🇧</span>
+                                    <span className="text-sm font-medium">English</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Profile Info */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Ime i prezime' : 'Full name'}</label>
                             <input
                                 type="text"
-                                value={editingProfile.companyName}
-                                onChange={(e) => setEditingProfile({ ...editingProfile, companyName: e.target.value })}
-                                placeholder={language === 'sr' ? 'Unesite ime firme...' : 'Enter company name...'}
+                                value={editingProfile.name}
+                                onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })}
                                 className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                             />
                         </div>
-                    )}
-                    {/* Location Setting - for clients and managers */}
-                    {userRole !== 'admin' && (
+
                         <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Broj telefona' : 'Phone number'}</label>
+                            <input
+                                type="tel"
+                                value={editingProfile.phone}
+                                disabled
+                                className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 cursor-not-allowed"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">{language === 'sr' ? 'Broj telefona se ne može menjati jer se koristi za prijavu' : 'Phone number cannot be changed as it is used for login'}</p>
+                        </div>
+
+
+
+                        {/* ECO Code Display */}
+                        {userRole !== 'admin' && companyCode && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'ECO Kod firme' : 'Company ECO Code'}</label>
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-mono font-bold">{companyCode}</code>
+                                    <button
+                                        onClick={() => { navigator.clipboard.writeText(companyCode); toast.success(language === 'sr' ? 'Kopirano!' : 'Copied!'); }}
+                                        className="p-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl transition-colors"
+                                    >
+                                        <Copy size={20} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* RIGHT COLUMN: Map & Location */}
+                    {userRole !== 'admin' && (
+                        <div className="flex flex-col h-full min-h-[400px]">
                             <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'Moja lokacija' : 'My location'}</label>
-                            <div className="h-48 rounded-xl overflow-hidden border border-slate-200 mb-2">
+                            <div className="flex-1 rounded-xl overflow-hidden border border-slate-200 mb-2 relative min-h-[300px]">
                                 <MapContainer
                                     center={[editingProfile.latitude || 44.8, editingProfile.longitude || 20.45]}
                                     zoom={editingProfile.latitude ? 15 : 11}
-                                    style={{ height: '100%', width: '100%' }}
+                                    style={{ height: '100%', width: '100%', minHeight: '100%' }}
                                 >
                                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                                     <DraggableMarker
@@ -1606,62 +1655,23 @@ export default function Dashboard() {
                                 </MapContainer>
                             </div>
                             {editingProfile.address && (
-                                <p className="text-xs text-slate-500 flex items-center gap-1">
-                                    <MapPin size={12} className="text-emerald-500" />
-                                    {editingProfile.address.length > 80 ? editingProfile.address.substring(0, 80) + '...' : editingProfile.address}
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mb-1">
+                                    <MapPin size={12} className="text-emerald-500 shrink-0" />
+                                    <span className="truncate">{editingProfile.address}</span>
                                 </p>
                             )}
                             {editingProfile.latitude && editingProfile.longitude && (
-                                <p className="text-xs text-emerald-600 mt-1">
+                                <p className="text-xs text-emerald-600">
                                     {language === 'sr' ? 'Koordinate' : 'Coordinates'}: {editingProfile.latitude.toFixed(4)}, {editingProfile.longitude.toFixed(4)}
                                 </p>
                             )}
-                            <p className="text-xs text-slate-400 mt-1">{language === 'sr' ? 'Prevucite marker na mapi da podesite tačnu lokaciju' : 'Drag the marker on the map to set exact location'}</p>
+                            <p className="text-xs text-slate-400 mt-2 italic border-t pt-2">
+                                {language === 'sr' ? 'Savet: Prevucite crveni marker na mapi da podesite tačnu lokaciju vašeg objekta.' : 'Tip: Drag the red marker on the map to set the exact location of your facility.'}
+                            </p>
                         </div>
                     )}
-                    {/* ECO Code Display */}
-                    {userRole !== 'admin' && companyCode && (
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2">{language === 'sr' ? 'ECO Kod firme' : 'Company ECO Code'}</label>
-                            <div className="flex items-center gap-2">
-                                <code className="flex-1 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-mono font-bold">{companyCode}</code>
-                                <button
-                                    onClick={() => { navigator.clipboard.writeText(companyCode); toast.success(language === 'sr' ? 'Kopirano!' : 'Copied!'); }}
-                                    className="p-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-xl transition-colors"
-                                >
-                                    <Copy size={20} />
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                    {/* Save Button */}
-                    <button
-                        onClick={async () => {
-                            try {
-                                // Save name if changed
-                                if (editingProfile.name && editingProfile.name !== user?.name) {
-                                    await updateProfile(editingProfile.name);
-                                }
-                                // Save company name if changed (managers only)
-                                if (userRole === 'manager' && editingProfile.companyName && editingProfile.companyName !== companyName) {
-                                    await updateCompanyName(editingProfile.companyName);
-                                }
-                                // Save location if changed
-                                if (editingProfile.latitude && editingProfile.longitude && (editingProfile.latitude !== user?.latitude || editingProfile.longitude !== user?.longitude || editingProfile.address !== user?.address)) {
-                                    await updateLocation(editingProfile.address, editingProfile.latitude, editingProfile.longitude);
-                                }
-                                toast.success(language === 'sr' ? 'Podešavanja su sačuvana!' : 'Settings saved!');
-                                setShowSettings(false);
-                            } catch (error) {
-                                toast.error(language === 'sr' ? 'Greška pri čuvanju: ' + error.message : 'Error saving: ' + error.message);
-                            }
-                        }}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 rounded-xl transition-colors"
-                    >
-                        {language === 'sr' ? 'Sačuvaj promene' : 'Save changes'}
-                    </button>
                 </div>
-            </Modal>
+            </ModalWithFooter>
             {editingUser && (
                 <UserEditModal
                     user={editingUser}

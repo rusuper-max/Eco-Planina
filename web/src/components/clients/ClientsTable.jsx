@@ -242,7 +242,7 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                                         {showRegionColumn && (
                                             <td className="hidden xl:table-cell px-4 py-3">
                                                 {(() => {
-                                                    const regionName = getRegionName(c.region_id);
+                                                    const regionName = c.region?.name || getRegionName(c.region_id);
                                                     return regionName ? (
                                                         <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 flex items-center gap-1 w-fit">
                                                             <Building2 size={12} />
