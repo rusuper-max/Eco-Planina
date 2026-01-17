@@ -597,14 +597,15 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Delete region (soft delete)
+    // Delete region (hard delete)
     const deleteRegion = async (regionId) => {
         if (!regionId) throw new Error('Nedostaje ID filijale');
+        if (!user?.id) throw new Error('Korisnik nije prijavljen');
         try {
-            const { error } = await supabase
-                .from('regions')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', regionId);
+            const { error } = await supabase.rpc('delete_region', {
+                p_region_id: regionId,
+                p_user_id: user.id
+            });
             if (error) throw error;
             return { success: true };
         } catch (error) {

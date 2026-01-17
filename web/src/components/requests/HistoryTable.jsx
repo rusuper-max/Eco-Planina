@@ -30,10 +30,13 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
     const [activityLogs, setActivityLogs] = useState({});
     const [loadingAssignments, setLoadingAssignments] = useState(false);
 
-    // Fetch driver assignments and activity logs for detailed view
+    // Fetch driver assignments for proof data (always needed for ProofsModal)
     useEffect(() => {
-        if (showDetailedView && requests?.length > 0) {
+        if (requests?.length > 0) {
             fetchDriverAssignments();
+        }
+        // Fetch activity logs only for detailed view
+        if (showDetailedView && requests?.length > 0) {
             fetchActivityLogs();
         }
     }, [showDetailedView, requests]);
@@ -68,7 +71,11 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     completed_at,
                     assigned_by,
                     driver:driver_id(id, name, phone),
-                    client_name
+                    client_name,
+                    pickup_proof_url,
+                    delivery_proof_url,
+                    driver_weight,
+                    driver_weight_unit
                 `)
                 .in('id', assignmentIds);
 
