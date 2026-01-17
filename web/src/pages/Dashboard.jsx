@@ -107,6 +107,26 @@ export default function Dashboard() {
         return <DriverDashboard />;
     }
 
+    // Fetch driver assignments for manager view
+    const fetchDriverAssignments = useCallback(async () => {
+        if (!companyCode) return;
+        try {
+            // console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select('*, driver:driver_id(id, name)')
+                .eq('company_code', companyCode)
+                .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
+                .is('deleted_at', null);
+
+            if (error) throw error;
+            // console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments');
+            setDriverAssignments(data || []);
+        } catch (err) {
+            console.error('Error fetching driver assignments:', err);
+        }
+    }, [companyCode]);
+
     // Save activeTab to localStorage
     useEffect(() => {
         localStorage.setItem('ecomountaint_activeTab', activeTab);
@@ -288,24 +308,6 @@ export default function Dashboard() {
     };
 
     // Fetch driver assignments for manager view
-    const fetchDriverAssignments = useCallback(async () => {
-        if (!companyCode) return;
-        try {
-            // console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
-            const { data, error } = await supabase
-                .from('driver_assignments')
-                .select('*, driver:driver_id(id, name)')
-                .eq('company_code', companyCode)
-                .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
-                .is('deleted_at', null);
-
-            if (error) throw error;
-            // console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments');
-            setDriverAssignments(data || []);
-        } catch (err) {
-            console.error('Error fetching driver assignments:', err);
-        }
-    }, [companyCode]);
 
     // Fetch company drivers for map assignment
     const fetchCompanyDrivers = async () => {
