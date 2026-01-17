@@ -211,8 +211,12 @@ export const AdminProvider = ({ children }) => {
     const deleteUser = async (userId) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
-            // Soft delete
-            await supabase.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', userId);
+            // Hard delete using RPC
+            const { error } = await supabase.rpc('delete_user_permanently', {
+                p_target_user_id: userId,
+                p_requesting_user_id: user.id
+            });
+            if (error) throw error;
             return { success: true };
         } catch (error) {
             throw error;

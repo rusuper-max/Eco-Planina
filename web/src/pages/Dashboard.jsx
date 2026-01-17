@@ -39,7 +39,7 @@ import DriverDashboard from './DriverDashboard';
 export default function Dashboard() {
     const navigate = useNavigate();
     const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, hideClientHistoryItem } = useData();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, driverAssignments, hideClientHistoryItem } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -79,7 +79,7 @@ export default function Dashboard() {
     const [editingCompany, setEditingCompany] = useState(null);
     const [clientHistory, setClientHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
-    const [driverAssignments, setDriverAssignments] = useState([]);
+    // driverAssignments removed (using Context)
     const [companyDrivers, setCompanyDrivers] = useState([]);
     const [companyMembers, setCompanyMembers] = useState([]);
     const [showRegionSelectModal, setShowRegionSelectModal] = useState(false);
@@ -107,62 +107,35 @@ export default function Dashboard() {
         return <DriverDashboard />;
     }
 
-    // Fetch driver assignments for manager view
-    const fetchDriverAssignments = useCallback(async () => {
-        if (!companyCode) return;
-        try {
-            // console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
-            const { data, error } = await supabase
-                .from('driver_assignments')
-                .select('*, driver:driver_id(id, name)')
-                .eq('company_code', companyCode)
-                .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
-                .is('deleted_at', null);
-
-            if (error) throw error;
-            // console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments');
-            setDriverAssignments(data || []);
-        } catch (err) {
-            console.error('Error fetching driver assignments:', err);
-        }
-    }, [companyCode]);
+    // fetchDriverAssignments removed (handled in specific components or context if needed globally)
 
     // Save activeTab to localStorage
     useEffect(() => {
         localStorage.setItem('ecomountaint_activeTab', activeTab);
     }, [activeTab]);
 
-    // Realtime driver assignment updates (manager/company_admin)
+    // Refresh processed requests when switching to history tab
     useEffect(() => {
-        if (!companyCode) return;
-        const channel = supabase
-            .channel(`driver_assignments_company_${companyCode}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'driver_assignments',
-                    filter: `company_code=eq.${companyCode}`
-                },
-                async () => {
-                    await fetchDriverAssignments();
+        if (activeTab === 'history' && fetchProcessedRequests) {
+            fetchProcessedRequests({ page: historyPage }).then(result => {
+                if (result?.data) {
+                    setProcessedRequests(result.data);
+                    setHistoryCount(result.count || 0);
+                    setHistoryTotalPages(result.totalPages || 1);
                 }
-            )
-            .subscribe();
+            });
+        }
+    }, [activeTab]);
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [companyCode, fetchDriverAssignments]);
+    // Realtime driver assignment updates (handled in DataContext)
 
+    // Polling fallback - refresh data every 30 seconds to handle tab sleep/missed events
     // Polling fallback - refresh data every 30 seconds to handle tab sleep/missed events
     useEffect(() => {
         if (!companyCode || (userRole !== 'manager' && userRole !== 'company_admin')) return;
 
         const intervalId = setInterval(() => {
             // console.log('DEBUG: Polling refresh...');
-            fetchDriverAssignments();
             fetchProcessedRequests({ page: historyPage }).then(result => {
                 if (result?.data) {
                     setProcessedRequests(result.data);
@@ -173,7 +146,7 @@ export default function Dashboard() {
         }, 30000); // 30 seconds
 
         return () => clearInterval(intervalId);
-    }, [companyCode, userRole, fetchDriverAssignments, fetchProcessedRequests]);
+    }, [companyCode, userRole, fetchProcessedRequests]);
 
     // Realtime processed requests updates (manager/company_admin)
     useEffect(() => {
@@ -270,8 +243,8 @@ export default function Dashboard() {
                 if (userRole === 'manager') {
                     setClients(await fetchCompanyClients() || []);
                     setRegions(await fetchCompanyRegions() || []);
-                    // Fetch driver assignments for status display
-                    await fetchDriverAssignments();
+                    setRegions(await fetchCompanyRegions() || []);
+                    // Driver assignments are now auto-fetched via DataContext
                     // Fetch drivers for map assignment
                     await fetchCompanyDrivers();
                 }
@@ -293,8 +266,7 @@ export default function Dashboard() {
                     // Equipment is loaded from database via useEffect
                     // Fetch drivers for history table retroactive assignment
                     await fetchCompanyDrivers();
-                    // Fetch driver assignments for driver analytics
-                    await fetchDriverAssignments();
+                    // Driver assignments are now auto-fetched via DataContext
                 }
             }
             setInitialDataLoaded(true);
@@ -351,7 +323,7 @@ export default function Dashboard() {
             }
 
             // Refresh assignments
-            await fetchDriverAssignments();
+            // Auto-updates via DataContext realtime subscription
 
             const driver = companyDrivers.find(d => d.id === driverId);
             toast.success(`${result.assigned_count || requestIds.length} zahtev(a) dodeljeno vozaču: ${driver?.name || 'Nepoznato'}`);
@@ -391,8 +363,7 @@ export default function Dashboard() {
             console.log('DEBUG handleQuickAssignDriver: assigned_count =', result?.assigned_count);
 
             // Refresh assignments
-            console.log('DEBUG handleQuickAssignDriver: refreshing assignments...');
-            await fetchDriverAssignments();
+            console.log('DEBUG handleQuickAssignDriver: assignments auto-update via Context');
 
             const driver = companyDrivers.find(d => d.id === driverId);
             toast.success(`Zahtev dodeljen vozaču: ${driver?.name || 'Nepoznato'}`);
@@ -503,8 +474,8 @@ export default function Dashboard() {
     const handleLogout = () => { if (window.confirm('Odjaviti se?')) { logout(); navigate('/'); } };
     const handleNewRequest = async (data) => { setSubmitLoading(true); try { await addPickupRequest(data); setActiveTab('requests'); } catch (err) { toast.error(err.message); } finally { setSubmitLoading(false); } };
     const handleProcessRequest = (req) => setProcessingRequest(req);
-    const handleConfirmProcess = async (req, proofImageUrl, note, weightData) => {
-        await markRequestAsProcessed(req, proofImageUrl, note, weightData);
+    const handleConfirmProcess = async (req, proofImageUrl, note, weightData, retroactiveDriverInfo = null) => {
+        await markRequestAsProcessed(req, proofImageUrl, note, weightData, retroactiveDriverInfo);
     };
     const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { toast.error(err.message); } };
     const handleDeleteClient = async (id) => {
@@ -808,26 +779,46 @@ export default function Dashboard() {
         if (userRole === 'company_admin') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
             { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
-            { id: 'requests', icon: ClipboardList, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length, helpKey: 'sidebar-requests' },
-            { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
-            { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
-            { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' },
-            { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
-            { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera', helpKey: 'sidebar-manager-analytics' },
-            { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača', helpKey: 'sidebar-driver-analytics' },
-            { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
-            { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
-            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
-            { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
+            {
+                label: 'Upravljanje Zahtevima',
+                icon: ClipboardList,
+                children: [
+                    { id: 'requests', icon: Truck, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
+                    { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
+                    { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
+                ]
+            },
+            {
+                label: 'Analitika',
+                icon: BarChart3,
+                children: [
+                    { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
+                    { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera', helpKey: 'sidebar-manager-analytics' },
+                    { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača', helpKey: 'sidebar-driver-analytics' },
+                    { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
+                ]
+            },
+            {
+                label: 'Administracija',
+                icon: Settings,
+                children: [
+                    { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
+                    { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
+                    { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' },
+                    { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
+                    { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
+                ]
+            }
         ];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
-            { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending').length, helpKey: 'sidebar-requests' },
+            { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
             { id: 'drivers', icon: Users, label: 'Vozači', helpKey: 'sidebar-drivers' },
             { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
             { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
             { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
             { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
+
             { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
             { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' },
             { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
@@ -868,16 +859,23 @@ export default function Dashboard() {
 
     // Export functions - using semicolon as separator for Excel compatibility in Serbian locale
     const exportToCSV = (data, filename, headers) => {
-        const csvContent = [
-            headers.map(h => h.label).join(';'),
-            ...data.map(row => headers.map(h => `"${(row[h.key] || '').toString().replace(/"/g, '""')}"`).join(';'))
-        ].join('\n');
-        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
+        // ...
     };
+    // ... skipping other functions ...
+
+    // ... inside return ...
+    // Note: I will need to use multi_replace for this due to length, but replace_file_content is better for contiguous block.
+    // I am replacing getMenu to end of sidebar rendering logic (line 1356).
+    // Wait, line 1356 is FAR down.
+    // I should only replace getMenu first, then the rendering loop separately.
+    // This input block is too large and risky.
+
+    // I will split this into two edits.
+    // 1. Update getMenu.
+    // 2. Update rendering loop.
+
+    // Edit 1: getMenu function update
+    // Edit 2: Sidebar mapping logic
 
     const handleExportUsers = () => {
         const headers = [
@@ -1078,7 +1076,7 @@ export default function Dashboard() {
                 </div>
             );
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
-            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} drivers={companyDrivers} onAssignDriverToProcessed={handleAssignDriverToProcessed} onEdit={async (id, updates) => {
+            if (activeTab === 'history') return <HistoryTable requests={processedRequests} wasteTypes={wasteTypes} drivers={companyDrivers} showDetailedView={true} onAssignDriverToProcessed={handleAssignDriverToProcessed} onEdit={async (id, updates) => {
                 try {
                     await updateProcessedRequest(id, updates);
                     // Refresh the list
@@ -1130,6 +1128,7 @@ export default function Dashboard() {
                     />
                 </div>
             );
+
             // Sort by remaining time (most urgent first) for dashboard preview
             const sortedByUrgency = [...pending].sort((a, b) => {
                 const remA = getRemainingTime(a.created_at, a.urgency);
@@ -1190,6 +1189,7 @@ export default function Dashboard() {
                     }}
                 />
             );
+            if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'history') return (
                 <div className="space-y-4">
                     <h1 className="text-2xl font-bold">Istorija svih zahteva</h1>
@@ -1352,7 +1352,23 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2"><div className="w-9 h-9 bg-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0"><Mountain size={20} /></div><div className="flex flex-col leading-tight"><span className="font-bold text-lg text-white">EcoMountain</span><span className="font-bold text-sm text-emerald-400">Tracking</span></div></div>
                         <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-slate-400"><X size={24} /></button>
                     </div>
-                    <nav className="flex-1 p-4 space-y-1">{menu.map(m => <SidebarItem key={m.id} icon={m.icon} label={m.label} active={activeTab === m.id} badge={m.badge} isLink={m.isLink} href={m.href} helpKey={m.helpKey} onClick={() => { if (!m.isLink) { setActiveTab(m.id); setSidebarOpen(false); } }} />)}</nav>
+                    <nav className="flex-1 p-4 space-y-1">
+                        {menu.map(m => {
+                            const processItem = (item) => ({
+                                ...item,
+                                active: activeTab === item.id,
+                                onClick: () => {
+                                    if (!item.children && !item.isLink) {
+                                        setActiveTab(item.id);
+                                        setSidebarOpen(false);
+                                    }
+                                },
+                                children: item.children ? item.children.map(processItem) : undefined
+                            });
+
+                            return <SidebarItem key={m.id || m.label} {...processItem(m)} />;
+                        })}
+                    </nav>
                     <div className="p-4 border-t border-slate-700"><SidebarItem icon={LogOut} label="Odjavi se" onClick={handleLogout} /></div>
                 </div>
             </aside>
@@ -1539,7 +1555,8 @@ export default function Dashboard() {
                 request={processingRequest}
                 onProcess={handleConfirmProcess}
                 onClose={() => setProcessingRequest(null)}
-                hasDriverAssignment={!!driverAssignments.find(a => a.request_id === processingRequest?.id)}
+                hasDriverAssignment={!!(driverAssignments || []).find(a => a.request_id === processingRequest?.id)}
+                driverAssignment={(driverAssignments || []).find(a => a.request_id === processingRequest?.id) || null}
                 drivers={companyDrivers}
                 onQuickAssign={handleQuickAssignDriver}
             />

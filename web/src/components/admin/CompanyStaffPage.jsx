@@ -202,18 +202,18 @@ export const CompanyStaffPage = () => {
         }
     };
 
-    // Soft delete user
+    // Hard delete user
     const handleDeleteUser = async (userId) => {
         try {
-            const { error } = await supabase
-                .from('users')
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', userId);
+            const { error } = await supabase.rpc('delete_user_permanently', {
+                p_target_user_id: userId,
+                p_requesting_user_id: user.id
+            });
 
             if (error) throw error;
 
             setStaff(prev => prev.filter(s => s.id !== userId));
-            toast.success('Korisnik uklonjen');
+            toast.success('Korisnik trajno obrisan');
             setDeleteConfirm(null);
         } catch (error) {
             toast.error('Greska: ' + error.message);
@@ -229,7 +229,7 @@ export const CompanyStaffPage = () => {
         unassigned: staff.filter(s => !s.region_id).length
     }), [staff]);
 
-    if (!isCompanyAdmin() && !isAdmin()) {
+    if (!isCompanyAdmin() && !isAdmin() && user?.role !== 'manager') {
         return (
             <div className="p-8 text-center text-slate-500">
                 Nemate pristup ovoj stranici.
@@ -293,7 +293,7 @@ export const CompanyStaffPage = () => {
                         </div>
                     </div>
                 </div>
-                </div>
+            </div>
 
             {/* Filters */}
             <div className="flex flex-wrap gap-3">

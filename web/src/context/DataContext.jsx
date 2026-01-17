@@ -17,21 +17,29 @@ export const DataProvider = ({ children }) => {
     const { user, companyCode } = useAuth();
     const [pickupRequests, setPickupRequests] = useState([]);
     const [clientRequests, setClientRequests] = useState([]);
+    const [driverAssignments, setDriverAssignments] = useState([]); // All active assignments for company
     const [processedNotification, setProcessedNotification] = useState(null);
 
-    // Real-time subscriptions for pickup requests
-    // Re-fetch when user's region_id changes (e.g., manager moved to different branch)
+    // Real-time subscriptions for pickup requests and driver assignments
     useEffect(() => {
         if (!companyCode) return;
         fetchPickupRequests(companyCode);
-        const channelName = `pickup_requests_web_${companyCode}_${user?.region_id || 'all'}`;
-        const subscription = supabase
-            .channel(channelName)
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pickup_requests', filter: `company_code=eq.${companyCode}` }, () => fetchPickupRequests(companyCode))
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pickup_requests', filter: `company_code=eq.${companyCode}` }, () => fetchPickupRequests(companyCode))
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pickup_requests' }, () => fetchPickupRequests(companyCode))
+        fetchDriverAssignments(companyCode);
+
+        const channelRequest = supabase
+            .channel(`pickup_requests_web_${companyCode}_${user?.region_id || 'all'}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pickup_requests', filter: `company_code=eq.${companyCode}` }, () => fetchPickupRequests(companyCode))
             .subscribe();
-        return () => { supabase.removeChannel(subscription); };
+
+        const channelAssignments = supabase
+            .channel(`driver_assignments_web_${companyCode}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments', filter: `company_code=eq.${companyCode}` }, () => fetchDriverAssignments(companyCode))
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channelRequest);
+            supabase.removeChannel(channelAssignments);
+        };
     }, [companyCode, user?.region_id]);
 
     // Real-time for client requests
@@ -147,6 +155,35 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    const fetchDriverAssignments = async (code = companyCode) => {
+        if (!code) return;
+        try {
+            const { data, error } = await supabase
+                .from('driver_assignments')
+                .select(`
+                    *,
+                    driver:driver_id(id, name, phone),
+                    assigner:assigned_by(id, name)
+                `)
+                .eq('company_code', code)
+                .is('deleted_at', null)
+                .neq('status', 'completed') // Maybe show completed too? Dashboard logic implies active ones?
+                // Actually Dashboard uses it to find assignment for pending request.
+                // If the request is pending, the assignment MUST be active (not completed).
+                // Or if it IS completed but not processed?
+                // Let's fetch ALL non-deleted assignments for safety, or just active ones.
+                // Given "pending requests" context, active ones are most relevant.
+                // But let's filter purely by deleted_at for now to be safe.
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            console.log('[DEBUG fetchDriverAssignments]', data?.length);
+            setDriverAssignments(data || []);
+        } catch (error) {
+            console.error('Error fetching driver assignments:', error);
+        }
+    };
+
     const fetchPickupRequests = async (code = companyCode) => {
         if (!code) return;
         try {
@@ -189,7 +226,7 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null) => {
+    const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null, retroactiveDriverInfo = null) => {
         try {
             // Get driver info and assignment ID if assigned
             let driverInfo = null;
@@ -207,6 +244,13 @@ export const DataProvider = ({ children }) => {
                         driverInfo = assignment.driver;
                     }
                 }
+            }
+
+            // If no driver from assignment but we have retroactive driver info, use that
+            // This is a "Naknadno" (retroactive) assignment - driver set during processing without proper assignment flow
+            if (!driverInfo && retroactiveDriverInfo) {
+                driverInfo = retroactiveDriverInfo;
+                // Note: driverAssignmentId stays null - this is intentional to mark it as "retroactive"
             }
 
             const processedRecord = {
@@ -229,7 +273,7 @@ export const DataProvider = ({ children }) => {
                 processed_by_name: user?.name || null, // Store name for easier display
                 driver_id: driverInfo?.id || null, // Store driver who handled this request
                 driver_name: driverInfo?.name || null, // Store driver name for easier display
-                driver_assignment_id: driverAssignmentId, // Store direct link to driver_assignment for timeline
+                driver_assignment_id: driverAssignmentId, // Store direct link to driver_assignment for timeline (null for retroactive)
             };
 
             if (weightData) {
@@ -526,9 +570,15 @@ export const DataProvider = ({ children }) => {
     };
 
     const deleteClient = async (clientId) => {
+        if (!clientId) throw new Error('Nedostaje ID klijenta');
+        if (!user?.id) throw new Error('Korisnik nije prijavljen');
         try {
-            // Soft delete
-            await supabase.from('users').update({ deleted_at: new Date().toISOString() }).eq('id', clientId);
+            // Hard delete using RPC
+            const { error } = await supabase.rpc('delete_user_permanently', {
+                p_target_user_id: clientId,
+                p_requesting_user_id: user.id
+            });
+            if (error) throw error;
             return { success: true };
         } catch (error) {
             throw error;
@@ -553,6 +603,7 @@ export const DataProvider = ({ children }) => {
                 `)
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
+                .is('users.deleted_at', null)
                 .order('name');
             if (error) throw error;
             // Transform count from array to number
@@ -974,6 +1025,7 @@ export const DataProvider = ({ children }) => {
 
     const value = {
         pickupRequests,
+        driverAssignments,
         clientRequests,
         processedNotification,
         clearProcessedNotification,

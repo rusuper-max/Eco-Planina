@@ -113,23 +113,55 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             const requestIds = requests.map(r => r.request_id || r.original_request_id).filter(Boolean);
             if (requestIds.length === 0) return;
 
-            const { data, error } = await supabase
+            // Query 1: Direct entity_id matches (for create, process, etc.)
+            const { data: directLogs, error: directError } = await supabase
                 .from('activity_logs')
                 .select('*')
                 .in('entity_id', requestIds)
-                .in('action', ['create', 'assign', 'picked_up', 'delivered', 'process'])
+                .in('action', ['create', 'process'])
                 .order('created_at', { ascending: true });
 
-            if (error) throw error;
+            if (directError) throw directError;
 
-            // Group by entity_id (request_id)
-            const logsMap = {};
-            (data || []).forEach(log => {
-                if (!logsMap[log.entity_id]) {
-                    logsMap[log.entity_id] = [];
-                }
-                logsMap[log.entity_id].push(log);
+            // Query 2: Driver assignment logs (entity_type = 'driver_assignment') 
+            // where metadata->request_id matches our request IDs
+            // Also get picked_up/delivered which are logged with entity_type = 'driver_assignment'
+            const { data: assignmentLogs, error: assignmentError } = await supabase
+                .from('activity_logs')
+                .select('*')
+                .eq('entity_type', 'driver_assignment')
+                .in('action', ['assign', 'picked_up', 'delivered'])
+                .order('created_at', { ascending: true });
+
+            if (assignmentError) throw assignmentError;
+
+            // Filter assignment logs to only those matching our request IDs (via metadata)
+            const filteredAssignmentLogs = (assignmentLogs || []).filter(log => {
+                const metadataRequestId = log.metadata?.request_id;
+                return metadataRequestId && requestIds.includes(metadataRequestId);
             });
+
+            // Combine all logs
+            const allLogs = [...(directLogs || []), ...filteredAssignmentLogs];
+
+            // Group by request_id (use metadata.request_id for assignment logs)
+            const logsMap = {};
+            allLogs.forEach(log => {
+                const requestId = log.entity_type === 'driver_assignment'
+                    ? log.metadata?.request_id
+                    : log.entity_id;
+                if (!requestId) return;
+                if (!logsMap[requestId]) {
+                    logsMap[requestId] = [];
+                }
+                logsMap[requestId].push(log);
+            });
+
+            // Sort each group by created_at
+            Object.keys(logsMap).forEach(key => {
+                logsMap[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            });
+
             setActivityLogs(logsMap);
         } catch (err) {
             console.error('Error fetching activity logs:', err);
