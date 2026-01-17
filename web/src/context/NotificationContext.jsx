@@ -105,8 +105,14 @@ export const NotificationProvider = ({ children }) => {
             )
             .subscribe();
 
+        // Polling fallback (every 60s) to keep count in sync
+        const intervalId = setInterval(() => {
+            fetchNotifications();
+        }, 60000);
+
         return () => {
             supabase.removeChannel(subscription);
+            clearInterval(intervalId);
         };
     }, [user?.id, fetchNotifications]);
 
