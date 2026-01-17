@@ -134,7 +134,22 @@ export default function Dashboard() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [companyCode]);
+    }, [companyCode, fetchDriverAssignments]);
+
+    // Polling fallback - refresh data every 30 seconds to handle tab sleep/missed events
+    useEffect(() => {
+        if (!companyCode || (userRole !== 'manager' && userRole !== 'company_admin')) return;
+
+        const intervalId = setInterval(() => {
+            // console.log('DEBUG: Polling refresh...');
+            fetchDriverAssignments();
+            fetchProcessedRequests().then(data => {
+                if (data) setProcessedRequests(data);
+            });
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(intervalId);
+    }, [companyCode, userRole, fetchDriverAssignments, fetchProcessedRequests]);
 
     // Realtime processed requests updates (manager/company_admin)
     useEffect(() => {
@@ -159,7 +174,7 @@ export default function Dashboard() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [companyCode]);
+    }, [companyCode, fetchProcessedRequests]);
 
     // Load equipment from database (with one-time migration from localStorage)
     useEffect(() => {
@@ -273,23 +288,24 @@ export default function Dashboard() {
     };
 
     // Fetch driver assignments for manager view
-    const fetchDriverAssignments = async () => {
+    const fetchDriverAssignments = useCallback(async () => {
         if (!companyCode) return;
         try {
-            console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
+            // console.log('DEBUG fetchDriverAssignments: fetching for company', companyCode);
             const { data, error } = await supabase
                 .from('driver_assignments')
                 .select('*, driver:driver_id(id, name)')
                 .eq('company_code', companyCode)
                 .in('status', ['assigned', 'in_progress', 'picked_up', 'delivered'])
                 .is('deleted_at', null);
+
             if (error) throw error;
-            console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments', data);
+            // console.log('DEBUG fetchDriverAssignments: received', data?.length, 'assignments');
             setDriverAssignments(data || []);
         } catch (err) {
             console.error('Error fetching driver assignments:', err);
         }
-    };
+    }, [companyCode]);
 
     // Fetch company drivers for map assignment
     const fetchCompanyDrivers = async () => {
