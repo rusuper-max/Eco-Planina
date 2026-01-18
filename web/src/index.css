@@ -20,3 +20,17 @@
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out forwards;
 }
+
+/* Smooth blink animation - fade in/out without size change */
+@keyframes blink-fade {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-blink-fade {
+  animation: blink-fade 1.5s ease-in-out infinite;
+}

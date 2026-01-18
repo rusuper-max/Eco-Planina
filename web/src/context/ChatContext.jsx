@@ -95,9 +95,17 @@ export const ChatProvider = ({ children }) => {
             });
             const partnerIds = Object.keys(conversationMap);
             if (partnerIds.length === 0) return [];
-            // Dohvati partnere - uključi i obrisane korisnike da ne prikazuje "Nepoznato"
-            const { data: partners } = await supabase.from('users').select('id, name, role, phone, deleted_at').in('id', partnerIds);
-            const partnerMap = (partners || []).reduce((acc, p) => {
+            // Dohvati partnere pomoću RPC funkcije koja vraća i obrisane korisnike
+            let partners = [];
+            const { data: rpcData, error: rpcError } = await supabase.rpc('get_chat_partners', { partner_ids: partnerIds });
+            if (!rpcError && rpcData) {
+                partners = rpcData;
+            } else {
+                // Fallback na direktan query ako RPC ne postoji
+                const { data: fallbackData } = await supabase.from('users').select('id, name, role, phone, deleted_at').in('id', partnerIds);
+                partners = fallbackData || [];
+            }
+            const partnerMap = partners.reduce((acc, p) => {
                 acc[p.id] = {
                     ...p,
                     name: p.deleted_at ? `${p.name} (obrisan)` : p.name

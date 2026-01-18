@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     Building2, Users, Truck, User, ZoomIn, ZoomOut, Maximize2, Minimize2,
-    RefreshCw, Save, Network, Phone, Mail, X, LogIn, Edit3, Shield, Briefcase,
-    Package, FileText, ChevronDown, ChevronUp, Hash, MapPin
+    RefreshCw, Save, Network, Phone, Mail, X, Edit3, Shield, Briefcase,
+    Package, FileText, ChevronDown, ChevronUp, Hash, MapPin, Recycle,
+    LogIn, Calendar, TrendingUp
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context';
+import { useCompany } from '../../context/CompanyContext';
 import toast from 'react-hot-toast';
+
+// LocalStorage keys
+const POSITIONS_STORAGE_KEY = 'eco_n8n_editor_positions_v2';
+const BRANCH_POSITIONS_KEY = 'eco_n8n_branch_positions_v1';
+const HELP_HIDDEN_KEY = 'eco_n8n_help_hidden';
 
 // ============================================================================
 // ROLE CONFIGURATION
@@ -14,70 +21,78 @@ import toast from 'react-hot-toast';
 
 const ROLES = {
     company_admin: {
-        label: 'Admin',
+        label: 'Admin Firme',
         color: 'bg-purple-600',
         hex: '#7c3aed',
         icon: Users,
-        borderColor: 'border-purple-500'
+        borderColor: 'border-purple-500',
+        canDrag: false // Cannot be moved
     },
     supervisor: {
         label: 'Supervizor',
         color: 'bg-blue-600',
         hex: '#2563eb',
         icon: Shield,
-        borderColor: 'border-blue-500'
+        borderColor: 'border-blue-500',
+        canDrag: false // Cannot be moved
     },
     manager: {
         label: 'Menadžer',
         color: 'bg-emerald-600',
         hex: '#059669',
         icon: Briefcase,
-        borderColor: 'border-emerald-500'
+        borderColor: 'border-emerald-500',
+        canDrag: true
     },
     driver: {
         label: 'Vozač',
         color: 'bg-amber-500',
         hex: '#f59e0b',
         icon: Truck,
-        borderColor: 'border-amber-500'
+        borderColor: 'border-amber-500',
+        canDrag: true
     },
     client: {
         label: 'Klijent',
         color: 'bg-slate-500',
         hex: '#64748b',
         icon: User,
-        borderColor: 'border-slate-500'
+        borderColor: 'border-slate-500',
+        canDrag: true
     }
 };
 
 const BRANCH_COLORS = {
     default: { bg: 'bg-slate-800/60', border: 'border-rose-600/50', label: 'bg-rose-600' },
     unassigned: { bg: 'bg-slate-800/40', border: 'border-slate-600/50', label: 'bg-slate-600' },
-    uprava: { bg: 'bg-purple-900/30', border: 'border-purple-500/50', label: 'bg-purple-600' }
+    centrala: { bg: 'bg-purple-900/30', border: 'border-purple-500/50', label: 'bg-purple-600' }
 };
 
 // ============================================================================
 // NODE CARD COMPONENT
 // ============================================================================
 
-const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick }) => {
+const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick, canDrag }) => {
     const RoleConfig = ROLES[node.role] || ROLES.client;
     const Icon = RoleConfig.icon;
 
     return (
         <div
-            onMouseDown={onMouseDown}
+            data-node="true"
+            onMouseDown={canDrag ? onMouseDown : undefined}
             onClick={onClick}
             className={`
-                absolute w-44 p-2.5 rounded-lg cursor-pointer transition-all duration-150
+                absolute w-44 p-2.5 rounded-lg transition-shadow
                 bg-slate-800 border border-slate-700
-                ${isSelected ? 'ring-2 ring-white shadow-2xl z-50 scale-105' : 'hover:ring-1 hover:ring-slate-500 z-10'}
-                ${isDragging ? 'shadow-2xl scale-105 opacity-90' : 'shadow-lg'}
+                ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}
+                ${isSelected ? 'ring-2 ring-white shadow-2xl z-50' : 'hover:ring-1 hover:ring-slate-500 z-10'}
+                ${isDragging ? 'shadow-2xl opacity-80 z-50' : 'shadow-lg'}
             `}
             style={{
                 left: node.x,
                 top: node.y,
-                filter: isDragging ? 'drop-shadow(0 10px 20px rgba(0,0,0,0.5))' : undefined
+                transform: isDragging ? 'scale(1.05)' : 'scale(1)',
+                transition: isDragging ? 'none' : 'transform 0.1s, box-shadow 0.15s'
             }}
         >
             {/* Role color strip */}
@@ -101,6 +116,13 @@ const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick }) => {
             {node.hasPending && (
                 <div className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full animate-pulse" />
             )}
+
+            {/* Lock icon for non-draggable */}
+            {!canDrag && (
+                <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-slate-700 rounded-full flex items-center justify-center border border-slate-600">
+                    <Shield size={8} className="text-purple-400" />
+                </div>
+            )}
         </div>
     );
 };
@@ -109,14 +131,13 @@ const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick }) => {
 // COMPANY NODE COMPONENT
 // ============================================================================
 
-const CompanyNode = ({ companyName, position, isSelected, onMouseDown, onClick }) => (
+const CompanyNode = ({ companyName, position, isSelected, onClick }) => (
     <div
-        onMouseDown={onMouseDown}
         onClick={onClick}
         className={`
-            absolute w-52 p-4 rounded-xl cursor-pointer transition-all duration-150
+            absolute w-52 p-4 rounded-xl cursor-pointer transition-shadow
             bg-gradient-to-br from-purple-900/80 to-slate-800 border-2 border-purple-500
-            ${isSelected ? 'ring-2 ring-white shadow-2xl scale-105' : 'hover:ring-1 hover:ring-purple-400'}
+            ${isSelected ? 'ring-2 ring-white shadow-2xl' : 'hover:ring-1 hover:ring-purple-400'}
             shadow-xl z-20
         `}
         style={{ left: position.x, top: position.y }}
@@ -140,17 +161,21 @@ const CompanyNode = ({ companyName, position, isSelected, onMouseDown, onClick }
 // BRANCH CONTAINER COMPONENT
 // ============================================================================
 
-const BranchContainer = ({ branch, isDropTarget, onEditClick }) => {
-    const colors = branch.isUprava ? BRANCH_COLORS.uprava
+const BranchContainer = ({ branch, isDropTarget, onEditClick, onMouseDown, isDragging }) => {
+    const colors = branch.isCentrala ? BRANCH_COLORS.centrala
         : branch.isUnassigned ? BRANCH_COLORS.unassigned
             : BRANCH_COLORS.default;
 
     return (
         <div
+            data-branch="true"
+            onMouseDown={onMouseDown}
             className={`
                 absolute rounded-xl border-2 backdrop-blur-sm transition-all duration-200
                 ${colors.bg} ${colors.border}
                 ${isDropTarget ? 'border-emerald-400 bg-emerald-900/20 scale-[1.02]' : ''}
+                ${isDragging ? 'shadow-2xl opacity-90 z-30' : ''}
+                cursor-grab active:cursor-grabbing
             `}
             style={{
                 left: branch.x,
@@ -165,12 +190,12 @@ const BranchContainer = ({ branch, isDropTarget, onEditClick }) => {
                 tracking-wide uppercase text-white border border-slate-600/50
                 flex items-center gap-2 ${colors.label}
             `}>
-                {branch.isUprava ? <Shield size={12} /> : branch.isUnassigned ? <Users size={12} /> : <Building2 size={12} />}
+                {branch.isCentrala ? <Shield size={12} /> : branch.isUnassigned ? <Users size={12} /> : <Building2 size={12} />}
                 {branch.label}
             </div>
 
             {/* Edit button for real branches */}
-            {!branch.isUprava && !branch.isUnassigned && onEditClick && (
+            {!branch.isCentrala && !branch.isUnassigned && onEditClick && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onEditClick(branch); }}
                     className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-700/80 hover:bg-slate-600 text-slate-400 hover:text-white transition-colors"
@@ -189,7 +214,8 @@ const BranchContainer = ({ branch, isDropTarget, onEditClick }) => {
 // DETAIL SIDEBAR COMPONENT
 // ============================================================================
 
-const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
+const DetailSidebar = ({ node, onClose, wasteTypes = [], onLoginAs, processedRequests = [] }) => {
+    const [expandedWaste, setExpandedWaste] = useState(false);
     const [expandedRequests, setExpandedRequests] = useState(false);
 
     if (!node) return null;
@@ -198,12 +224,31 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
     const Icon = RoleConfig.icon;
     const userData = node.data || {};
 
-    // Mock request data - in real implementation this would come from the API
-    const requestCount = userData.request_count || 0;
-    const requestsByType = userData.requests_by_type || {};
+    // Get allowed waste types for clients
+    const allowedWasteTypes = userData.allowed_waste_types || [];
+    const hasAllWasteTypes = !allowedWasteTypes.length || allowedWasteTypes.length === wasteTypes.length;
+
+    // Calculate requests by waste type for this client
+    const requestsByWasteType = useMemo(() => {
+        if (node.role !== 'client') return {};
+        const clientRequests = processedRequests.filter(r => r.client_id === node.userId);
+        const byType = {};
+        clientRequests.forEach(req => {
+            const wtId = req.waste_type_id;
+            const wt = wasteTypes.find(w => w.id === wtId);
+            const label = wt?.label || req.waste_label || 'Nepoznato';
+            byType[label] = (byType[label] || 0) + 1;
+        });
+        return byType;
+    }, [node, processedRequests, wasteTypes]);
+
+    const totalRequests = Object.values(requestsByWasteType).reduce((a, b) => a + b, 0);
+
+    // Can login as manager or driver
+    const canLoginAs = (node.role === 'manager' || node.role === 'driver') && onLoginAs;
 
     return (
-        <div className="absolute right-0 top-0 h-full w-80 bg-slate-800 border-l border-slate-700 shadow-2xl transform transition-transform z-40 flex flex-col">
+        <div data-sidebar="true" className="absolute right-0 top-0 h-full w-80 bg-slate-800 border-l border-slate-700 shadow-2xl z-40 flex flex-col">
             {/* Header */}
             <div className="flex justify-between items-center px-5 py-4 bg-slate-900/50 border-b border-slate-700">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
@@ -215,8 +260,11 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
                 </button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+            {/* Content - stop wheel propagation */}
+            <div
+                className="flex-1 overflow-y-auto p-5 space-y-5"
+                onWheel={(e) => e.stopPropagation()}
+            >
                 {/* Profile header */}
                 <div className="flex items-center gap-4">
                     <div className={`p-4 rounded-xl ${RoleConfig.color}`}>
@@ -229,6 +277,17 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
                         </span>
                     </div>
                 </div>
+
+                {/* Login as button for managers/drivers */}
+                {canLoginAs && (
+                    <button
+                        onClick={() => onLoginAs(node)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium transition-colors"
+                    >
+                        <LogIn size={18} />
+                        Uloguj se kao {node.label.split(' ')[0]}
+                    </button>
+                )}
 
                 {/* Info cards */}
                 <div className="bg-slate-700/40 rounded-xl p-4 space-y-4 border border-slate-600/50">
@@ -262,8 +321,20 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
                         </div>
                     )}
 
+                    {/* Created at for managers/drivers */}
+                    {(node.role === 'manager' || node.role === 'driver') && userData.created_at && (
+                        <div>
+                            <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1">
+                                <Calendar size={10} /> Registrovan
+                            </label>
+                            <div className="text-slate-200 mt-1 text-sm">
+                                {new Date(userData.created_at).toLocaleDateString('sr-Latn-RS', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* PIB (for clients) */}
-                    {userData.pib && (
+                    {node.role === 'client' && userData.pib && (
                         <div>
                             <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1">
                                 <Hash size={10} /> PIB
@@ -273,36 +344,72 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
                             </div>
                         </div>
                     )}
+
+                    {/* Address (for clients) */}
+                    {node.role === 'client' && userData.address && (
+                        <div>
+                            <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1">
+                                <MapPin size={10} /> Adresa
+                            </label>
+                            <div className="text-slate-200 mt-1 text-sm">{userData.address}</div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Request count (for clients) */}
-                {node.role === 'client' && (
+                {/* Stats for managers/drivers */}
+                {(node.role === 'manager' || node.role === 'driver') && (
+                    <div className="bg-slate-700/40 rounded-xl p-4 border border-slate-600/50">
+                        <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1 mb-3">
+                            <TrendingUp size={10} /> Statistika
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-emerald-400">
+                                    {userData.processed_count || 0}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1">Obrađeno</div>
+                            </div>
+                            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                                <div className="text-2xl font-bold text-blue-400">
+                                    {userData.assigned_count || 0}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1">Aktivno</div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Waste types for clients */}
+                {node.role === 'client' && wasteTypes.length > 0 && (
                     <div className="bg-slate-700/40 rounded-xl border border-slate-600/50 overflow-hidden">
                         <button
-                            onClick={() => setExpandedRequests(!expandedRequests)}
+                            onClick={() => setExpandedWaste(!expandedWaste)}
                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
                         >
                             <div className="flex items-center gap-2">
-                                <FileText size={16} className="text-emerald-400" />
-                                <span className="text-slate-200 font-medium">Broj zahteva</span>
+                                <Recycle size={16} className="text-emerald-400" />
+                                <span className="text-slate-200 font-medium">Vrste robe</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-emerald-400 font-bold">{requestCount}</span>
-                                {expandedRequests ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                                <span className="text-emerald-400 font-bold text-sm">
+                                    {hasAllWasteTypes ? 'Sve' : `${allowedWasteTypes.length}/${wasteTypes.length}`}
+                                </span>
+                                {expandedWaste ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
                             </div>
                         </button>
 
-                        {expandedRequests && Object.keys(requestsByType).length > 0 && (
+                        {expandedWaste && (
                             <div className="px-4 pb-3 space-y-2 border-t border-slate-600/50 pt-3">
-                                {Object.entries(requestsByType).map(([typeId, count]) => {
-                                    const wasteType = wasteTypes.find(w => w.id === typeId);
+                                {wasteTypes.map(wt => {
+                                    const isAllowed = hasAllWasteTypes || allowedWasteTypes.includes(wt.id);
                                     return (
-                                        <div key={typeId} className="flex items-center justify-between text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <Package size={12} className="text-slate-400" />
-                                                <span className="text-slate-300">{wasteType?.label || 'Nepoznato'}</span>
-                                            </div>
-                                            <span className="text-slate-400">{count}</span>
+                                        <div key={wt.id} className={`flex items-center gap-2 text-sm ${isAllowed ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
+                                            {wt.customImage ? (
+                                                <img src={wt.customImage} alt="" className="w-4 h-4 rounded object-cover" />
+                                            ) : (
+                                                <span className="text-sm">{wt.icon}</span>
+                                            )}
+                                            <span>{wt.label}</span>
                                         </div>
                                     );
                                 })}
@@ -311,21 +418,77 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
                     </div>
                 )}
 
-                {/* Login as button */}
-                {onLoginAs && node.role !== 'client' && (
-                    <button
-                        onClick={() => onLoginAs(node)}
-                        className="w-full px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
-                    >
-                        <LogIn size={16} />
-                        Prijavi se kao {node.label}
-                    </button>
+                {/* Equipment for clients */}
+                {node.role === 'client' && userData.equipment_types && userData.equipment_types.length > 0 && (
+                    <div className="bg-slate-700/40 rounded-xl p-4 border border-slate-600/50">
+                        <label className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1 mb-2">
+                            <Package size={10} /> Oprema
+                        </label>
+                        <div className="text-emerald-400 font-medium">
+                            {userData.equipment_types.length} kom. dodeljeno
+                        </div>
+                    </div>
+                )}
+
+                {/* Request count for clients - EXPANDABLE */}
+                {node.role === 'client' && (
+                    <div className="bg-slate-700/40 rounded-xl border border-slate-600/50 overflow-hidden">
+                        <button
+                            onClick={() => totalRequests > 0 && setExpandedRequests(!expandedRequests)}
+                            className={`w-full px-4 py-3 flex items-center justify-between ${totalRequests > 0 ? 'hover:bg-slate-700/50 cursor-pointer' : ''} transition-colors`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <FileText size={16} className="text-emerald-400" />
+                                <span className="text-slate-200 font-medium">Zahtevi</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {totalRequests > 0 ? (
+                                    <>
+                                        <span className="text-emerald-400 font-bold text-sm">
+                                            {totalRequests} obrađen{totalRequests === 1 ? '' : totalRequests < 5 ? 'a' : 'ih'}
+                                        </span>
+                                        {expandedRequests ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                                    </>
+                                ) : (
+                                    <span className="text-slate-500 text-sm">Nema</span>
+                                )}
+                            </div>
+                        </button>
+
+                        {expandedRequests && totalRequests > 0 && (
+                            <div className="px-4 pb-3 space-y-2 border-t border-slate-600/50 pt-3">
+                                {Object.entries(requestsByWasteType)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([label, count]) => {
+                                        const wt = wasteTypes.find(w => w.label === label);
+                                        return (
+                                            <div key={label} className="flex items-center justify-between text-sm">
+                                                <div className="flex items-center gap-2 text-slate-300">
+                                                    {wt?.customImage ? (
+                                                        <img src={wt.customImage} alt="" className="w-4 h-4 rounded object-cover" />
+                                                    ) : wt?.icon ? (
+                                                        <span className="text-sm">{wt.icon}</span>
+                                                    ) : (
+                                                        <Recycle size={14} className="text-slate-500" />
+                                                    )}
+                                                    <span>{label}</span>
+                                                </div>
+                                                <span className="text-emerald-400 font-bold">{count}</span>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
 
             {/* Footer info */}
             <div className="p-4 border-t border-slate-700/50 text-xs text-slate-500 leading-relaxed">
-                Prevlačenjem ovog noda u drugu filijalu automatski se menja dodela.
+                {ROLES[node.role]?.canDrag
+                    ? 'Prevlačenjem ovog noda u drugu filijalu automatski se menja dodela.'
+                    : 'Ovaj korisnik se ne može pomerati između filijala.'
+                }
             </div>
         </div>
     );
@@ -337,8 +500,13 @@ const DetailSidebar = ({ node, onClose, onLoginAs, wasteTypes = [] }) => {
 
 export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const { companyName, loginAsUser } = useAuth();
-    const { assignUsersToRegion, fetchUsersGroupedByRegion, fetchCompanyRegions, updateRegion } = useData();
+    const { assignUsersToRegion, fetchUsersGroupedByRegion, fetchCompanyRegions, fetchProcessedRequests } = useData();
+    const { fetchCompanyWasteTypes } = useCompany();
     const containerRef = useRef(null);
+
+    // Refs for panning and branch dragging (avoid stale closure issues)
+    const panningRef = useRef({ active: false, startX: 0, startY: 0, offsetX: 50, offsetY: 20 });
+    const branchDragRef = useRef({ active: false, branchId: null, startX: 0, startY: 0, initialBranchX: 0, initialBranchY: 0, initialNodePositions: {} });
 
     // State
     const [isFullscreen, setIsFullscreen] = useState(initialFullscreen);
@@ -346,17 +514,25 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const [allRegions, setAllRegions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [wasteTypes, setWasteTypes] = useState([]);
+    const [processedRequests, setProcessedRequests] = useState([]);
 
     // View state
     const [scale, setScale] = useState(0.85);
     const [offset, setOffset] = useState({ x: 50, y: 20 });
-    const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const [showHelp, setShowHelp] = useState(() => {
+        try {
+            return localStorage.getItem(HELP_HIDDEN_KEY) !== 'true';
+        } catch { return true; }
+    });
 
     // Node dragging
     const [draggingNodeId, setDraggingNodeId] = useState(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [nodePositions, setNodePositions] = useState({});
+
+    // Branch dragging - just track the ID for visual feedback
+    const [draggingBranchId, setDraggingBranchId] = useState(null);
 
     // Selection & sidebar
     const [selectedNode, setSelectedNode] = useState(null);
@@ -370,26 +546,35 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     // Branch layout
     const [branchLayout, setBranchLayout] = useState([]);
 
-    // LocalStorage key
-    const POSITIONS_STORAGE_KEY = 'eco_n8n_editor_positions';
-
     // ========================================================================
     // DATA LOADING
     // ========================================================================
 
     useEffect(() => {
         loadData();
+        loadWasteTypes();
     }, []);
+
+    const loadWasteTypes = async () => {
+        try {
+            const wt = await fetchCompanyWasteTypes();
+            setWasteTypes(wt || []);
+        } catch (err) {
+            console.error('Error loading waste types:', err);
+        }
+    };
 
     const loadData = async () => {
         setLoading(true);
         try {
-            const [groupedData, regions] = await Promise.all([
+            const [groupedData, regions, historyResult] = await Promise.all([
                 fetchUsersGroupedByRegion(),
-                fetchCompanyRegions()
+                fetchCompanyRegions(),
+                fetchProcessedRequests({ pageSize: 1000 }) // Fetch all history for client counts
             ]);
             setData(groupedData);
             setAllRegions(regions || []);
+            setProcessedRequests(historyResult?.data || []);
             setPendingChanges([]);
             initializeLayout(groupedData, regions);
         } catch (err) {
@@ -420,11 +605,10 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         const companyY = 40;
         positions['company'] = { x: companyX, y: companyY };
 
-        const allRegions = regions || [];
         const unassigned = groupedData.unassigned || [];
         const regionsData = groupedData.regions || [];
 
-        // Separate company admins
+        // Separate company admins and supervisors (they stay in "Centrala")
         const companyAdmins = unassigned.filter(u => u.role === 'company_admin');
         const supervisors = unassigned.filter(u => u.role === 'supervisor');
         const realUnassigned = unassigned.filter(u => u.role !== 'company_admin' && u.role !== 'supervisor');
@@ -434,47 +618,55 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         const totalWidth = totalBranches * BRANCH_WIDTH + (totalBranches - 1) * BRANCH_GAP;
         const startX = Math.max(50, companyX - totalWidth / 2 + BRANCH_WIDTH / 2 - 50);
 
-        // Uprava (company admins) - small box near company
-        if (companyAdmins.length > 0) {
-            const upravaX = companyX + 280;
-            const upravaY = companyY - 20;
-            branches.push({
-                id: 'uprava',
-                label: 'Uprava',
-                x: upravaX,
-                y: upravaY,
-                width: 200,
-                height: 80 + companyAdmins.length * 50,
-                isUprava: true,
-                regionId: 'uprava'
-            });
-
-            companyAdmins.forEach((admin, i) => {
-                positions[`user-${admin.id}`] = {
-                    x: upravaX + 20,
-                    y: upravaY + 40 + i * 70
-                };
-            });
+        // FIRST: Load saved branch positions (needed before calculating node positions)
+        let savedBranchPos = {};
+        try {
+            const savedBranches = localStorage.getItem(BRANCH_POSITIONS_KEY);
+            if (savedBranches) {
+                savedBranchPos = JSON.parse(savedBranches);
+            }
+        } catch (e) {
+            // Ignore
         }
 
-        // Supervisors - positioned between company and branches
-        if (supervisors.length > 0) {
-            const supY = companyY + 140;
-            const supSpacing = 220;
-            const supStartX = companyX - ((supervisors.length - 1) * supSpacing) / 2;
+        // Centrala container (for company admins and supervisors)
+        const centralaUsers = [...companyAdmins, ...supervisors];
+        if (centralaUsers.length > 0) {
+            // Use saved position or default
+            const defaultCentralaX = companyX + 280;
+            const defaultCentralaY = companyY - 20;
+            const centralaX = savedBranchPos['centrala']?.x ?? defaultCentralaX;
+            const centralaY = savedBranchPos['centrala']?.y ?? defaultCentralaY;
 
-            supervisors.forEach((sup, i) => {
-                positions[`user-${sup.id}`] = {
-                    x: supStartX + i * supSpacing - NODE_WIDTH / 2,
-                    y: supY
+            branches.push({
+                id: 'centrala',
+                label: 'Centrala',
+                x: centralaX,
+                y: centralaY,
+                width: 200,
+                height: 80 + centralaUsers.length * 70,
+                isCentrala: true,
+                regionId: 'centrala'
+            });
+
+            // Position nodes INSIDE the branch (use branch position)
+            centralaUsers.forEach((user, i) => {
+                positions[`user-${user.id}`] = {
+                    x: centralaX + 12,
+                    y: centralaY + 40 + i * 76
                 };
             });
         }
 
         // Region branches
         regionsData.forEach((region, regionIdx) => {
-            const branchX = startX + regionIdx * (BRANCH_WIDTH + BRANCH_GAP);
-            const branchY = BRANCH_START_Y;
+            const defaultBranchX = startX + regionIdx * (BRANCH_WIDTH + BRANCH_GAP);
+            const defaultBranchY = BRANCH_START_Y;
+            const branchId = `region-${region.id}`;
+
+            // Use saved position or default
+            const branchX = savedBranchPos[branchId]?.x ?? defaultBranchX;
+            const branchY = savedBranchPos[branchId]?.y ?? defaultBranchY;
 
             const users = region.users || [];
             const managers = users.filter(u => u.role === 'manager');
@@ -482,11 +674,11 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             const clients = users.filter(u => u.role === 'client');
 
             // Calculate needed height
-            const rows = Math.ceil((managers.length + drivers.length + clients.length) / 1);
-            const neededHeight = Math.max(BRANCH_HEIGHT, 80 + rows * (NODE_HEIGHT + NODE_GAP));
+            const totalUsers = managers.length + drivers.length + clients.length;
+            const neededHeight = Math.max(BRANCH_HEIGHT, 80 + totalUsers * (NODE_HEIGHT + NODE_GAP));
 
             branches.push({
-                id: `region-${region.id}`,
+                id: branchId,
                 label: region.name,
                 x: branchX,
                 y: branchY,
@@ -495,24 +687,11 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 regionId: region.id
             });
 
-            // Position nodes inside branch
+            // Position nodes INSIDE branch (relative to branch position)
             let nodeY = branchY + 50;
             const nodeX = branchX + (BRANCH_WIDTH - NODE_WIDTH) / 2;
 
-            // Managers first
-            managers.forEach((user) => {
-                positions[`user-${user.id}`] = { x: nodeX, y: nodeY };
-                nodeY += NODE_HEIGHT + NODE_GAP;
-            });
-
-            // Then drivers
-            drivers.forEach((user) => {
-                positions[`user-${user.id}`] = { x: nodeX, y: nodeY };
-                nodeY += NODE_HEIGHT + NODE_GAP;
-            });
-
-            // Then clients
-            clients.forEach((user) => {
+            [...managers, ...drivers, ...clients].forEach((user) => {
                 positions[`user-${user.id}`] = { x: nodeX, y: nodeY };
                 nodeY += NODE_HEIGHT + NODE_GAP;
             });
@@ -520,22 +699,28 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
 
         // Unassigned branch
         if (realUnassigned.length > 0) {
-            const unassignedX = startX + regionsData.length * (BRANCH_WIDTH + BRANCH_GAP);
-            const rows = Math.ceil(realUnassigned.length / 1);
-            const neededHeight = Math.max(BRANCH_HEIGHT, 80 + rows * (NODE_HEIGHT + NODE_GAP));
+            const defaultUnassignedX = startX + regionsData.length * (BRANCH_WIDTH + BRANCH_GAP);
+            const defaultUnassignedY = BRANCH_START_Y;
+
+            // Use saved position or default
+            const unassignedX = savedBranchPos['unassigned']?.x ?? defaultUnassignedX;
+            const unassignedY = savedBranchPos['unassigned']?.y ?? defaultUnassignedY;
+
+            const neededHeight = Math.max(BRANCH_HEIGHT, 80 + realUnassigned.length * (NODE_HEIGHT + NODE_GAP));
 
             branches.push({
                 id: 'unassigned',
                 label: 'Nedodeljeni',
                 x: unassignedX,
-                y: BRANCH_START_Y,
+                y: unassignedY,
                 width: BRANCH_WIDTH,
                 height: neededHeight,
                 isUnassigned: true,
                 regionId: null
             });
 
-            let nodeY = BRANCH_START_Y + 50;
+            // Position nodes INSIDE branch
+            let nodeY = unassignedY + 50;
             const nodeX = unassignedX + (BRANCH_WIDTH - NODE_WIDTH) / 2;
 
             realUnassigned.forEach((user) => {
@@ -544,20 +729,9 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             });
         }
 
-        // Load saved positions
-        try {
-            const saved = localStorage.getItem(POSITIONS_STORAGE_KEY);
-            if (saved) {
-                const savedPositions = JSON.parse(saved);
-                Object.keys(savedPositions).forEach(key => {
-                    if (positions[key]) {
-                        positions[key] = savedPositions[key];
-                    }
-                });
-            }
-        } catch (e) {
-            // Ignore
-        }
+        // Note: We no longer load individual node positions from localStorage
+        // Nodes are always positioned relative to their branch position
+        // This ensures consistency and prevents nodes from appearing outside their branch
 
         setNodePositions(positions);
         setBranchLayout(branches);
@@ -572,7 +746,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         const regions = data.regions || [];
         const unassigned = data.unassigned || [];
 
-        // Company admins
+        // Company admins (in Centrala)
         const companyAdmins = unassigned.filter(u => u.role === 'company_admin');
         companyAdmins.forEach(admin => {
             nodeList.push({
@@ -581,14 +755,14 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 role: admin.role,
                 label: admin.name,
                 userId: admin.id,
-                regionId: 'uprava',
-                branchName: 'Uprava',
+                regionId: 'centrala',
+                branchName: 'Centrala',
                 data: admin,
                 hasPending: pendingChanges.some(c => c.userId === admin.id)
             });
         });
 
-        // Supervisors
+        // Supervisors (in Centrala)
         const supervisors = unassigned.filter(u => u.role === 'supervisor');
         supervisors.forEach(sup => {
             nodeList.push({
@@ -597,8 +771,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 role: sup.role,
                 label: sup.name,
                 userId: sup.id,
-                regionId: null,
-                branchName: 'Supervizor',
+                regionId: 'centrala',
+                branchName: 'Centrala',
                 data: sup,
                 hasPending: pendingChanges.some(c => c.userId === sup.id)
             });
@@ -606,7 +780,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
 
         // Region users
         regions.forEach(region => {
-            const users = (region.users || []).filter(u => u.role !== 'company_admin');
+            const users = (region.users || []).filter(u => u.role !== 'company_admin' && u.role !== 'supervisor');
             users.forEach(user => {
                 nodeList.push({
                     id: `user-${user.id}`,
@@ -655,38 +829,61 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         setScale(s => Math.max(0.4, Math.min(1.5, s + delta)));
     }, []);
 
+    // Canvas panning - using refs for real-time tracking
     const handleCanvasMouseDown = (e) => {
-        if (e.target === containerRef.current || e.target.classList.contains('canvas-bg')) {
-            setIsDraggingCanvas(true);
-            setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+        // Get the actual target element
+        const target = e.target;
+        const isInteractive = target.closest('button') ||
+            target.closest('[data-node]') ||
+            target.closest('[data-branch]') ||
+            target.closest('[data-sidebar]');
+
+        // Start panning if not clicking on an interactive element
+        if (!isInteractive) {
+            e.preventDefault();
+            panningRef.current = {
+                active: true,
+                startX: e.clientX,
+                startY: e.clientY,
+                offsetX: offset.x,
+                offsetY: offset.y
+            };
             setSelectedNode(null);
         }
     };
 
     const handleCanvasMouseMove = (e) => {
-        if (isDraggingCanvas) {
+        // Canvas panning using ref
+        if (panningRef.current.active) {
+            const dx = e.clientX - panningRef.current.startX;
+            const dy = e.clientY - panningRef.current.startY;
             setOffset({
-                x: e.clientX - dragStart.x,
-                y: e.clientY - dragStart.y
+                x: panningRef.current.offsetX + dx,
+                y: panningRef.current.offsetY + dy
             });
+            return;
         }
 
+        // Node dragging
         if (draggingNodeId) {
             const rect = containerRef.current.getBoundingClientRect();
             const x = (e.clientX - rect.left - offset.x) / scale - dragOffset.x;
             const y = (e.clientY - rect.top - offset.y) / scale - dragOffset.y;
 
-            setNodePositions(prev => ({
-                ...prev,
-                [draggingNodeId]: { x, y }
-            }));
+            // Use functional update for smoother dragging
+            setNodePositions(prev => {
+                if (prev[draggingNodeId]?.x === x && prev[draggingNodeId]?.y === y) {
+                    return prev;
+                }
+                return { ...prev, [draggingNodeId]: { x, y } };
+            });
 
             // Check drop target
             const nodeCenter = { x: x + 88, y: y + 30 };
             let foundTarget = null;
 
             for (const branch of branchLayout) {
-                if (branch.isUprava) continue; // Can't drop into Uprava
+                if (branch.isCentrala) continue; // Can't drop into Centrala
 
                 if (
                     nodeCenter.x >= branch.x &&
@@ -707,7 +904,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     };
 
     const handleCanvasMouseUp = () => {
-        setIsDraggingCanvas(false);
+        panningRef.current.active = false;
 
         if (draggingNodeId && dropTarget) {
             const node = nodes.find(n => n.id === draggingNodeId);
@@ -731,22 +928,131 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         setDropTarget(null);
     };
 
-    const handleNodeMouseDown = (e, node) => {
+    const handleNodeMouseDown = useCallback((e, node) => {
         e.stopPropagation();
+        e.preventDefault();
+
+        const roleConfig = ROLES[node.role];
+        if (!roleConfig?.canDrag) return; // Don't allow dragging for non-draggable roles
+
         const rect = e.currentTarget.getBoundingClientRect();
         setDragOffset({
             x: (e.clientX - rect.left) / scale,
             y: (e.clientY - rect.top) / scale
         });
         setDraggingNodeId(node.id);
-    };
+    }, [scale]);
 
-    const handleNodeClick = (e, node) => {
+    const handleNodeClick = useCallback((e, node) => {
         e.stopPropagation();
         if (!draggingNodeId) {
             setSelectedNode(node);
         }
-    };
+    }, [draggingNodeId]);
+
+    // ========================================================================
+    // BRANCH DRAGGING - Using refs for smooth dragging with nodes following
+    // ========================================================================
+
+    // Get nodes that belong to a branch
+    const getNodesInBranch = useCallback((branchId) => {
+        const branch = branchLayout.find(b => b.id === branchId);
+        if (!branch) return [];
+
+        return nodes.filter(node => {
+            if (branch.isCentrala) {
+                return node.regionId === 'centrala';
+            } else if (branch.isUnassigned) {
+                return node.regionId === null;
+            } else {
+                return node.regionId === branch.regionId;
+            }
+        }).map(n => n.id);
+    }, [branchLayout, nodes]);
+
+    const handleBranchMouseDown = useCallback((e, branch) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // Store initial positions for smooth dragging
+        const nodeIdsInBranch = getNodesInBranch(branch.id);
+        const initialNodePos = {};
+        nodeIdsInBranch.forEach(nodeId => {
+            if (nodePositions[nodeId]) {
+                initialNodePos[nodeId] = { ...nodePositions[nodeId] };
+            }
+        });
+
+        branchDragRef.current = {
+            active: true,
+            branchId: branch.id,
+            startX: e.clientX,
+            startY: e.clientY,
+            initialBranchX: branch.x,
+            initialBranchY: branch.y,
+            initialNodePositions: initialNodePos
+        };
+
+        setDraggingBranchId(branch.id);
+    }, [getNodesInBranch, nodePositions]);
+
+    // Global mouse move/up handlers for branch dragging
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (!branchDragRef.current.active) return;
+
+            const { branchId, startX, startY, initialBranchX, initialBranchY, initialNodePositions } = branchDragRef.current;
+
+            // Calculate delta in screen space, then convert to canvas space
+            const dx = (e.clientX - startX) / scale;
+            const dy = (e.clientY - startY) / scale;
+
+            // Update branch position
+            const newBranchX = initialBranchX + dx;
+            const newBranchY = initialBranchY + dy;
+
+            setBranchLayout(prev => prev.map(b =>
+                b.id === branchId ? { ...b, x: newBranchX, y: newBranchY } : b
+            ));
+
+            // Update all nodes inside the branch with the same delta
+            setNodePositions(prev => {
+                const updated = { ...prev };
+                Object.keys(initialNodePositions).forEach(nodeId => {
+                    updated[nodeId] = {
+                        x: initialNodePositions[nodeId].x + dx,
+                        y: initialNodePositions[nodeId].y + dy
+                    };
+                });
+                return updated;
+            });
+        };
+
+        const handleMouseUp = () => {
+            if (!branchDragRef.current.active) return;
+
+            // Save branch positions to localStorage
+            const allBranchPositions = {};
+            branchLayout.forEach(b => {
+                allBranchPositions[b.id] = { x: b.x, y: b.y };
+            });
+            localStorage.setItem(BRANCH_POSITIONS_KEY, JSON.stringify(allBranchPositions));
+
+            // Save node positions too
+            localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(nodePositions));
+
+            branchDragRef.current.active = false;
+            setDraggingBranchId(null);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [scale, branchLayout, nodePositions]);
 
     // ========================================================================
     // SAVE CHANGES
@@ -767,8 +1073,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 await assignUsersToRegion(userIds, regionId === 'null' ? null : regionId);
             }
 
-            // Save positions
-            localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(nodePositions));
+            // Clear saved positions so nodes get repositioned in their new branches
+            localStorage.removeItem(POSITIONS_STORAGE_KEY);
 
             toast.success(`Sačuvano ${pendingChanges.length} promena`);
             setPendingChanges([]);
@@ -778,19 +1084,6 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             toast.error('Greška: ' + err.message);
         }
         setSaving(false);
-    };
-
-    const handleLoginAs = async (node) => {
-        if (!loginAsUser) {
-            toast.error('Funkcija nije dostupna');
-            return;
-        }
-        try {
-            await loginAsUser(node.userId);
-            toast.success(`Prijavljeni kao ${node.label}`);
-        } catch (err) {
-            toast.error('Greška: ' + err.message);
-        }
     };
 
     const resetView = () => {
@@ -863,7 +1156,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                         </button>
                     </div>
 
-                    <button onClick={loadData} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400">
+                    <button onClick={loadData} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400" title="Osveži">
                         <RefreshCw size={14} />
                     </button>
                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400">
@@ -874,7 +1167,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
 
             {/* Legend */}
             <div className="flex items-center gap-4 px-4 py-2 bg-slate-800/50 border-b border-slate-700/50 text-xs flex-shrink-0">
-                {Object.entries(ROLES).map(([key, config]) => (
+                {Object.entries(ROLES).filter(([k]) => k !== 'supervisor').map(([key, config]) => (
                     <span key={key} className="flex items-center gap-1.5 text-slate-400">
                         <span className={`w-2 h-2 rounded-full ${config.color}`} />
                         {config.label}
@@ -885,7 +1178,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
             {/* Canvas */}
             <div
                 ref={containerRef}
-                className={`flex-1 relative overflow-hidden ${isDraggingCanvas ? 'cursor-grabbing' : draggingNodeId ? 'cursor-grabbing' : 'cursor-grab'}`}
+                className={`flex-1 relative overflow-hidden select-none ${draggingNodeId ? 'cursor-grabbing' : 'cursor-grab'
+                    }`}
                 style={{
                     backgroundImage: 'radial-gradient(#334155 1px, transparent 1px)',
                     backgroundSize: `${20 * scale}px ${20 * scale}px`,
@@ -901,7 +1195,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 <div className="canvas-bg absolute inset-0" />
 
                 <div
-                    className="absolute origin-top-left transition-transform duration-75 ease-out"
+                    className="absolute origin-top-left"
                     style={{
                         transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                         width: '3000px',
@@ -910,7 +1204,6 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                 >
                     {/* SVG Connections */}
                     <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-                        {/* Company to supervisors/branches */}
                         {(() => {
                             const companyPos = nodePositions['company'];
                             if (!companyPos) return null;
@@ -919,7 +1212,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                             const companyBottom = { x: companyPos.x + 104, y: companyPos.y + 90 };
 
                             // Lines to branch tops
-                            branchLayout.filter(b => !b.isUprava).forEach(branch => {
+                            branchLayout.filter(b => !b.isCentrala).forEach(branch => {
                                 const branchTop = { x: branch.x + branch.width / 2, y: branch.y };
                                 lines.push(
                                     <path
@@ -944,6 +1237,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                             key={branch.id}
                             branch={branch}
                             isDropTarget={dropTarget?.id === branch.id}
+                            isDragging={draggingBranchId === branch.id}
+                            onMouseDown={(e) => handleBranchMouseDown(e, branch)}
                         />
                     ))}
 
@@ -952,7 +1247,6 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                         companyName={companyName}
                         position={nodePositions['company'] || { x: 500, y: 40 }}
                         isSelected={false}
-                        onMouseDown={() => { }}
                         onClick={() => { }}
                     />
 
@@ -960,6 +1254,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                     {nodes.map(node => {
                         const pos = nodePositions[node.id] || { x: 0, y: 0 };
                         const nodeWithPos = { ...node, x: pos.x, y: pos.y };
+                        const canDrag = ROLES[node.role]?.canDrag ?? false;
 
                         return (
                             <NodeCard
@@ -967,6 +1262,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                                 node={nodeWithPos}
                                 isSelected={selectedNode?.id === node.id}
                                 isDragging={draggingNodeId === node.id}
+                                canDrag={canDrag}
                                 onMouseDown={(e) => handleNodeMouseDown(e, node)}
                                 onClick={(e) => handleNodeClick(e, node)}
                             />
@@ -979,22 +1275,49 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                     <DetailSidebar
                         node={selectedNode}
                         onClose={() => setSelectedNode(null)}
-                        onLoginAs={handleLoginAs}
+                        wasteTypes={wasteTypes}
+                        processedRequests={processedRequests || []}
+                        onLoginAs={loginAsUser ? async (node) => {
+                            try {
+                                await loginAsUser(node.userId);
+                                toast.success(`Prijavljeni kao ${node.label}`);
+                            } catch (err) {
+                                toast.error('Greška: ' + err.message);
+                            }
+                        } : null}
                     />
                 )}
             </div>
 
-            {/* Instructions */}
-            <div className="absolute bottom-4 left-4 pointer-events-none z-20">
-                <div className="bg-slate-800/90 border border-slate-700 p-3 rounded-xl text-xs text-slate-400 max-w-xs shadow-xl backdrop-blur-sm">
-                    <p className="font-bold text-slate-300 mb-1.5">Kako koristiti:</p>
-                    <ul className="list-disc pl-4 space-y-1">
-                        <li>Prevuci korisnike u druge filijale</li>
-                        <li>Klikni na osobu za detalje</li>
-                        <li>Scroll za zoom, drag za pomicanje</li>
-                    </ul>
+            {/* Instructions - Hide permanently when collapsed */}
+            {showHelp && (
+                <div className="absolute bottom-4 left-4 z-20">
+                    <div className="bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-slate-400 max-w-xs shadow-xl backdrop-blur-sm overflow-hidden">
+                        <div className="p-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="font-bold text-slate-300">Kako koristiti</span>
+                                <button
+                                    onClick={() => {
+                                        setShowHelp(false);
+                                        localStorage.setItem(HELP_HIDDEN_KEY, 'true');
+                                    }}
+                                    className="p-1 hover:bg-slate-700 rounded text-slate-500 hover:text-slate-300 transition-colors"
+                                    title="Sakrij trajno"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            <ul className="list-disc pl-4 space-y-1">
+                                <li>Drži klik na praznom prostoru i pomeri za navigaciju</li>
+                                <li>Prevuci menadžere, vozače i klijente u druge filijale</li>
+                                <li>Prevuci filijale da ih pomeriš na mapi</li>
+                                <li>Klikni na osobu za detalje</li>
+                                <li>Scroll za zoom</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

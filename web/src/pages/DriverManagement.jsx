@@ -289,10 +289,16 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
             });
     }, [pickupRequests]);
 
+    // Only keep assignments that still point to an active (pending) request
+    const activeAssignments = useMemo(() => {
+        const pendingIds = new Set(pendingRequests.map(r => r.id));
+        return assignments.filter(a => a.request_id && pendingIds.has(a.request_id));
+    }, [assignments, pendingRequests]);
+
     // Get assigned request IDs
     const assignedRequestIds = useMemo(() => {
-        return new Set(assignments.map(a => a.request_id));
-    }, [assignments]);
+        return new Set(activeAssignments.map(a => a.request_id));
+    }, [activeAssignments]);
 
     // Filter requests
     const filteredRequests = useMemo(() => {
@@ -316,7 +322,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
 
     // Get assignments for a driver
     const getDriverAssignments = (driverId) => {
-        return assignments.filter(a => a.driver_id === driverId);
+        return activeAssignments.filter(a => a.driver_id === driverId);
     };
 
     // Toggle request selection - always enabled now
@@ -709,7 +715,7 @@ export default function DriverManagement({ wasteTypes = WASTE_TYPES }) {
                                 </tr>
                             ) : (
                                 filteredRequests.map(request => {
-                                    const assignment = assignments.find(a => a.request_id === request.id);
+                                    const assignment = activeAssignments.find(a => a.request_id === request.id);
                                     const driverName = assignment?.driver?.name;
                                     return (
                                         <RequestRow

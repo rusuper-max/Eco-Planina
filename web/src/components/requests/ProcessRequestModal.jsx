@@ -288,6 +288,12 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                                     type="number"
                                     value={weight}
                                     onChange={(e) => setWeight(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        // Block letters and special chars - only allow digits, decimal, backspace, arrows, tab
+                                        if (['e', 'E', '+', '-'].includes(e.key)) {
+                                            e.preventDefault();
+                                        }
+                                    }}
                                     placeholder="0.00"
                                     min="0"
                                     step="0.01"

@@ -37,9 +37,16 @@ export const DataProvider = ({ children }) => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments', filter: `company_code=eq.${companyCode}` }, () => fetchDriverAssignments(companyCode))
             .subscribe();
 
+        // Fallback polling every 45 seconds for driver assignment status updates
+        // This ensures manager sees status changes even if realtime subscription fails
+        const pollInterval = setInterval(() => {
+            fetchDriverAssignments(companyCode);
+        }, 45000);
+
         return () => {
             supabase.removeChannel(channelRequest);
             supabase.removeChannel(channelAssignments);
+            clearInterval(pollInterval);
         };
     }, [companyCode, user?.region_id]);
 
@@ -284,42 +291,23 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Reject request - moves to history with "rejected" status instead of deleting
+    // Reject request - uses atomic RPC to prevent duplicates
     const rejectPickupRequest = async (request, rejectionNote = null) => {
         try {
-            const processedRecord = {
-                company_code: request.company_code,
-                client_id: request.user_id,
-                client_name: request.client_name,
-                client_address: request.client_address,
-                waste_type: request.waste_type,
-                waste_label: request.waste_label,
-                fill_level: request.fill_level,
-                urgency: request.urgency,
-                note: request.note,
-                processing_note: rejectionNote || 'Zahtev odbijen',
-                created_at: request.created_at,
-                request_id: request.id,
-                request_code: request.request_code,
-                region_id: request.region_id,
-                processed_by_id: user?.id || null,
-                processed_by_name: user?.name || null,
-                status: 'rejected', // Mark as rejected
-            };
+            const { data, error } = await supabase.rpc('reject_pickup_request', {
+                p_request_id: request.id,
+                p_company_code: request.company_code,
+                p_processor_id: user?.id || null,
+                p_processor_name: user?.name || 'Nepoznato',
+                p_notes: rejectionNote || 'Zahtev odbijen'
+            });
 
-            const { error: insertError } = await supabase.from('processed_requests').insert([processedRecord]);
-            if (insertError) throw insertError;
+            if (error) throw error;
 
-            // Delete driver assignment if exists
-            await supabase
-                .from('driver_assignments')
-                .update({ deleted_at: new Date().toISOString(), status: 'cancelled' })
-                .eq('request_id', request.id)
-                .is('deleted_at', null);
-
-            // Delete the original request
-            const { error: deleteError } = await supabase.from('pickup_requests').delete().eq('id', request.id);
-            if (deleteError) throw deleteError;
+            // Check RPC result
+            if (!data?.success) {
+                throw new Error(data?.error || 'Greška pri odbijanju zahteva');
+            }
 
             setPickupRequests(prev => prev.filter(req => req.id !== request.id));
             return { success: true };
@@ -328,96 +316,29 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // Process request - uses atomic RPC to prevent duplicates
     const markRequestAsProcessed = async (request, proofImageUrl = null, processingNote = null, weightData = null, retroactiveDriverInfo = null) => {
         try {
-            // Get driver info and assignment ID if assigned
-            let driverInfo = null;
-            let driverAssignmentId = null;
-            if (request.id) {
-                const { data: assignment } = await supabase
-                    .from('driver_assignments')
-                    .select('id, driver_id, driver:driver_id(id, name)')
-                    .eq('request_id', request.id)
-                    .is('deleted_at', null)
-                    .single();
-                if (assignment) {
-                    driverAssignmentId = assignment.id;
-                    if (assignment.driver) {
-                        driverInfo = assignment.driver;
-                    }
-                }
+            const { data, error } = await supabase.rpc('process_pickup_request', {
+                p_request_id: request.id,
+                p_company_code: request.company_code,
+                p_processor_id: user?.id || null,
+                p_processor_name: user?.name || 'Nepoznato',
+                p_status: 'completed',
+                p_notes: processingNote,
+                p_driver_id: retroactiveDriverInfo?.id || null,
+                p_driver_name: retroactiveDriverInfo?.name || null,
+                p_proof_image_url: proofImageUrl,
+                p_weight: weightData?.weight || null,
+                p_weight_unit: weightData?.weight_unit || 'kg'
+            });
+
+            if (error) throw error;
+
+            // Check RPC result
+            if (!data?.success) {
+                throw new Error(data?.error || 'Greška pri obradi zahteva');
             }
-
-            // If no driver from assignment but we have retroactive driver info, use that
-            // This is a "Naknadno" (retroactive) assignment - driver set during processing without proper assignment flow
-            if (!driverInfo && retroactiveDriverInfo) {
-                driverInfo = retroactiveDriverInfo;
-                // Note: driverAssignmentId stays null - this is intentional to mark it as "retroactive"
-            }
-
-            const processedRecord = {
-                company_code: request.company_code,
-                client_id: request.user_id,
-                client_name: request.client_name,
-                client_address: request.client_address,
-                waste_type: request.waste_type,
-                waste_label: request.waste_label,
-                fill_level: request.fill_level,
-                urgency: request.urgency,
-                note: request.note,
-                processing_note: processingNote,
-                created_at: request.created_at,
-                proof_image_url: proofImageUrl,
-                request_id: request.id, // Store original request ID for linking with driver history
-                request_code: request.request_code, // Copy request code for display in history
-                region_id: request.region_id, // Copy region from pickup_request for RLS filtering
-                processed_by_id: user?.id || null, // Track who processed the request
-                processed_by_name: user?.name || null, // Store name for easier display
-                driver_id: driverInfo?.id || null, // Store driver who handled this request
-                driver_name: driverInfo?.name || null, // Store driver name for easier display
-                driver_assignment_id: driverAssignmentId, // Store direct link to driver_assignment for timeline (null for retroactive)
-            };
-
-            if (weightData) {
-                processedRecord.weight = weightData.weight;
-                processedRecord.weight_unit = weightData.weight_unit || 'kg';
-            }
-            const { error: insertError } = await supabase.from('processed_requests').insert([processedRecord]);
-            if (insertError) throw insertError;
-
-            // Update driver assignment status to 'completed' if exists
-            // IMPORTANT: Only set completed_at, do NOT overwrite picked_up_at or delivered_at
-            // Those timestamps are set by the driver and should be preserved
-            const now = new Date().toISOString();
-
-            // First check if assignment exists and has driver timestamps
-            const { data: existingAssignment } = await supabase
-                .from('driver_assignments')
-                .select('picked_up_at, delivered_at')
-                .eq('request_id', request.id)
-                .is('deleted_at', null)
-                .single();
-
-            // Only update status and completed_at, preserve driver's timestamps
-            const updateData = {
-                status: 'completed',
-                completed_at: now
-            };
-
-            // Only set delivered_at if driver didn't already set it
-            // (for cases where manager processes before driver marks as delivered)
-            if (!existingAssignment?.delivered_at) {
-                updateData.delivered_at = now;
-            }
-
-            await supabase
-                .from('driver_assignments')
-                .update(updateData)
-                .eq('request_id', request.id)
-                .is('deleted_at', null);
-
-            const { error: deleteError } = await supabase.from('pickup_requests').delete().eq('id', request.id);
-            if (deleteError) throw deleteError;
 
             setPickupRequests(prev => prev.filter(req => req.id !== request.id));
             setProcessedNotification({ wasteLabel: request.waste_label || request.waste_type });
@@ -789,6 +710,7 @@ export const DataProvider = ({ children }) => {
     };
 
     // Set client location and update all their pending requests
+    // Uses RPC function that updates both users and pickup_requests in one atomic operation
     const setClientLocationWithRequests = async (clientId, latitude, longitude) => {
         if (!user) throw new Error('Niste prijavljeni');
         if (!['manager', 'company_admin', 'admin', 'developer'].includes(user.role)) {
@@ -802,7 +724,7 @@ export const DataProvider = ({ children }) => {
         }
 
         try {
-            // 1. Update client's location using SECURITY DEFINER RPC function
+            // RPC function updates both client and all their pending requests atomically
             const { data: success, error: rpcError } = await supabase.rpc('update_client_location', {
                 client_id: clientId,
                 lat: latNum,
@@ -812,18 +734,8 @@ export const DataProvider = ({ children }) => {
             if (rpcError) throw rpcError;
             if (!success) throw new Error('Nemate dozvolu za ažuriranje lokacije ovog klijenta');
 
-            // 2. Update all pending requests for this client with the new location
-            const { error: requestsError } = await supabase
-                .from('pickup_requests')
-                .update({
-                    latitude: latNum,
-                    longitude: lngNum
-                })
-                .eq('user_id', clientId)
-                .eq('company_code', companyCode)
-                .eq('status', 'pending');
-
-            if (requestsError) throw requestsError;
+            // Refresh pickup requests to reflect new location
+            await fetchPickupRequests(companyCode);
 
             return { success: true };
         } catch (error) {
@@ -872,7 +784,7 @@ export const DataProvider = ({ children }) => {
     const fetchUsersGroupedByRegion = async () => {
         if (!companyCode) return { regions: [], unassigned: [] };
         try {
-            const [regionsRes, usersRes] = await Promise.all([
+            const [regionsRes, usersRes, processedRes, assignmentsRes] = await Promise.all([
                 supabase
                     .from('regions')
                     .select('id, name')
@@ -881,21 +793,76 @@ export const DataProvider = ({ children }) => {
                     .order('name'),
                 supabase
                     .from('users')
-                    .select('id, name, role, region_id, address')
+                    .select('id, name, role, region_id, address, pib, allowed_waste_types, phone, created_at, equipment_types')
                     .eq('company_code', companyCode)
                     .is('deleted_at', null)
-                    .order('name')
+                    .order('name'),
+                // Fetch processed requests for stats (client_id, processed_by_id, driver_id)
+                supabase
+                    .from('processed_requests')
+                    .select('client_id, processed_by_id, driver_id')
+                    .eq('company_code', companyCode)
+                    .is('deleted_at', null),
+                // Fetch active assignments for drivers
+                supabase
+                    .from('driver_assignments')
+                    .select('driver_id')
+                    .eq('company_code', companyCode)
+                    .is('deleted_at', null)
+                    .in('status', ['assigned', 'in_progress'])
             ]);
 
             if (regionsRes.error) throw regionsRes.error;
             if (usersRes.error) throw usersRes.error;
+            // Note: processedRes and assignmentsRes errors are non-fatal - we just won't have stats
+
+            // Count stats per user
+            const clientRequestCounts = {};  // How many requests a client made
+            const processedByCounts = {};    // How many requests a manager processed
+            const driverProcessedCounts = {}; // How many requests a driver completed
+
+            if (!processedRes.error && processedRes.data) {
+                processedRes.data.forEach(req => {
+                    if (req.client_id) {
+                        clientRequestCounts[req.client_id] = (clientRequestCounts[req.client_id] || 0) + 1;
+                    }
+                    if (req.processed_by_id) {
+                        processedByCounts[req.processed_by_id] = (processedByCounts[req.processed_by_id] || 0) + 1;
+                    }
+                    if (req.driver_id) {
+                        driverProcessedCounts[req.driver_id] = (driverProcessedCounts[req.driver_id] || 0) + 1;
+                    }
+                });
+            }
+
+            // Count active assignments per driver
+            const activeAssignmentCounts = {};
+            if (!assignmentsRes.error && assignmentsRes.data) {
+                assignmentsRes.data.forEach(a => {
+                    if (a.driver_id) {
+                        activeAssignmentCounts[a.driver_id] = (activeAssignmentCounts[a.driver_id] || 0) + 1;
+                    }
+                });
+            }
+
+            // Add stats to users based on role
+            const usersWithStats = (usersRes.data || []).map(u => ({
+                ...u,
+                request_count: clientRequestCounts[u.id] || 0,
+                processed_count: u.role === 'manager'
+                    ? (processedByCounts[u.id] || 0)
+                    : u.role === 'driver'
+                        ? (driverProcessedCounts[u.id] || 0)
+                        : 0,
+                assigned_count: activeAssignmentCounts[u.id] || 0
+            }));
 
             const regions = (regionsRes.data || []).map(region => ({
                 ...region,
-                users: (usersRes.data || []).filter(u => u.region_id === region.id)
+                users: usersWithStats.filter(u => u.region_id === region.id)
             }));
 
-            const unassigned = (usersRes.data || []).filter(u => !u.region_id);
+            const unassigned = usersWithStats.filter(u => !u.region_id);
 
             return { regions, unassigned };
         } catch (error) {
@@ -912,16 +879,16 @@ export const DataProvider = ({ children }) => {
     const fetchCompanyEquipment = async () => {
         if (!companyCode) return [];
         try {
-            // Try with region join first
+            // Try with region and assigned_to joins first
             let result = await supabase
                 .from('equipment')
-                .select('*, region:region_id(id, name)')
+                .select('*, region:region_id(id, name), assigned_user:assigned_to(id, name)')
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('name');
 
-            // If region_id column doesn't exist (PGRST200), fallback to simple query
-            if (result.error?.code === 'PGRST200' || result.error?.message?.includes('region_id')) {
+            // If region_id or assigned_to column doesn't exist, fallback to simple query
+            if (result.error?.code === 'PGRST200' || result.error?.message?.includes('region_id') || result.error?.message?.includes('assigned_to')) {
                 result = await supabase
                     .from('equipment')
                     .select('*')
@@ -935,7 +902,12 @@ export const DataProvider = ({ children }) => {
                 if (result.error.code === '42P01') return [];
                 throw result.error;
             }
-            return result.data || [];
+
+            // Map assigned_user to assigned_to_name for frontend compatibility
+            return (result.data || []).map(eq => ({
+                ...eq,
+                assigned_to_name: eq.assigned_user?.name || null
+            }));
         } catch (error) {
             console.error('Error fetching equipment:', error);
             return [];
@@ -994,6 +966,7 @@ export const DataProvider = ({ children }) => {
             if (equipmentData.description !== undefined) updates.description = equipmentData.description?.trim() || null;
             if (equipmentData.customImage !== undefined) updates.custom_image_url = equipmentData.customImage || null;
             if (equipmentData.region_id !== undefined) updates.region_id = equipmentData.region_id;
+            if (equipmentData.assigned_to !== undefined) updates.assigned_to = equipmentData.assigned_to;
 
             let result = await supabase
                 .from('equipment')

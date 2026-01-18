@@ -534,10 +534,16 @@ export default function Dashboard() {
             toast.error('Greška pri dodavanju opreme');
         }
     };
-    const handleAssignEquipment = (eqId, clientId) => {
-        // TODO: Implement equipment assignment to clients via database
-        const client = clients.find(c => c.id === clientId);
-        setEquipment(prev => prev.map(eq => eq.id === eqId ? { ...eq, assigned_to: clientId, assigned_to_name: client?.name } : eq));
+    const handleAssignEquipment = async (eqId, clientId) => {
+        try {
+            const client = clients.find(c => c.id === clientId);
+            await updateEquipment(eqId, { assigned_to: clientId || null });
+            setEquipment(prev => prev.map(eq => eq.id === eqId ? { ...eq, assigned_to: clientId, assigned_to_name: client?.name || null } : eq));
+            toast.success(clientId ? 'Oprema dodeljena klijentu' : 'Dodela opreme uklonjena');
+        } catch (err) {
+            console.error('Error assigning equipment:', err);
+            toast.error('Greška pri dodeli opreme');
+        }
     };
     const handleDeleteEquipment = async (id) => {
         const eq = equipment.find(e => e.id === id);
@@ -1094,7 +1100,7 @@ export default function Dashboard() {
                             <Plus size={18} /> Kreiraj zahtev
                         </button>
                     </div>
-                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleRejectRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} />
+                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleRejectRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} onEditLocation={(req) => setEditingClientLocation({ id: req.user_id, name: req.client_name, latitude: req.latitude, longitude: req.longitude, address: req.client_address })} />
                 </div>
             );
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;

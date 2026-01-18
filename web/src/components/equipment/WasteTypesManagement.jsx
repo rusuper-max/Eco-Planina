@@ -340,6 +340,7 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                 <WasteTypeClientsModal
                     wasteType={managingClientsFor}
                     clients={clients}
+                    allWasteTypes={wasteTypes}
                     onClose={() => setManagingClientsFor(null)}
                     onSave={onUpdateClientWasteTypes}
                 />

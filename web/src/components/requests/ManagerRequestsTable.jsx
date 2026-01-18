@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, XCircle, UserPlus, X, ChevronDown } from 'lucide-react';
+import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, XCircle, UserPlus, X, ChevronDown, AlertTriangle } from 'lucide-react';
 import { EmptyState, FillLevelBar, RequestStatusBadge, CountdownTimer } from '../common';
 import { getRemainingTime } from '../../utils/timeUtils';
 
@@ -102,6 +102,7 @@ export const ManagerRequestsTable = ({
     assignments = [],
     drivers = [],
     onQuickAssign,
+    onEditLocation,
     readOnly = false
 }) => {
     // DEBUG: Log assignments and requests to see matching
@@ -328,6 +329,16 @@ export const ManagerRequestsTable = ({
                                         <td className="px-2 md:px-4 py-3 text-center whitespace-nowrap">
                                             <div className="inline-flex items-center gap-0.5 relative">
                                                 <button onClick={() => onView(req)} className="p-1.5 md:p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Info"><Info size={18} /></button>
+                                                {/* Location warning - show blinking if no coordinates set */}
+                                                {(!req.latitude || !req.longitude) && onEditLocation && (
+                                                    <button
+                                                        onClick={() => onEditLocation(req)}
+                                                        className="p-1.5 md:p-2 text-red-500 hover:bg-red-50 rounded-lg animate-blink-fade"
+                                                        title="Podesi lokaciju"
+                                                    >
+                                                        <AlertTriangle size={18} />
+                                                    </button>
+                                                )}
                                                 {/* Quick Assign button - only show if not assigned, we have drivers, and not readOnly */}
                                                 {!readOnly && assignmentStatus === 'not_assigned' && drivers.length > 0 && onQuickAssign && (
                                                     <button

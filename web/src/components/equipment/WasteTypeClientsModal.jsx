@@ -8,7 +8,7 @@ const ITEMS_PER_PAGE = 20;
 /**
  * Modal za bulk upravljanje klijentima kojima je dodeljena vrsta robe
  */
-export const WasteTypeClientsModal = ({ wasteType, clients, onClose, onSave }) => {
+export const WasteTypeClientsModal = ({ wasteType, clients, allWasteTypes = [], onClose, onSave }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [saving, setSaving] = useState(false);
@@ -107,10 +107,10 @@ export const WasteTypeClientsModal = ({ wasteType, clients, onClose, onSave }) =
                     // Klijent NE treba da ima ovu vrstu
                     if (hasAll) {
                         // Ima sve, treba da uklonimo samo ovu - postavi sve ostale
-                        // Napomena: ovo zahteva da znamo koje sve vrste postoje
-                        // Za sada preskacemo ove klijente - oni ce zadrzati sve
-                        // Alternativa: proslediti sve waste type IDs
-                        newAllowed = null; // TODO: potrebna lista svih waste types
+                        const allOtherTypes = allWasteTypes
+                            .filter(wt => wt.id !== wasteType.id)
+                            .map(wt => wt.id);
+                        newAllowed = allOtherTypes.length > 0 ? allOtherTypes : [];
                     } else {
                         // Ukloni ovu vrstu iz liste
                         newAllowed = currentAllowed.filter(id => id !== wasteType.id);
