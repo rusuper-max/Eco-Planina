@@ -62,7 +62,7 @@ export const translations = {
 
     // Manager View
     totalRequests: 'Ukupno',
-    urgentRequests: '24h',
+    urgentRequests: 'Hitno',
     pickupRequests: 'Zahtevi za Preuzimanje',
     sortedByUrgency: 'Sortirano po hitnosti',
     noActiveRequests: 'Nema aktivnih zahteva',
@@ -400,7 +400,7 @@ export const translations = {
 
     // Manager View
     totalRequests: 'Total',
-    urgentRequests: '24h',
+    urgentRequests: 'Hitno',
     pickupRequests: 'Pickup Requests',
     sortedByUrgency: 'Sorted by urgency',
     noActiveRequests: 'No active requests',

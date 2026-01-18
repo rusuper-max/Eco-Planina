@@ -10,12 +10,12 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppContext } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
 import LocationPicker from '../components/LocationPicker';
+
+const SUPABASE_URL = 'https://vmsfsstxxndpxbsdylog.supabase.co';
 
 const COLORS = {
   primary: '#10B981',
@@ -27,14 +27,15 @@ const COLORS = {
   mediumGray: '#6B7280',
   blue: '#3B82F6',
   blueLight: '#DBEAFE',
+  orange: '#F97316',
+  orangeLight: '#FED7AA',
   red: '#EF4444',
 };
 
 const RegisterScreen = ({ navigation }) => {
-  const { registerManagerWithMasterCode, registerManagerToExistingCompany, registerClient, isLoading, logout } = useAppContext();
   const { t, countryCodes } = useLanguage();
+  const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState('');
-  const [firmName, setFirmName] = useState('');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
@@ -44,13 +45,9 @@ const RegisterScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [companyCode, setCompanyCode] = useState('');
-  const [selectedRole, setSelectedRole] = useState(null);
-  const [joinExistingCompany, setJoinExistingCompany] = useState(false);
-  const [existingCompanyCode, setExistingCompanyCode] = useState('');
-  const [masterCode, setMasterCode] = useState('');
-  const [pib, setPib] = useState('');
+  const [selectedRole, setSelectedRole] = useState(null); // 'client' or 'driver'
 
-  // Address search state
+  // Address search state (only for clients)
   const [addressQuery, setAddressQuery] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -120,160 +117,90 @@ const RegisterScreen = ({ navigation }) => {
       return;
     }
 
+    // Common validation
+    if (!name.trim()) {
+      Alert.alert(t('error'), t('enterYourName'));
+      return;
+    }
+    if (!companyCode.trim()) {
+      Alert.alert(t('error'), t('enterCompanyCode'));
+      return;
+    }
+    if (!phone.trim()) {
+      Alert.alert(t('error'), t('phoneRequired'));
+      return;
+    }
+    if (password.length < 6) {
+      Alert.alert(t('error'), t('passwordMin'));
+      return;
+    }
+    if (password !== confirmPassword) {
+      Alert.alert(t('error'), t('passwordMismatch'));
+      return;
+    }
+
+    // Client-specific validation
+    if (selectedRole === 'client' && !address.trim()) {
+      Alert.alert(t('error'), t('selectAddress'));
+      return;
+    }
+
+    setIsLoading(true);
     try {
-      if (selectedRole === 'manager') {
-        if (!name.trim()) {
-          Alert.alert(t('error'), t('enterYourName'));
-          return;
-        }
-        if (!joinExistingCompany && !firmName.trim()) {
-          Alert.alert(t('error'), t('enterFirmName'));
-          return;
-        }
-        if (!joinExistingCompany && !masterCode.trim()) {
-          Alert.alert(t('error'), 'Unesite Master Code koji ste dobili od administratora');
-          return;
-        }
-        if (!joinExistingCompany && !pib.trim()) {
-          Alert.alert(t('error'), 'Unesite PIB vase firme');
-          return;
-        }
-        if (!joinExistingCompany && pib.trim().length !== 9) {
-          Alert.alert(t('error'), 'PIB mora imati tacno 9 cifara');
-          return;
-        }
-        if (joinExistingCompany && !existingCompanyCode.trim()) {
-          Alert.alert(t('error'), t('enterCompanyCode'));
-          return;
-        }
-        if (!phone.trim()) {
-          Alert.alert(t('error'), t('phoneRequired'));
-          return;
-        }
+      const fullPhone = countryCode + phone.trim().replace(/^0+/, ''); // Remove leading zeros
 
-        if (password.length < 6) {
-          Alert.alert(t('error'), t('passwordMin'));
-          return;
-        }
-        if (password !== confirmPassword) {
-          Alert.alert(t('error'), t('passwordMismatch'));
-          return;
-        }
+      // Call Edge Function for registration
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/auth-register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: fullPhone,
+          password: password,
+          address: selectedRole === 'client' ? address.trim() : null,
+          latitude: selectedRole === 'client' ? latitude : null,
+          longitude: selectedRole === 'client' ? longitude : null,
+          companyCode: companyCode.trim().toUpperCase(),
+          role: selectedRole,
+        }),
+      });
 
-        const fullPhone = countryCode + phone.trim().replace(/^0+/, ''); // Remove leading zeros
+      const result = await response.json();
 
-        if (joinExistingCompany) {
-          // Join existing company as manager
-          const result = await registerManagerToExistingCompany(
-            name.trim(),
-            fullPhone,
-            password,
-            existingCompanyCode.trim()
-          );
-
-          // Logout to clear auto-login state
-          logout();
-
-          Alert.alert(
-            t('registrationSuccess'),
-            t('managerJoinedSuccess') + '\n\n' + result.companyName + '\n\nBicete prebaceni na ekran za prijavu.',
-            [
-              {
-                text: t('ok'),
-                onPress: () => navigation.navigate('Login'),
-              },
-            ]
-          );
-        } else {
-          // Create new company with Master Code + PIB
-          const result = await registerManagerWithMasterCode(
-            name.trim(),
-            firmName.trim(),
-            fullPhone,
-            password,
-            masterCode.trim(),
-            pib.trim()
-          );
-
-          // Logout to clear auto-login state
-          logout();
-
-          Alert.alert(
-            t('registrationSuccess'),
-            `Firma je uspesno registrovana!\n\nKod za klijente:\n${result.companyCode}\n\n${t('shareCodeHint')}\n\nBicete prebaceni na ekran za prijavu.`,
-            [
-              {
-                text: t('ok'),
-                onPress: () => navigation.navigate('Login'),
-              },
-            ]
-          );
-        }
-      } else {
-        if (!name.trim()) {
-          Alert.alert(t('error'), t('enterNameOrFirm'));
-          return;
-        }
-        if (!companyCode.trim()) {
-          Alert.alert(t('error'), t('enterCompanyCode'));
-          return;
-        }
-        if (!address.trim()) {
-          Alert.alert(t('error'), t('selectAddress'));
-          return;
-        }
-        if (!phone.trim()) {
-          Alert.alert(t('error'), t('phoneRequired'));
-          return;
-        }
-        if (password.length < 6) {
-          Alert.alert(t('error'), t('passwordMin'));
-          return;
-        }
-        if (password !== confirmPassword) {
-          Alert.alert(t('error'), t('passwordMismatch'));
-          return;
-        }
-
-        const fullPhone = countryCode + phone.trim().replace(/^0+/, ''); // Remove leading zeros
-        await registerClient(
-          name.trim(),
-          address.trim(),
-          fullPhone,
-          companyCode.trim(),
-          password,
-          latitude,
-          longitude
-        );
-
-        // Logout to clear auto-login state
-        logout();
-
-        Alert.alert(
-          t('registrationSuccess'),
-          'Registracija uspesna!\n\nBicete prebaceni na ekran za prijavu.',
-          [
-            {
-              text: t('ok'),
-              onPress: () => navigation.navigate('Login'),
-            },
-          ]
-        );
+      if (!result.success) {
+        throw new Error(result.error || 'Greska pri registraciji');
       }
+
+      // Success
+      const roleLabel = selectedRole === 'driver' ? 'Vozac' : 'Klijent';
+      Alert.alert(
+        t('registrationSuccess'),
+        `${roleLabel} uspesno registrovan!\n\nFirma: ${result.companyName}\n\nBicete prebaceni na ekran za prijavu.`,
+        [
+          {
+            text: t('ok'),
+            onPress: () => navigation.navigate('Login'),
+          },
+        ]
+      );
     } catch (error) {
       Alert.alert(t('error'), error.message || t('registrationError'));
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const isFormValid = () => {
     if (!selectedRole) return false;
-    if (selectedRole === 'manager') {
-      if (joinExistingCompany) {
-        return name.trim() && existingCompanyCode.trim() && phone.trim() && password.length >= 6 && password === confirmPassword;
-      }
-      return name.trim() && firmName.trim() && masterCode.trim() && pib.trim().length === 9 && phone.trim() && password.length >= 6 && password === confirmPassword;
+    const baseValid = name.trim() && companyCode.trim() && phone.trim() && password.length >= 6 && password === confirmPassword;
+
+    if (selectedRole === 'client') {
+      return baseValid && address.trim();
     }
-    return name.trim() && companyCode.trim() && address.trim() && phone.trim() && password.length >= 6 && password === confirmPassword;
+    // Driver doesn't need address
+    return baseValid;
   };
 
   return (
@@ -335,223 +262,41 @@ const RegisterScreen = ({ navigation }) => {
                 </View>
               </TouchableOpacity>
 
-              {/* Manager Option */}
+              {/* Driver Option */}
               <TouchableOpacity
                 style={[
                   styles.roleCard,
-                  selectedRole === 'manager' && styles.roleCardSelectedManager,
+                  selectedRole === 'driver' && styles.roleCardSelectedDriver,
                 ]}
-                onPress={() => setSelectedRole('manager')}
+                onPress={() => setSelectedRole('driver')}
                 activeOpacity={0.8}
               >
                 <View style={[
                   styles.roleIconContainer,
-                  { backgroundColor: COLORS.blueLight },
-                  selectedRole === 'manager' && styles.roleIconContainerSelectedManager,
+                  { backgroundColor: COLORS.orangeLight },
+                  selectedRole === 'driver' && styles.roleIconContainerSelectedDriver,
                 ]}>
-                  <Text style={styles.roleIcon}>📊</Text>
+                  <Text style={styles.roleIcon}>🚛</Text>
                 </View>
                 <View style={styles.roleTextContainer}>
-                  <Text style={styles.roleTitle}>{t('managerRole')}</Text>
+                  <Text style={styles.roleTitle}>Vozac</Text>
                   <Text style={styles.roleDescription}>
-                    {t('managerRoleDesc')}
+                    Preuzimam robu od klijenata
                   </Text>
                 </View>
                 <View style={[
                   styles.radioOuter,
-                  selectedRole === 'manager' && styles.radioOuterSelectedManager,
+                  selectedRole === 'driver' && styles.radioOuterSelectedDriver,
                 ]}>
-                  {selectedRole === 'manager' && <View style={styles.radioInnerManager} />}
+                  {selectedRole === 'driver' && <View style={styles.radioInnerDriver} />}
                 </View>
               </TouchableOpacity>
             </View>
 
-            {/* Manager Fields */}
-            {selectedRole === 'manager' && (
+            {/* Common Fields (shown when role is selected) */}
+            {selectedRole && (
               <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>{t('yourNameLabel')}</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder={t('yourNamePlaceholder')}
-                    placeholderTextColor={COLORS.mediumGray}
-                    value={name}
-                    onChangeText={setName}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
-
-                {/* Checkbox for joining existing company */}
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => {
-                    setJoinExistingCompany(!joinExistingCompany);
-                    if (!joinExistingCompany) {
-                      setFirmName('');
-                    } else {
-                      setExistingCompanyCode('');
-                    }
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.checkbox, joinExistingCompany && styles.checkboxChecked]}>
-                    {joinExistingCompany && <Text style={styles.checkboxMark}>✓</Text>}
-                  </View>
-                  <View style={styles.checkboxTextContainer}>
-                    <Text style={styles.checkboxLabel}>{t('joinExistingCompany')}</Text>
-                    <Text style={styles.checkboxHint}>{t('joinExistingCompanyHint')}</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* Show either firm name or existing company code */}
-                {joinExistingCompany ? (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>{t('existingCompanyCode')}</Text>
-                    <Text style={styles.labelHint}>{t('existingCompanyCodeHint')}</Text>
-                    <TextInput
-                      style={[styles.textInput, styles.codeInput]}
-                      placeholder="ECO-XXXXXX"
-                      placeholderTextColor={COLORS.mediumGray}
-                      value={existingCompanyCode}
-                      onChangeText={(text) => setExistingCompanyCode(text.toUpperCase())}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>Master Code</Text>
-                      <Text style={styles.labelHint}>Kod koji ste dobili od administratora</Text>
-                      <TextInput
-                        style={[styles.textInput, styles.codeInput]}
-                        placeholder="MC-XXXXXX"
-                        placeholderTextColor={COLORS.mediumGray}
-                        value={masterCode}
-                        onChangeText={(text) => setMasterCode(text.toUpperCase())}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                      />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>{t('firmNameLabel')}</Text>
-                      <Text style={styles.labelHint}>{t('firmNameHint')}</Text>
-                      <TextInput
-                        style={styles.textInput}
-                        placeholder={t('firmNamePlaceholder')}
-                        placeholderTextColor={COLORS.mediumGray}
-                        value={firmName}
-                        onChangeText={setFirmName}
-                        autoCapitalize="words"
-                        autoCorrect={false}
-                      />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.label}>PIB firme</Text>
-                      <Text style={styles.labelHint}>Poreski identifikacioni broj (9 cifara)</Text>
-                      <TextInput
-                        style={[styles.textInput, styles.codeInput]}
-                        placeholder="123456789"
-                        placeholderTextColor={COLORS.mediumGray}
-                        value={pib}
-                        onChangeText={(text) => setPib(text.replace(/[^0-9]/g, '').slice(0, 9))}
-                        keyboardType="number-pad"
-                        maxLength={9}
-                      />
-                      {pib.length > 0 && pib.length < 9 && (
-                        <Text style={styles.errorText}>PIB mora imati 9 cifara ({pib.length}/9)</Text>
-                      )}
-                    </View>
-                  </>
-                )}
-
-                <View style={[styles.inputGroup, { zIndex: 50 }]}>
-                  <Text style={styles.label}>{t('phone')}</Text>
-                  <View style={styles.phoneInputRow}>
-                    <TouchableOpacity
-                      style={styles.countryCodeBtn}
-                      onPress={() => setShowCountryPicker(!showCountryPicker)}
-                    >
-                      <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
-                      <Text style={styles.countryCodeText}>{countryCode}</Text>
-                      <Text style={styles.dropdownArrow}>▼</Text>
-                    </TouchableOpacity>
-                    <TextInput
-                      style={[styles.textInput, styles.phoneInput]}
-                      placeholder="641234567"
-                      placeholderTextColor={COLORS.mediumGray}
-                      value={phone}
-                      onChangeText={setPhone}
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                  {showCountryPicker && (
-                    <View style={styles.countryPickerDropdown}>
-                      {countryCodes.map((country) => (
-                        <TouchableOpacity
-                          key={country.code}
-                          style={[
-                            styles.countryOption,
-                            countryCode === country.code && styles.countryOptionSelected
-                          ]}
-                          onPress={() => {
-                            setCountryCode(country.code);
-                            setShowCountryPicker(false);
-                          }}
-                        >
-                          <Text style={styles.countryFlag}>{country.flag}</Text>
-                          <Text style={styles.countryName}>{country.name}</Text>
-                          <Text style={styles.countryCodeText}>{country.code}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>{t('password')}</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder={t('passwordPlaceholder')}
-                    placeholderTextColor={COLORS.mediumGray}
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                  />
-                  {password.length > 0 && password.length < 6 && (
-                    <Text style={styles.errorText}>{t('passwordMin')}</Text>
-                  )}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>{t('confirmPassword')}</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder={t('confirmPasswordPlaceholder')}
-                    placeholderTextColor={COLORS.mediumGray}
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                  />
-                </View>
-
-                {!joinExistingCompany && (
-                  <View style={styles.infoBox}>
-                    <Text style={styles.infoIcon}>💡</Text>
-                    <Text style={styles.infoText}>
-                      {t('managerInfoHint')}
-                    </Text>
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* Client Fields */}
-            {selectedRole === 'client' && (
-              <>
+                {/* Company Code */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t('companyCodeLabel')}</Text>
                   <Text style={styles.labelHint}>{t('companyCodeHintReg')}</Text>
@@ -566,11 +311,14 @@ const RegisterScreen = ({ navigation }) => {
                   />
                 </View>
 
+                {/* Name */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>{t('nameOrFirmLabel')}</Text>
+                  <Text style={styles.label}>
+                    {selectedRole === 'driver' ? 'Ime i prezime' : t('nameOrFirmLabel')}
+                  </Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder={t('nameOrFirmPlaceholder')}
+                    placeholder={selectedRole === 'driver' ? 'Marko Markovic' : t('nameOrFirmPlaceholder')}
                     placeholderTextColor={COLORS.mediumGray}
                     value={name}
                     onChangeText={setName}
@@ -579,68 +327,72 @@ const RegisterScreen = ({ navigation }) => {
                   />
                 </View>
 
-                <View style={[styles.inputGroup, { zIndex: 100 }]}>
-                  <Text style={styles.label}>{t('locationAddressLabel')}</Text>
-                  <View style={styles.labelRow}>
-                    <Text style={styles.labelHint}>{t('addressSearchHint')}</Text>
-                    <TouchableOpacity onPress={() => setShowMap(true)} style={styles.mapLinkBtn}>
-                      <Text style={styles.mapLinkText}>📍 {t('selectOnMapBtn')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.addressSearchContainer}>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder={t('addressPlaceholder')}
-                      placeholderTextColor={COLORS.mediumGray}
-                      value={addressQuery}
-                      onChangeText={handleAddressQueryChange}
-                      autoCapitalize="words"
-                    />
-                    {isSearching && (
-                      <View style={styles.searchingIndicator}>
-                        <ActivityIndicator size="small" color={COLORS.primary} />
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Address suggestions dropdown */}
-                  {addressSuggestions.length > 0 && (
-                    <View style={styles.suggestionsContainer}>
-                      {addressSuggestions.map((item, index) => (
-                        <TouchableOpacity
-                          key={item.place_id || index}
-                          style={styles.suggestionItem}
-                          onPress={() => selectAddress(item)}
-                        >
-                          <Text style={styles.suggestionIcon}>📍</Text>
-                          <Text style={styles.suggestionText} numberOfLines={2}>
-                            {item.display_name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-
-                  {/* Selected address display */}
-                  {address && addressSuggestions.length === 0 ? (
-                    <View style={styles.selectedAddress}>
-                      <Text style={styles.selectedAddressIcon}>✅</Text>
-                      <Text style={styles.selectedAddressText} numberOfLines={2}>{address}</Text>
-                      <TouchableOpacity
-                        onPress={() => {
-                          setAddress('');
-                          setAddressQuery('');
-                          setLatitude(null);
-                          setLongitude(null);
-                        }}
-                        style={styles.clearAddressBtn}
-                      >
-                        <Text style={styles.clearAddressBtnText}>✕</Text>
+                {/* Address - Only for Clients */}
+                {selectedRole === 'client' && (
+                  <View style={[styles.inputGroup, { zIndex: 100 }]}>
+                    <Text style={styles.label}>{t('locationAddressLabel')}</Text>
+                    <View style={styles.labelRow}>
+                      <Text style={styles.labelHint}>{t('addressSearchHint')}</Text>
+                      <TouchableOpacity onPress={() => setShowMap(true)} style={styles.mapLinkBtn}>
+                        <Text style={styles.mapLinkText}>📍 {t('selectOnMapBtn')}</Text>
                       </TouchableOpacity>
                     </View>
-                  ) : null}
-                </View>
+                    <View style={styles.addressSearchContainer}>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder={t('addressPlaceholder')}
+                        placeholderTextColor={COLORS.mediumGray}
+                        value={addressQuery}
+                        onChangeText={handleAddressQueryChange}
+                        autoCapitalize="words"
+                      />
+                      {isSearching && (
+                        <View style={styles.searchingIndicator}>
+                          <ActivityIndicator size="small" color={COLORS.primary} />
+                        </View>
+                      )}
+                    </View>
 
+                    {/* Address suggestions dropdown */}
+                    {addressSuggestions.length > 0 && (
+                      <View style={styles.suggestionsContainer}>
+                        {addressSuggestions.map((item, index) => (
+                          <TouchableOpacity
+                            key={item.place_id || index}
+                            style={styles.suggestionItem}
+                            onPress={() => selectAddress(item)}
+                          >
+                            <Text style={styles.suggestionIcon}>📍</Text>
+                            <Text style={styles.suggestionText} numberOfLines={2}>
+                              {item.display_name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Selected address display */}
+                    {address && addressSuggestions.length === 0 ? (
+                      <View style={styles.selectedAddress}>
+                        <Text style={styles.selectedAddressIcon}>✅</Text>
+                        <Text style={styles.selectedAddressText} numberOfLines={2}>{address}</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setAddress('');
+                            setAddressQuery('');
+                            setLatitude(null);
+                            setLongitude(null);
+                          }}
+                          style={styles.clearAddressBtn}
+                        >
+                          <Text style={styles.clearAddressBtnText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+
+                {/* Phone */}
                 <View style={[styles.inputGroup, { zIndex: 50 }]}>
                   <Text style={styles.label}>{t('phone')}</Text>
                   <View style={styles.phoneInputRow}>
@@ -684,6 +436,7 @@ const RegisterScreen = ({ navigation }) => {
                   )}
                 </View>
 
+                {/* Password */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t('password')}</Text>
                   <TextInput
@@ -699,6 +452,7 @@ const RegisterScreen = ({ navigation }) => {
                   )}
                 </View>
 
+                {/* Confirm Password */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>{t('confirmPassword')}</Text>
                   <TextInput
@@ -710,6 +464,16 @@ const RegisterScreen = ({ navigation }) => {
                     secureTextEntry
                   />
                 </View>
+
+                {/* Info box for driver */}
+                {selectedRole === 'driver' && (
+                  <View style={[styles.infoBox, { backgroundColor: COLORS.orangeLight }]}>
+                    <Text style={styles.infoIcon}>💡</Text>
+                    <Text style={[styles.infoText, { color: COLORS.orange }]}>
+                      Kao vozac, dobicete pristup ruti i spisku lokacija za preuzimanje robe.
+                    </Text>
+                  </View>
+                )}
               </>
             )}
 
@@ -717,6 +481,7 @@ const RegisterScreen = ({ navigation }) => {
             <TouchableOpacity
               style={[
                 styles.registerButton,
+                selectedRole === 'driver' && styles.registerButtonDriver,
                 !isFormValid() && styles.registerButtonDisabled,
               ]}
               onPress={handleRegister}
@@ -996,9 +761,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primaryLight,
   },
-  roleCardSelectedManager: {
-    borderColor: COLORS.blue,
-    backgroundColor: COLORS.blueLight,
+  roleCardSelectedDriver: {
+    borderColor: COLORS.orange,
+    backgroundColor: COLORS.orangeLight,
   },
   roleIconContainer: {
     width: 44,
@@ -1012,8 +777,8 @@ const styles = StyleSheet.create({
   roleIconContainerSelected: {
     backgroundColor: COLORS.primary,
   },
-  roleIconContainerSelectedManager: {
-    backgroundColor: COLORS.blue,
+  roleIconContainerSelectedDriver: {
+    backgroundColor: COLORS.orange,
   },
   roleIcon: {
     fontSize: 22,
@@ -1043,8 +808,8 @@ const styles = StyleSheet.create({
   radioOuterSelected: {
     borderColor: COLORS.primary,
   },
-  radioOuterSelectedManager: {
-    borderColor: COLORS.blue,
+  radioOuterSelectedDriver: {
+    borderColor: COLORS.orange,
   },
   radioInner: {
     width: 10,
@@ -1052,11 +817,11 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: COLORS.primary,
   },
-  radioInnerManager: {
+  radioInnerDriver: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: COLORS.blue,
+    backgroundColor: COLORS.orange,
   },
   infoBox: {
     flexDirection: 'row',
@@ -1086,6 +851,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
+  },
+  registerButtonDriver: {
+    backgroundColor: COLORS.orange,
+    shadowColor: COLORS.orange,
   },
   registerButtonDisabled: {
     backgroundColor: COLORS.mediumGray,
@@ -1123,51 +892,6 @@ const styles = StyleSheet.create({
     color: COLORS.red,
     marginTop: 4,
     marginLeft: 4,
-  },
-  // Checkbox styles
-  checkboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: COLORS.blueLight,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: COLORS.blue,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: COLORS.blue,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    marginTop: 2,
-  },
-  checkboxChecked: {
-    backgroundColor: COLORS.blue,
-  },
-  checkboxMark: {
-    color: COLORS.white,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  checkboxTextContainer: {
-    flex: 1,
-  },
-  checkboxLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.blue,
-  },
-  checkboxHint: {
-    fontSize: 12,
-    color: COLORS.blue,
-    marginTop: 2,
-    opacity: 0.8,
   },
 });
 

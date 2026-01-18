@@ -9,13 +9,20 @@ const COLORS = {
   white: '#FFFFFF',
 };
 
-const getUrgencyColor = (urgency) => {
-  switch (urgency) {
-    case '24h': return '#EF4444'; // red
-    case '48h': return '#F59E0B'; // orange
-    case '72h': return '#10B981'; // green
-    default: return '#3B82F6'; // blue (for clients/others)
-  }
+// Helper za određivanje boje na osnovu preostalog vremena
+const getUrgencyColor = (createdAt, maxPickupHours = 48) => {
+  if (!createdAt) return '#3B82F6'; // blue default
+  const created = new Date(createdAt);
+  const hoursToAdd = maxPickupHours || 48;
+  const deadline = new Date(created.getTime() + hoursToAdd * 60 * 60 * 1000);
+  const now = new Date();
+  const diff = deadline - now;
+  if (diff <= 0) return '#EF4444'; // red - expired
+  const hoursLeft = diff / (1000 * 60 * 60);
+  const percentLeft = hoursLeft / hoursToAdd;
+  if (percentLeft <= 0.25) return '#EF4444'; // red - urgent
+  if (percentLeft <= 0.50) return '#F59E0B'; // orange - warning
+  return '#10B981'; // green - normal
 };
 
 const WASTE_ICONS = {
@@ -25,7 +32,7 @@ const WASTE_ICONS = {
   trash: '🗑️',
 };
 
-const RequestsMap = ({ requests, onMarkerPress, selectedId, mode = 'requests' }) => {
+const RequestsMap = ({ requests, onMarkerPress, selectedId, mode = 'requests', maxPickupHours = 48 }) => {
   // Filter requests that have valid coordinates
   const validRequests = requests.filter(
     (r) => r.latitude && r.longitude && !isNaN(r.latitude) && !isNaN(r.longitude)
@@ -67,14 +74,16 @@ const RequestsMap = ({ requests, onMarkerPress, selectedId, mode = 'requests' })
   // Generate markers JavaScript for Leaflet
   const markersJS = validRequests.map((request, index) => {
     const isClientMode = mode === 'clients';
-    const color = isClientMode ? '#3B82F6' : getUrgencyColor(request.urgency); // Blue for clients
+    const color = isClientMode ? '#3B82F6' : getUrgencyColor(request.created_at, maxPickupHours); // Blue for clients
     const icon = WASTE_ICONS[request.waste_type] || (isClientMode ? '🏢' : '📦');
-    const circleRadius = isClientMode ? 80 : (request.urgency === '24h' ? 150 : request.urgency === '48h' ? 100 : 60);
+    // Circle radius based on urgency level
+    const urgencyColor = getUrgencyColor(request.created_at, maxPickupHours);
+    const circleRadius = isClientMode ? 80 : (urgencyColor === '#EF4444' ? 150 : urgencyColor === '#F59E0B' ? 100 : 60);
 
-    // For clients mode, show client name; for requests mode, show urgency
+    // For clients mode, show client name; for requests mode, show waste type
     const badgeContent = isClientMode
       ? (request.client_name || 'Klijent').substring(0, 15) + ((request.client_name || '').length > 15 ? '...' : '')
-      : request.urgency;
+      : (request.waste_label || request.waste_type || 'Zahtev').substring(0, 12);
 
     return `
       // Circle for marker

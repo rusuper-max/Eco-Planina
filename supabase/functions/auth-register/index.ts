@@ -49,13 +49,26 @@ serve(async (req) => {
     // Check if phone already exists
     const { data: existingUser } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, auth_id, role, company_code, region_id')
       .eq('phone', phone)
       .is('deleted_at', null)
       .single()
 
+    // Shadow Contact Claim Logic:
+    // If user exists with auth_id = NULL, this is a shadow contact that can be claimed
+    let isShadowClaim = false
+    let shadowUser: typeof existingUser = null
+
     if (existingUser) {
-      throw new Error('Korisnik sa ovim brojem telefona već postoji')
+      if (existingUser.auth_id === null) {
+        // This is a shadow contact - we can claim it!
+        isShadowClaim = true
+        shadowUser = existingUser
+        console.log('Shadow contact found, will claim:', existingUser.id)
+      } else {
+        // Real user already exists - cannot register
+        throw new Error('Korisnik sa ovim brojem telefona već postoji')
+      }
     }
 
     // Use phone as email for Supabase Auth (phone@eco.local)
@@ -175,6 +188,22 @@ serve(async (req) => {
         console.error('Error creating default region:', regionError)
         // Don't throw - company is created, region is optional
       }
+
+      // Create default waste types for the new company
+      const defaultWasteTypes = [
+        { name: 'Karton', icon: '📦', company_code: newCompanyCode! },
+        { name: 'Plastika', icon: '♻️', company_code: newCompanyCode! },
+        { name: 'Staklo', icon: '🍾', company_code: newCompanyCode! },
+      ]
+
+      const { error: wasteTypesError } = await supabaseAdmin
+        .from('waste_types')
+        .insert(defaultWasteTypes)
+
+      if (wasteTypesError) {
+        console.error('Error creating default waste types:', wasteTypesError)
+        // Don't throw - company is created, waste types are optional
+      }
     }
 
     // Create Supabase Auth user (handles password hashing automatically)
@@ -217,26 +246,55 @@ serve(async (req) => {
       }
     }
 
-    // Create user profile in public.users table
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('users')
-      .insert({
-        auth_id: authData.user.id,
-        name: name,
-        phone: phone,
-        address: address || null,
-        latitude: latitude || null,
-        longitude: longitude || null,
-        role: assignedRole,
-        company_code: finalCompanyCode,
-        is_owner: isOwner,
-        region_id: assignedRegionId
-      })
-      .select()
-      .single()
+    // Create or update user profile in public.users table
+    let userData: any
+    let userError: any
+
+    if (isShadowClaim && shadowUser) {
+      // CLAIM SHADOW CONTACT: Update existing user with auth_id
+      // This preserves the user ID and all associated history (requests, etc.)
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({
+          auth_id: authData.user.id,
+          name: name,  // Update name in case it differs
+          address: address || shadowUser.address || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
+          // Keep existing company_code and region_id from shadow profile
+        })
+        .eq('id', shadowUser.id)
+        .select()
+        .single()
+
+      userData = data
+      userError = error
+      console.log('Shadow contact claimed successfully:', shadowUser.id)
+    } else {
+      // NEW USER: Create new profile
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .insert({
+          auth_id: authData.user.id,
+          name: name,
+          phone: phone,
+          address: address || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
+          role: assignedRole,
+          company_code: finalCompanyCode,
+          is_owner: isOwner,
+          region_id: assignedRegionId
+        })
+        .select()
+        .single()
+
+      userData = data
+      userError = error
+    }
 
     if (userError) {
-      // Rollback: delete auth user if profile creation fails
+      // Rollback: delete auth user if profile creation/update fails
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       console.error('User profile error:', userError)
       throw new Error('Greška pri kreiranju profila')

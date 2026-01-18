@@ -1,15 +1,17 @@
-import React from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Updates from 'expo-updates';
 import { AppProvider, useAppContext } from './src/context/AppContext';
 import { LanguageProvider } from './src/context/LanguageContext';
 
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import ClientViewScreen from './src/screens/ClientViewScreen';
+import DriverViewScreen from './src/screens/DriverViewScreen';
 import ManagerViewScreen from './src/screens/ManagerViewScreen';
 import ClientsScreen from './src/screens/ClientsScreen';
 import EquipmentScreen from './src/screens/EquipmentScreen';
@@ -58,6 +60,9 @@ const RootNavigator = () => {
               <Stack.Screen name="Equipment" component={EquipmentScreen} />
               <Stack.Screen name="History" component={HistoryScreen} />
             </>
+          ) : user.role === 'driver' ? (
+            // Driver Stack
+            <Stack.Screen name="DriverView" component={DriverViewScreen} />
           ) : (
             // Client Stack
             <Stack.Screen name="ClientView" component={ClientViewScreen} />
@@ -75,6 +80,37 @@ const RootNavigator = () => {
 };
 
 export default function App() {
+  // Check for OTA updates on app start
+  useEffect(() => {
+    async function checkForUpdates() {
+      try {
+        // Skip in development mode
+        if (__DEV__) return;
+
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          Alert.alert(
+            'Nova verzija dostupna',
+            'Aplikacija ce se ponovo pokrenuti sa novom verzijom.',
+            [
+              {
+                text: 'OK',
+                onPress: async () => {
+                  await Updates.reloadAsync();
+                },
+              },
+            ]
+          );
+        }
+      } catch (error) {
+        // Silently fail - updates are not critical
+        console.log('Update check failed:', error);
+      }
+    }
+    checkForUpdates();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <LanguageProvider>

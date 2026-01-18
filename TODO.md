@@ -1,155 +1,117 @@
-# EcoLogistics - TODO Lista
+# EcoLogistics TODO
 
-## 1. Sistem Notifikacija (Prioritet: VISOK) - ZAVRSENO
-
-### 1.1 Baza podataka
-- [x] Kreirati `notifications` tabelu u Supabase
-  - `id`, `user_id`, `type`, `title`, `message`, `data` (JSONB), `is_read`, `created_at`
-- [x] Dodati `notification_preferences` kolonu na `users` tabelu
-- [x] Dodati RLS politike za notifikacije
-- [x] Kreirati database triggere za auto-kreiranje notifikacija
-
-### 1.2 Backend - Triggeri za notifikacije
-- [x] Trigger: Novi zahtev -> notifikacija menadzeru
-- [x] Trigger: Zahtev obradjen -> notifikacija klijentu
-- [x] Trigger: Vozac dodeljen -> notifikacija vozacu i klijentu
-- [x] Trigger: Novi klijent -> notifikacija menadzeru
-- [x] Trigger: Hitni zahtev (24h) -> notifikacija menadzeru (prioritet)
-
-### 1.3 Frontend - Web komponente
-- [x] Kreirati `NotificationContext.jsx` - state management
-- [x] Kreirati `NotificationBell.jsx` - dropdown komponenta
-- [x] Dodati real-time Supabase subscription za notifikacije
-- [x] Integrisati zvucni signal za nove notifikacije (opciono)
-
-### 1.4 Podesavanja notifikacija
-- [ ] Dodati "Podesavanja" stranicu/modal za notification preferences
-- [ ] Toggle za svaki tip notifikacije po ulozi
-- [ ] Sacuvati preference u bazi
+> Prioritizovana lista zadataka za stabilnost i skalabilnost aplikacije.
+> Poslednje ažuriranje: 16.01.2026.
 
 ---
 
-## 2. Sigurnosna poboljsanja (Prioritet: SREDNJI) - ZAVRSENO
+## 🔴 Prioritet 1: Stabilnost i Bezbednost
 
-### 2.1 Ukloniti hardkodovane kljuceve
-- [x] Ukloniti fallback Supabase kljuceve iz `supabase.js`
-- [x] Ukloniti fallback Supabase kljuceve iz `AuthContext.jsx`
-- [x] Dodati error handling ako env varijable nisu postavljene
-- [ ] Proveriti da `.env` nije commitovan u git
+### 1.1 RLS Audit [DONE ✅]
+- [x] Pregledati sve RLS politike za `users` tabelu
+  - [x] ⚠️ **KRITIČNA RUPA PRONAĐENA I POPRAVLJENA**
+  - [x] Kreiran `026_security_prevent_role_self_promotion.sql`
+  - [x] Trigger sprečava korisnike da menjaju svoj `role`, `company_code`, `is_owner`
+  - [x] company_admin ne može promovisati nikoga na admin/developer
+- [x] Pregledati RLS za `driver_assignments` - OK (004_fix_rls_recursion.sql)
+- [x] Pregledati RLS za `processed_requests` - OK (015_fix_processed_requests_policy.sql)
+- [x] Pregledati RLS za `pickup_requests` - OK (001_supabase_auth_migration.sql)
+- [ ] Dokumentovati sve politike u SECURITY.md (opciono)
 
-### 2.2 Prebaciti admin funkcije u Edge Functions (opciono - nije hitno)
-- [ ] `changeUserRole` -> Edge Function
-- [ ] `impersonateUser` -> Edge Function (ili ukloniti)
+### 1.2 Error Boundaries (React) [DONE ✅]
+- [x] Kreirati `ErrorBoundary` komponentu za web
+- [x] Specijalizovani wrapperi: `MapErrorBoundary`, `AnalyticsErrorBoundary`, `TableErrorBoundary`
+- [x] Fallback UI sa "Pokušaj ponovo" i "Početna" dugmadima
+- [x] Dev-only error details prikaz
+- [ ] (Opciono) Wrap-ovati kritične sekcije u Dashboard.jsx
 
-**Napomena:** RLS politike vec stite admin funkcije na database nivou, tako da ovo nije kriticno.
-
----
-
-## 3. Skalabilnost (Prioritet: NIZAK - kada podaci rastu)
-
-### 3.1 Paginacija
-- [ ] Dodati paginaciju za `pickup_requests`
-- [ ] Dodati paginacija za `processed_requests`
-- [ ] Dodati paginaciju za `clients` listu
-- [ ] Implementirati "Load more" ili infinite scroll
-
----
-
-## 4. UI Poboljsanja - ZAVRSENO
-
-### 4.1 Analitika
-- [x] Dodati boje za vrste otpada (12 boja paleta)
-- [x] Stampanje izvestaja sa naprednim filterima
-- [x] Excel export (CSV sa UTF-8 BOM)
-- [x] Modal za izbor perioda, klijenta, vrste otpada
-
-### 4.2 Profesionalni Excel Export (ExcelJS) - NOVO
-- [x] Pravi .xlsx format umesto CSV
-- [x] 7 sheet-ova sa detaljnim podacima:
-  - Sumarno, Po vrsti otpada, Po klijentu, Dnevni trend
-  - Detaljan pregled, Svi zahtevi, Grafici (slike)
-- [x] Checkbox za izbor sheet-ova pri exportu
-- [x] Generisanje pravih grafika (pie, bar, line chart) kao PNG slike
-- [x] Profesionalno formatiranje (boje, headeri, granice)
-- [x] PrintExport komponenta takodje koristi ExcelJS
-
-### 4.3 Manager Analytics - NOVO
-- [x] Nova stranica "Ucanak menadzera" za Company Admin
-- [x] Pracenje koliko zahteva je obradio svaki menadzer
-- [x] Statistika po tezini, klijentima, vrstama otpada
-- [x] Filtriranje po periodu (nedelja, mesec, sve)
-- [x] Expandable kartice sa detaljima
-
-### 4.4 Pracenje obrade zahteva - NOVO
-- [x] processed_by_id i processed_by_name u processed_requests
-- [x] Prikaz menadzera u HistoryTable
-- [x] Timeline prikaz sa vozacem i menadzerom
-
-### 4.5 UI poboljsanja - NOVO
-- [x] Background slika na Login/Register ekranima
-- [x] Background slika na Client panelu
-- [x] Siri modal za Excel export na desktopu (max-w-3xl)
-- [x] Horizontalni layout filtera u modalu
+### 1.3 Deploy Pending Migracija
+- [ ] Pokrenuti `006_company_admin_role.sql` na produkciji
+- [x] Pokrenuti `026_security_prevent_role_self_promotion.sql` na produkciji ✅ **DEPLOYED**
+- [ ] Deploy `auth-register` Edge Function sa claim logikom
 
 ---
 
-## 5. Filijale (Regije) - ZAVRSENO
+## 🟠 Prioritet 2: Offline Support (Mobile)
 
-### 5.1 Region sistem
-- [x] Kreiranje/brisanje/editovanje filijala
-- [x] Vizuelni pregled filijala (node editor)
-- [x] Batch dodeljivanje korisnika filijalama
-- [x] Paginacija kod dodeljivanja (50 po stranici)
-- [x] Brzi izbor po srpskim gradovima
-- [x] Auto-assign regiona pri registraciji novih korisnika
-- [x] Zastita od brisanja poslednje filijale
+### 2.1 Offline Queue za Vozače
+- [ ] Implementirati AsyncStorage persistence za assignments
+- [ ] Queue za offline akcije (pickup, delivery)
+- [ ] Sync queue kad se vrati konekcija
+- [ ] UI indikator za offline mod
+- [ ] Retry logika sa exponential backoff
 
----
-
-## 6. Tipovi notifikacija po ulozi
-
-### Klijent
-| Tip | Opis | Default |
-|-----|------|---------|
-| `request_processed` | Zahtev obradjen | ON |
-| `driver_assigned` | Vozac dodeljen | ON |
-| `driver_on_way` | Vozac na putu | OFF |
-| `new_message` | Nova poruka | ON |
-
-### Vozac
-| Tip | Opis | Default |
-|-----|------|---------|
-| `new_assignment` | Novi zadatak | ON |
-| `assignment_cancelled` | Zadatak otkazan | ON |
-| `reminder` | Podsetnik za nedovrsene | OFF |
-| `new_message` | Nova poruka | ON |
-
-### Menadzer
-| Tip | Opis | Default |
-|-----|------|---------|
-| `new_request` | Novi zahtev | ON |
-| `urgent_request` | Hitni zahtev (24h) | ON |
-| `request_expiring` | Zahtev istice | ON |
-| `new_client` | Novi klijent | ON |
-| `driver_completed` | Vozac zavrsio | OFF |
-| `new_message` | Nova poruka | ON |
-
-### Company Admin
-| Tip | Opis | Default |
-|-----|------|---------|
-| Sve od menadzera | + | - |
-| `new_manager` | Novi menadzer | ON |
-| `weekly_report` | Nedeljni izvestaj | OFF |
+### 2.2 Caching
+- [ ] Keširati waste types lokalno
+- [ ] Keširati company settings
+- [ ] Keširati poslednje assignments
 
 ---
 
-## Zavrsene faze
+## 🟡 Prioritet 3: Testing
 
-1. **Faza 1:** [DONE] Baza + NotificationContext + NotificationBell
-2. **Faza 2:** [DONE] Triggeri za kljucne dogadjaje
-3. **Faza 3:** [TODO] Podesavanja notifikacija (UI za toggle-ove)
-4. **Faza 4:** [DONE] Sigurnosna poboljsanja
-5. **Faza 5:** [TODO] Paginacija (kada bude potrebno)
-6. **Faza 6:** [DONE] Profesionalni Excel export (ExcelJS)
-7. **Faza 7:** [DONE] Manager Analytics
-8. **Faza 8:** [DONE] Region sistem kompletiran
+### 3.1 E2E Smoke Test (Web)
+- [ ] Setup Playwright
+- [ ] Test: Client kreira zahtev
+- [ ] Test: Manager vidi i obrađuje zahtev
+- [ ] Test: (opciono) Driver flow
+
+### 3.2 Mobile Testing
+- [ ] Ručno testiranje happy path na iOS/Android
+- [ ] (Kasnije) Setup Detox ili Maestro
+
+---
+
+## 🟢 Prioritet 4: TypeScript
+
+### 4.1 Supabase Types
+- [ ] Generisati tipove: `supabase gen types typescript`
+- [ ] Kreirati `/src/types/database.ts`
+- [ ] Koristiti tipove u kritičnim hookovima
+
+### 4.2 Postepena Migracija
+- [ ] Migrirati utils fajlove
+- [ ] Migrirati context fajlove
+- [ ] (Kasnije) Migrirati komponente
+
+---
+
+## 🔵 Prioritet 5: Features
+
+### 5.1 Push Notifikacije
+- [ ] EAS Build setup
+- [ ] Expo Notifications konfiguracija
+- [ ] Supabase trigger za nove assignments
+- [ ] Test na fizičkom uređaju
+
+### 5.2 Client Import (Dovršiti)
+- [ ] Test Excel import flow end-to-end
+- [ ] Test claim profile flow (shadow → registered)
+- [ ] Dodati import dugme za `company_admin` u Osoblje tab
+
+### 5.3 UI Poboljšanja
+- [ ] Mobile notifikacije layout fix
+- [ ] Role filter u region expand (za velike liste)
+- [ ] Dark mode (opciono)
+
+---
+
+## ✅ Nedavno Završeno
+
+- [x] Route optimization (Web + Mobile) - Nearest Neighbor algoritam
+- [x] Bulk waste type assignment
+- [x] Company Admin: Read-only Aktivni Zahtevi tab
+- [x] Client Import Modal
+- [x] Shadow contact claim logic u auth-register
+- [x] Phone normalization utility
+- [x] Driver ima svoj zasebni Dashboard
+- [x] Company Admin impersonacija (samo niže role, ista firma)
+- [x] RegionsPage sa tabovima (Filijale/Dodeli/Vizuelni)
+
+---
+
+## 📝 Napomene
+
+- **Monorepo**: Razmotriti Turborepo/Nx kad kreneš TS + shared types
+- **Sentry**: Razmotriti za production error tracking
+- **Analytics**: Mixpanel/Amplitude za user behavior tracking

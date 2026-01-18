@@ -12,26 +12,6 @@ export const useAppContext = () => {
   return context;
 };
 
-// Generate unique company code
-const generateCompanyCode = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'ECO-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
-// Generate master code for admin
-const generateMasterCodeString = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'MC-';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
 export const AppProvider = ({ children }) => {
   // User state
   const [user, setUser] = useState(null);
@@ -41,9 +21,15 @@ export const AppProvider = ({ children }) => {
   // Company info
   const [companyCode, setCompanyCode] = useState(null);
   const [companyName, setCompanyName] = useState(null);
+  const [maxPickupHours, setMaxPickupHours] = useState(48); // Default 48h
 
   // Pickup requests from Supabase
   const [pickupRequests, setPickupRequests] = useState([]);
+
+  // Chat state
+  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Client's own requests (for client view)
   const [clientRequests, setClientRequests] = useState([]);
@@ -71,12 +57,12 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Fetch client's own requests
+  // Fetch client's own requests with driver assignment info
   const fetchClientRequests = async () => {
     if (!user?.id) return [];
 
     try {
-      const { data, error } = await supabase
+      const { data: requests, error } = await supabase
         .from('pickup_requests')
         .select('*')
         .eq('user_id', user.id)
@@ -84,8 +70,37 @@ export const AppProvider = ({ children }) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setClientRequests(data || []);
-      return data || [];
+
+      // Fetch driver assignments for these requests
+      if (requests && requests.length > 0) {
+        const requestIds = requests.map(r => r.id);
+        const { data: assignments } = await supabase
+          .from('driver_assignments')
+          .select('request_id, driver_id, assigned_by, status, driver:driver_id(id, name), assigner:assigned_by(id, name)')
+          .in('request_id', requestIds)
+          .is('deleted_at', null);
+
+        // Merge assignment info into requests
+        const enrichedRequests = requests.map(req => {
+          const assignment = assignments?.find(a => a.request_id === req.id);
+          return {
+            ...req,
+            assignment: assignment ? {
+              driver_id: assignment.driver_id,
+              driver_name: assignment.driver?.name,
+              assigned_by_id: assignment.assigned_by,
+              assigned_by_name: assignment.assigner?.name,
+              status: assignment.status
+            } : null
+          };
+        });
+
+        setClientRequests(enrichedRequests);
+        return enrichedRequests;
+      }
+
+      setClientRequests(requests || []);
+      return requests || [];
     } catch (error) {
       console.error('Error fetching client requests:', error);
       return [];
@@ -118,21 +133,62 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Check for saved session on mount
+  // Check for saved session on mount and listen to auth state changes
   useEffect(() => {
-    const checkSession = async () => {
+    const initializeAuth = async () => {
       setIsLoading(true);
       try {
-        const sessionStr = await AsyncStorage.getItem('user_session');
-        if (sessionStr) {
-          const session = JSON.parse(sessionStr);
-          if (session.user) {
-            setUser(session.user);
-            setCompanyCode(session.companyCode);
-            setCompanyName(session.companyName);
+        // First check Supabase Auth session
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+
+        if (authSession?.user) {
+          // User is authenticated via Supabase Auth - fetch their profile
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('auth_id', authSession.user.id)
+            .is('deleted_at', null)
+            .single();
+
+          if (userData) {
+            // Fetch company
+            let companyData = null;
+            if (userData.company_code) {
+              const { data: company } = await supabase
+                .from('companies')
+                .select('*')
+                .eq('code', userData.company_code)
+                .is('deleted_at', null)
+                .single();
+              companyData = company;
+            }
+
+            setUser({
+              id: userData.id,
+              auth_id: authSession.user.id,
+              name: userData.name,
+              role: userData.role,
+              address: userData.address,
+              phone: userData.phone,
+              latitude: userData.latitude,
+              longitude: userData.longitude,
+              region_id: userData.region_id,
+              allowed_waste_types: userData.allowed_waste_types,
+            });
+            setCompanyCode(companyData?.code || userData.company_code);
+            setCompanyName(companyData?.name || 'Nepoznato');
+            setMaxPickupHours(companyData?.max_pickup_hours || 48);
             setIsRegistered(true);
-            // Re-verify code silently to ensure company still exists or get fresh data
-            // (Optional, but good practice)
+          }
+        } else {
+          // No Supabase Auth session - try legacy AsyncStorage session (for migration)
+          const sessionStr = await AsyncStorage.getItem('user_session');
+          if (sessionStr) {
+            const session = JSON.parse(sessionStr);
+            if (session.user) {
+              // Legacy session exists but no auth - clear it and require re-login
+              await AsyncStorage.removeItem('user_session');
+            }
           }
         }
       } catch (e) {
@@ -141,7 +197,22 @@ export const AppProvider = ({ children }) => {
         setIsLoading(false);
       }
     };
-    checkSession();
+
+    initializeAuth();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsRegistered(false);
+        setCompanyCode(null);
+        setCompanyName(null);
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   // Subscribe to real-time updates for company
@@ -230,8 +301,8 @@ export const AppProvider = ({ children }) => {
 
           // Check if request was just processed
           if (payload.eventType === 'UPDATE' &&
-              payload.new.status === 'processed' &&
-              payload.old?.status === 'pending') {
+            payload.new.status === 'processed' &&
+            payload.old?.status === 'pending') {
             setProcessedNotification({
               wasteLabel: payload.new.waste_label || payload.new.waste_type,
               processedAt: payload.new.processed_at
@@ -277,289 +348,88 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Login existing user by phone
-  const loginUser = async (phone, password, companyCodeInput = null) => {
+  // Login existing user by phone - uses Supabase Auth
+  const loginUser = async (phone, password) => {
     setIsLoading(true);
     try {
-      let query = supabase
+      // Create fake email from phone number (same format as web app)
+      const fakeEmail = `${phone.replace(/[^0-9]/g, '')}@eco.local`;
+
+      // Sign in with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: fakeEmail,
+        password: password,
+      });
+
+      if (authError) {
+        // If auth fails, provide friendly error message
+        if (authError.message.includes('Invalid login credentials')) {
+          throw new Error('Pogrešan broj telefona ili lozinka');
+        }
+        throw authError;
+      }
+
+      // Fetch user profile from users table using auth_id
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
-        .eq('phone', phone)
-        .eq('password', password); // Plain text check
-
-      if (companyCodeInput) {
-        query = query.eq('company_code', companyCodeInput.toUpperCase());
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
-        throw new Error('Pogrešan broj telefona ili lozinka');
-      }
-
-      // If multiple users found, take the first one (or the one matching company code)
-      const userData = data[0];
-
-      // Fetch company - try by user's company_code first, then by manager_id for older accounts
-      let companyData = null;
-      const { data: companyByCode } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('code', userData.company_code)
+        .eq('auth_id', authData.user.id)
+        .is('deleted_at', null)
         .single();
 
-      if (companyByCode) {
-        companyData = companyByCode;
-      } else if (userData.role === 'manager') {
-        // Fallback for older accounts where company_code might be master code
-        const { data: companyByManager } = await supabase
+      if (userError || !userData) {
+        // User exists in auth but not in users table - shouldn't happen but handle gracefully
+        throw new Error('Korisnički profil nije pronađen');
+      }
+
+      // Fetch company data
+      let companyData = null;
+      if (userData.company_code) {
+        const { data: company } = await supabase
           .from('companies')
           .select('*')
-          .eq('manager_id', userData.id)
+          .eq('code', userData.company_code)
+          .is('deleted_at', null)
           .single();
-        companyData = companyByManager;
+        companyData = company;
       }
 
-      // Check if company still has old MC- code and needs ECO- code
-      let actualCompanyCode = companyData?.code || userData.company_code;
-
-      if (companyData && actualCompanyCode.startsWith('MC-') && userData.role === 'manager') {
-        // Generate new ECO code for this company
-        const generateEcoCode = async () => {
-          const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-          let code;
-          let isUnique = false;
-          while (!isUnique) {
-            code = 'ECO-' + Array.from({ length: 4 }, () =>
-              chars[Math.floor(Math.random() * chars.length)]
-            ).join('');
-            const { data: existing } = await supabase
-              .from('companies')
-              .select('id')
-              .eq('code', code)
-              .single();
-            if (!existing) isUnique = true;
-          }
-          return code;
-        };
-
-        const newEcoCode = await generateEcoCode();
-
-        // Update company with new ECO code
-        await supabase
-          .from('companies')
-          .update({ code: newEcoCode })
-          .eq('id', companyData.id);
-
-        // Update all users with this company_code
-        await supabase
-          .from('users')
-          .update({ company_code: newEcoCode })
-          .eq('company_code', actualCompanyCode);
-
-        actualCompanyCode = newEcoCode;
-      }
+      const actualCompanyCode = companyData?.code || userData.company_code;
 
       setUser({
         id: userData.id,
+        auth_id: authData.user.id,
         name: userData.name,
         role: userData.role,
         address: userData.address,
         phone: userData.phone,
         latitude: userData.latitude,
         longitude: userData.longitude,
+        region_id: userData.region_id,
+        allowed_waste_types: userData.allowed_waste_types,
       });
       setCompanyCode(actualCompanyCode);
       setCompanyName(companyData?.name || 'Nepoznato');
+      setMaxPickupHours(companyData?.max_pickup_hours || 48);
       setIsRegistered(true);
 
+      // Save session for faster restore (Supabase Auth also persists, but we keep user profile)
       saveSession({
         id: userData.id,
+        auth_id: authData.user.id,
         name: userData.name,
         role: userData.role,
         address: userData.address,
         phone: userData.phone,
         latitude: userData.latitude,
         longitude: userData.longitude,
+        region_id: userData.region_id,
+        allowed_waste_types: userData.allowed_waste_types,
       }, actualCompanyCode, companyData?.name || 'Nepoznato');
 
       return { success: true, role: userData.role };
     } catch (error) {
       console.error('Error logging in:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Register manager (creates new company)
-  const registerManager = async (name, firmName, phone, password) => {
-    setIsLoading(true);
-    try {
-      // Check if phone already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', phone)
-        .single();
-
-      if (existingUser) {
-        throw new Error('Korisnik sa ovim brojem telefona već postoji');
-      }
-
-      const code = generateCompanyCode();
-
-      // Create company first
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .insert([{ code, name: firmName }])
-        .select()
-        .single();
-
-      if (companyError) throw companyError;
-
-      // Create manager user with phone
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .insert([{ name, role: 'manager', company_code: code, phone, password }])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      // Update company with manager_id
-      await supabase
-        .from('companies')
-        .update({ manager_id: userData.id })
-        .eq('id', companyData.id);
-
-      setUser({ id: userData.id, name, role: 'manager' });
-      setCompanyCode(code);
-      setCompanyName(firmName);
-      setIsRegistered(true);
-
-      saveSession({ id: userData.id, name, role: 'manager' }, code, firmName);
-
-      return { success: true, companyCode: code };
-    } catch (error) {
-      console.error('Error registering manager:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Register manager to existing company
-  const registerManagerToExistingCompany = async (name, phone, password, code) => {
-    setIsLoading(true);
-    try {
-      // Verify company code exists
-      const { valid, company } = await verifyCompanyCode(code);
-      if (!valid) {
-        throw new Error('Nevažeći kod firme');
-      }
-
-      // Check if phone already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', phone)
-        .single();
-
-      if (existingUser) {
-        throw new Error('Korisnik sa ovim brojem telefona već postoji');
-      }
-
-      // Create manager user linked to existing company
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .insert([{
-          name,
-          role: 'manager',
-          company_code: code.toUpperCase(),
-          phone,
-          password
-        }])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      setUser({ id: userData.id, name, role: 'manager' });
-      setCompanyCode(code.toUpperCase());
-      setCompanyName(company.name);
-      setIsRegistered(true);
-
-      saveSession({ id: userData.id, name, role: 'manager' }, code.toUpperCase(), company.name);
-
-      return { success: true, companyName: company.name };
-    } catch (error) {
-      console.error('Error registering manager to existing company:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Register client (joins existing company)
-  const registerClient = async (name, address, phone, code, password, lat = null, lng = null) => {
-    setIsLoading(true);
-    try {
-      // Verify company code
-      const { valid, company } = await verifyCompanyCode(code);
-      if (!valid) {
-        throw new Error('Nevažeći kod firme');
-      }
-
-      // Check if phone already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', phone)
-        .single();
-
-      if (existingUser) {
-        throw new Error('Korisnik sa ovim brojem telefona već postoji');
-      }
-
-      // Create client user with coordinates
-      const { data, error } = await supabase
-        .from('users')
-        .insert([{
-          name,
-          role: 'client',
-          address,
-          phone,
-          company_code: code.toUpperCase(),
-          password,
-          latitude: lat,
-          longitude: lng
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setUser({ id: data.id, name, role: 'client', address, phone, latitude: lat, longitude: lng });
-      setCompanyCode(code.toUpperCase());
-      setCompanyName(company.name);
-      setIsRegistered(true);
-
-      saveSession({
-        id: data.id,
-        name,
-        role: 'client',
-        address,
-        phone,
-        latitude: lat,
-        longitude: lng
-      }, code.toUpperCase(), company.name);
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error registering client:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -679,6 +549,37 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Fetch waste types for the company
+  const fetchWasteTypes = async () => {
+    if (!companyCode) return [];
+    try {
+      const { data, error } = await supabase
+        .from('waste_types')
+        .select('*')
+        .eq('company_code', companyCode)
+        .is('deleted_at', null)
+        .order('name');
+
+      if (error) throw error;
+
+      // If user has allowed_waste_types restriction, filter
+      if (user?.allowed_waste_types && user.allowed_waste_types.length > 0) {
+        return (data || []).filter(wt => user.allowed_waste_types.includes(wt.id));
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching waste types:', error);
+      return [];
+    }
+  };
+
+  // Generate short request code (e.g., "A3X7KP") - same format as web
+  const generateRequestCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Avoid confusing chars like 0/O, 1/I
+    return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
   const addPickupRequest = async (request) => {
     if (!companyCode) {
       throw new Error('Niste povezani sa firmom');
@@ -686,10 +587,10 @@ export const AppProvider = ({ children }) => {
 
     setIsLoading(true);
     try {
-      // Fetch fresh user data from database to ensure we have the latest location
+      // Fetch fresh user data from database to ensure we have the latest location and region_id
       const { data: freshUser } = await supabase
         .from('users')
-        .select('latitude, longitude, address')
+        .select('latitude, longitude, address, region_id')
         .eq('id', user?.id)
         .single();
 
@@ -706,6 +607,8 @@ export const AppProvider = ({ children }) => {
         client_phone: user?.phone || '',
         latitude: freshUser?.latitude ? Number(freshUser.latitude) : null,
         longitude: freshUser?.longitude ? Number(freshUser.longitude) : null,
+        region_id: freshUser?.region_id || user?.region_id || null,
+        request_code: generateRequestCode(),
         status: 'pending',
       };
 
@@ -852,7 +755,36 @@ export const AppProvider = ({ children }) => {
     return pickupRequests.filter((req) => selectedForPrint.includes(req.id));
   };
 
-  const logout = () => {
+  // Update user profile (name, phone)
+  const updateUserProfile = async (updates) => {
+    if (!user?.id) throw new Error('Niste prijavljeni');
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .update(updates)
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update local user state
+      setUser(prev => ({ ...prev, ...data }));
+      return data;
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Sign out from Supabase Auth
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Error signing out:', e);
+    }
     setUser(null);
     setIsRegistered(false);
     setCompanyCode(null);
@@ -860,6 +792,433 @@ export const AppProvider = ({ children }) => {
     setSelectedForPrint([]);
     setPickupRequests([]);
     clearSession();
+  };
+
+  // =====================================================
+  // CHAT FUNCTIONS
+  // =====================================================
+
+  // Fetch messages between current user and a partner
+  const fetchMessages = async (partnerId) => {
+    if (!user?.id || !partnerId) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setMessages(data || []);
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      return [];
+    }
+  };
+
+  // Send a message
+  const sendMessage = async (receiverId, content) => {
+    if (!user?.id || !receiverId || !content.trim()) {
+      throw new Error('Nedostaju podaci za slanje poruke');
+    }
+
+    try {
+      const newMessage = {
+        sender_id: user.id,
+        receiver_id: receiverId,
+        content: content.trim(),
+        is_read: false,
+        company_code: companyCode,
+      };
+
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([newMessage])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to local messages
+      setMessages(prev => [...prev, data]);
+      return data;
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  };
+
+  // Mark messages as read
+  const markMessagesAsRead = async (senderId) => {
+    if (!user?.id || !senderId) return;
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('sender_id', senderId)
+        .eq('receiver_id', user.id)
+        .eq('is_read', false);
+
+      if (error) throw error;
+
+      // Update local messages
+      setMessages(prev => prev.map(m =>
+        m.sender_id === senderId && m.receiver_id === user.id
+          ? { ...m, is_read: true }
+          : m
+      ));
+
+      // Update unread count
+      await fetchUnreadCount();
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
+  // Get conversations list with last message
+  const fetchConversations = async () => {
+    if (!user?.id || !companyCode) return [];
+
+    try {
+      // Fetch all messages involving this user
+      const { data: allMessages, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('company_code', companyCode)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Group by conversation partner
+      const conversationMap = new Map();
+
+      for (const msg of (allMessages || [])) {
+        const partnerId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
+
+        if (!conversationMap.has(partnerId)) {
+          conversationMap.set(partnerId, {
+            partnerId,
+            lastMessage: msg,
+            unreadCount: 0,
+          });
+        }
+
+        // Count unread messages from this partner
+        if (msg.receiver_id === user.id && !msg.is_read) {
+          const conv = conversationMap.get(partnerId);
+          conv.unreadCount++;
+        }
+      }
+
+      // Fetch partner details
+      const partnerIds = Array.from(conversationMap.keys());
+      if (partnerIds.length === 0) {
+        setConversations([]);
+        return [];
+      }
+
+      const { data: partners } = await supabase
+        .from('users')
+        .select('id, name, role')
+        .in('id', partnerIds);
+
+      // Merge partner info
+      const conversationList = Array.from(conversationMap.values()).map(conv => {
+        const partner = partners?.find(p => p.id === conv.partnerId);
+        return {
+          ...conv,
+          partnerName: partner?.name || 'Nepoznat',
+          partnerRole: partner?.role || 'unknown',
+        };
+      });
+
+      // Sort by last message time
+      conversationList.sort((a, b) =>
+        new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
+      );
+
+      setConversations(conversationList);
+      return conversationList;
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      return [];
+    }
+  };
+
+  // Get unread message count
+  const fetchUnreadCount = async () => {
+    if (!user?.id) return 0;
+
+    try {
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .eq('is_read', false);
+
+      if (error) throw error;
+      setUnreadCount(count || 0);
+      return count || 0;
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+      return 0;
+    }
+  };
+
+  // Fetch company members for starting new chats
+  const fetchCompanyMembers = async () => {
+    if (!companyCode || !user?.id) return [];
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, name, role, phone')
+        .eq('company_code', companyCode)
+        .neq('id', user.id)
+        .is('deleted_at', null)
+        .order('name');
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching company members:', error);
+      return [];
+    }
+  };
+
+  // Subscribe to new messages
+  const subscribeToMessages = (callback) => {
+    if (!user?.id) return null;
+
+    const channelName = `messages_${user.id}_${Date.now()}`;
+
+    const subscription = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('New message received:', payload);
+          if (callback) callback(payload.new);
+          fetchUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return subscription;
+  };
+
+  // =====================================================
+  // DRIVER FUNCTIONS
+  // =====================================================
+
+  // Fetch driver's assigned requests
+  const fetchDriverAssignments = async () => {
+    if (!user?.id || user?.role !== 'driver') return [];
+
+    try {
+      // Get assignments for this driver with request details
+      // Include 'picked_up' status too so driver can see what they've picked up
+      const { data: assignments, error } = await supabase
+        .from('driver_assignments')
+        .select(`
+          *,
+          request:pickup_requests(*)
+        `)
+        .eq('driver_id', user.id)
+        .in('status', ['assigned', 'in_progress', 'picked_up'])
+        .is('deleted_at', null)
+        .order('assigned_at', { ascending: false });
+
+      if (error) throw error;
+
+      console.log('[Driver] Fetched assignments:', assignments?.length || 0, 'for driver:', user.id);
+
+      // Extract and return the pickup requests with assignment info
+      // Also filter out requests that are already processed
+      return (assignments || []).map(a => ({
+        ...a.request,
+        assignment_id: a.id,
+        assignment_status: a.status,
+        assigned_at: a.assigned_at,
+        picked_up_at: a.picked_up_at
+      })).filter(r => r && r.id && r.status !== 'processed');
+    } catch (error) {
+      console.error('Error fetching driver assignments:', error);
+      return [];
+    }
+  };
+
+  // Fetch driver's completed/delivered assignments (history)
+  // After migration 025: driver_assignments.request_id becomes NULL after processing
+  // So we use processed_requests.driver_assignment_id to link them
+  const fetchDriverHistory = async () => {
+    if (!user?.id || user?.role !== 'driver') return [];
+
+    console.log('[fetchDriverHistory] Fetching for driver:', user.id);
+
+    try {
+      // 1. Fetch from processed_requests where this driver worked
+      const { data: processedRequests, error: processedError } = await supabase
+        .from('processed_requests')
+        .select('*')
+        .eq('driver_id', user.id)
+        .is('deleted_at', null)
+        .order('processed_at', { ascending: false })
+        .limit(50);
+
+      if (processedError) {
+        console.error('[fetchDriverHistory] processed_requests error:', processedError);
+      }
+      console.log('[fetchDriverHistory] processed_requests count:', processedRequests?.length || 0);
+
+      // 2. Get linked driver_assignments for timeline data
+      const assignmentIds = (processedRequests || [])
+        .map(p => p.driver_assignment_id)
+        .filter(Boolean);
+
+      let assignmentsMap = {};
+      if (assignmentIds.length > 0) {
+        const { data: assignments, error: assignmentsError } = await supabase
+          .from('driver_assignments')
+          .select('*')
+          .in('id', assignmentIds);
+
+        if (!assignmentsError && assignments) {
+          assignments.forEach(a => {
+            assignmentsMap[a.id] = a;
+          });
+        }
+      }
+
+      // 3. Get pending/delivered assignments (not yet processed by manager)
+      const { data: pendingAssignments, error: pendingError } = await supabase
+        .from('driver_assignments')
+        .select('*')
+        .eq('driver_id', user.id)
+        .eq('status', 'delivered')
+        .is('deleted_at', null)
+        .order('delivered_at', { ascending: false })
+        .limit(20);
+
+      if (pendingError) {
+        console.error('[fetchDriverHistory] pending assignments error:', pendingError);
+      }
+
+      console.log('[fetchDriverHistory] linked_assignments:', Object.keys(assignmentsMap).length,
+        'pending_assignments:', pendingAssignments?.length || 0);
+
+      // Build history from processed_requests with linked assignment data
+      const historyFromProcessed = (processedRequests || []).map(p => {
+        const assignment = assignmentsMap[p.driver_assignment_id];
+        const isRetroactive = !assignment || (!assignment.assigned_at && !assignment.picked_up_at);
+
+        return {
+          id: p.id,
+          assignment_id: p.driver_assignment_id,
+          processed_request_id: p.id,
+          assignment_status: 'completed',
+          source: isRetroactive ? 'processed_request' : 'driver_assignment',
+          // Client/request data
+          client_name: p.client_name,
+          client_address: p.client_address,
+          waste_type: p.waste_type,
+          waste_label: p.waste_label,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          // Use assignment timestamps if available, else processed_at
+          assigned_at: assignment?.assigned_at || null,
+          picked_up_at: assignment?.picked_up_at || null,
+          delivered_at: assignment?.delivered_at || p.processed_at,
+          completed_at: assignment?.completed_at || p.processed_at,
+          processed_at: p.processed_at,
+          created_at: p.created_at,
+          // Include processed data
+          weight: p.weight,
+          weight_unit: p.weight_unit,
+          proof_url: p.proof_image_url,
+          notes: p.processing_note
+        };
+      });
+
+      // Add pending assignments (delivered but not yet processed)
+      const pendingHistory = (pendingAssignments || []).map(a => ({
+        id: a.id,
+        assignment_id: a.id,
+        processed_request_id: null,
+        assignment_status: 'delivered',
+        source: 'driver_assignment',
+        client_name: a.client_name,
+        client_address: a.client_address,
+        waste_type: a.waste_type,
+        waste_label: a.waste_label,
+        latitude: a.latitude,
+        longitude: a.longitude,
+        assigned_at: a.assigned_at,
+        picked_up_at: a.picked_up_at,
+        delivered_at: a.delivered_at,
+        completed_at: null,
+        processed_at: null,
+        created_at: a.created_at
+      }));
+
+      // Combine and deduplicate
+      const processedAssignmentIds = new Set(historyFromProcessed.map(h => h.assignment_id).filter(Boolean));
+      const uniquePending = pendingHistory.filter(p => !processedAssignmentIds.has(p.assignment_id));
+
+      const combined = [...historyFromProcessed, ...uniquePending];
+
+      // Sort by most recent timestamp
+      return combined.sort((a, b) => {
+        const dateA = new Date(a.delivered_at || a.completed_at || a.processed_at || a.created_at);
+        const dateB = new Date(b.delivered_at || b.completed_at || b.processed_at || b.created_at);
+        return dateB - dateA;
+      });
+    } catch (error) {
+      console.error('Error fetching driver history:', error);
+      return [];
+    }
+  };
+
+  // Update driver assignment status
+  const updateDriverAssignmentStatus = async (assignmentId, status, additionalData = {}) => {
+    if (!user?.id || user?.role !== 'driver') {
+      throw new Error('Samo vozaci mogu azurirati status');
+    }
+
+    try {
+      const updateData = { status, ...additionalData };
+
+      // Set timestamps based on status
+      if (status === 'picked_up') {
+        updateData.picked_up_at = new Date().toISOString();
+      } else if (status === 'delivered') {
+        updateData.delivered_at = new Date().toISOString();
+      } else if (status === 'completed') {
+        updateData.completed_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('driver_assignments')
+        .update(updateData)
+        .eq('id', assignmentId)
+        .eq('driver_id', user.id);
+
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating assignment status:', error);
+      throw error;
+    }
   };
 
   // =====================================================
@@ -877,7 +1236,12 @@ export const AppProvider = ({ children }) => {
   const generateMasterCode = async (note = '') => {
     if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
 
-    const code = generateMasterCodeString();
+    // Generate master code string
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = 'MC-';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
 
     try {
       const { data, error } = await supabase
@@ -1163,152 +1527,17 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Verify master code for manager registration
-  const verifyMasterCode = async (code) => {
-    try {
-      const { data, error } = await supabase
-        .from('master_codes')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .eq('status', 'available')
-        .single();
-
-      if (error || !data) {
-        return { valid: false, masterCode: null };
-      }
-      return { valid: true, masterCode: data };
-    } catch (error) {
-      return { valid: false, masterCode: null };
-    }
-  };
-
-  // Register manager with Master Code + PIB (NEW flow)
-  // Master Code becomes the Company Code directly
-  const registerManagerWithMasterCode = async (name, firmName, phone, password, masterCode, pib) => {
-    setIsLoading(true);
-    try {
-      // Verify master code
-      const { valid, masterCode: mcData } = await verifyMasterCode(masterCode);
-      if (!valid) {
-        throw new Error('Nevažeći ili već iskorišćeni Master Code');
-      }
-
-      // Check if phone already exists
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone', phone)
-        .single();
-
-      if (existingUser) {
-        throw new Error('Korisnik sa ovim brojem telefona već postoji');
-      }
-
-      // Check if PIB already exists
-      const { data: existingPib } = await supabase
-        .from('companies')
-        .select('id')
-        .eq('pib', pib)
-        .single();
-
-      if (existingPib) {
-        throw new Error('Firma sa ovim PIB-om već postoji');
-      }
-
-      // Generate unique company code (ECO-XXXX format)
-      const generateCompanyCode = async () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let code;
-        let isUnique = false;
-
-        while (!isUnique) {
-          code = 'ECO-' + Array.from({ length: 4 }, () =>
-            chars[Math.floor(Math.random() * chars.length)]
-          ).join('');
-
-          // Check if code already exists
-          const { data: existing } = await supabase
-            .from('companies')
-            .select('id')
-            .eq('code', code)
-            .single();
-
-          if (!existing) isUnique = true;
-        }
-        return code;
-      };
-
-      const companyCode = await generateCompanyCode();
-
-      // Create company with PIB and master_code reference
-      const { data: companyData, error: companyError } = await supabase
-        .from('companies')
-        .insert([{
-          code: companyCode,
-          name: firmName,
-          pib: pib,
-          master_code_id: mcData.id
-        }])
-        .select()
-        .single();
-
-      if (companyError) throw companyError;
-
-      // Create manager user
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .insert([{ name, role: 'manager', company_code: companyCode, phone, password }])
-        .select()
-        .single();
-
-      if (userError) throw userError;
-
-      // Update company with manager_id
-      await supabase
-        .from('companies')
-        .update({ manager_id: userData.id })
-        .eq('id', companyData.id);
-
-      // Mark master code as used
-      await supabase
-        .from('master_codes')
-        .update({
-          status: 'used',
-          used_by_company: companyData.id,
-          pib: pib
-        })
-        .eq('id', mcData.id);
-
-      setUser({ id: userData.id, name, role: 'manager' });
-      setCompanyCode(companyCode);
-      setCompanyName(firmName);
-      setIsRegistered(true);
-
-      saveSession({ id: userData.id, name, role: 'manager' }, companyCode, firmName);
-
-      return { success: true, companyCode: companyCode };
-    } catch (error) {
-      console.error('Error registering manager with master code:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const value = {
     user,
     isRegistered,
     isLoading,
     companyCode,
     companyName,
-    registerManager,
-    registerManagerToExistingCompany,
-    registerManagerWithMasterCode,
-    registerClient,
+    maxPickupHours,
     verifyCompanyCode,
-    verifyMasterCode,
     loginUser,
     logout,
+    updateUserProfile,
     updateClientLocation,
     updateCompanyEquipmentTypes,
     fetchCompanyEquipmentTypes,
@@ -1321,6 +1550,22 @@ export const AppProvider = ({ children }) => {
     fetchPickupRequests,
     fetchProcessedRequests,
     fetchCompanyClients,
+    fetchWasteTypes,
+    // Driver functions
+    fetchDriverAssignments,
+    fetchDriverHistory,
+    updateDriverAssignmentStatus,
+    // Chat functions
+    messages,
+    conversations,
+    unreadCount,
+    fetchMessages,
+    sendMessage,
+    markMessagesAsRead,
+    fetchConversations,
+    fetchUnreadCount,
+    fetchCompanyMembers,
+    subscribeToMessages,
     // Client request tracking
     clientRequests,
     fetchClientRequests,

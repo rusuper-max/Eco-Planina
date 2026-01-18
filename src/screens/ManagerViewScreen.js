@@ -42,20 +42,36 @@ const WASTE_ICONS = {
   trash: '🗑️', // Generic trash icon for clients
 };
 
-const getUrgencyColor = (urgency) => {
-  switch (urgency) {
-    case '24h': return COLORS.red;
-    case '48h': return COLORS.orange;
-    case '72h': return COLORS.primary;
+// Helper za određivanje nivoa hitnosti na osnovu preostalog vremena
+const getUrgencyLevel = (createdAt, maxPickupHours) => {
+  if (!createdAt) return 'normal';
+  const created = new Date(createdAt);
+  const hoursToAdd = maxPickupHours || 48;
+  const deadline = new Date(created.getTime() + hoursToAdd * 60 * 60 * 1000);
+  const now = new Date();
+  const diff = deadline - now;
+  if (diff <= 0) return 'expired'; // Istekao
+  const hoursLeft = diff / (1000 * 60 * 60);
+  const percentLeft = hoursLeft / hoursToAdd;
+  if (percentLeft <= 0.25) return 'urgent'; // <25% vremena
+  if (percentLeft <= 0.50) return 'warning'; // 25-50% vremena
+  return 'normal'; // >50% vremena
+};
+
+const getUrgencyColorByLevel = (level) => {
+  switch (level) {
+    case 'expired':
+    case 'urgent': return COLORS.red;
+    case 'warning': return COLORS.orange;
     default: return COLORS.primary;
   }
 };
 
-const getUrgencyBgColor = (urgency) => {
-  switch (urgency) {
-    case '24h': return COLORS.redLight;
-    case '48h': return COLORS.orangeLight;
-    case '72h': return COLORS.primaryLight;
+const getUrgencyBgColorByLevel = (level) => {
+  switch (level) {
+    case 'expired':
+    case 'urgent': return COLORS.redLight;
+    case 'warning': return COLORS.orangeLight;
     default: return COLORS.primaryLight;
   }
 };
@@ -69,6 +85,7 @@ const ManagerViewScreen = ({ navigation }) => {
     logout,
     companyCode,
     companyName,
+    maxPickupHours,
     selectedForPrint,
     toggleSelectForPrint,
     clearPrintSelection,
@@ -87,7 +104,20 @@ const ManagerViewScreen = ({ navigation }) => {
   const [clients, setClients] = useState([]);
 
   const pendingRequests = pickupRequests.filter((r) => r.status === 'pending');
-  const urgentCount = pendingRequests.filter((r) => r.urgency === '24h').length;
+
+  // Računa hitne zahteve - oni koji imaju manje od 25% preostalog vremena
+  const getIsUrgent = (request) => {
+    if (!request.created_at) return false;
+    const created = new Date(request.created_at);
+    const hoursToAdd = maxPickupHours || 48;
+    const deadline = new Date(created.getTime() + hoursToAdd * 60 * 60 * 1000);
+    const now = new Date();
+    const diff = deadline - now;
+    if (diff <= 0) return true; // Istekao
+    const hoursLeft = diff / (1000 * 60 * 60);
+    return hoursLeft < hoursToAdd * 0.25; // Hitno ako ima manje od 25% vremena
+  };
+  const urgentCount = pendingRequests.filter(getIsUrgent).length;
 
   const handleComplete = (id) => {
     Alert.alert(
@@ -321,8 +351,9 @@ const ManagerViewScreen = ({ navigation }) => {
 
   const renderRequestItem = ({ item }) => {
     const icon = WASTE_ICONS[item.waste_type] || '📦';
-    const urgencyColor = getUrgencyColor(item.urgency);
-    const urgencyBgColor = getUrgencyBgColor(item.urgency);
+    const urgencyLevel = getUrgencyLevel(item.created_at, maxPickupHours);
+    const urgencyColor = getUrgencyColorByLevel(urgencyLevel);
+    const urgencyBgColor = getUrgencyBgColorByLevel(urgencyLevel);
     const isSelected = selectedForPrint.includes(item.id);
 
     return (
@@ -358,12 +389,7 @@ const ManagerViewScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.requestRight}>
-          <View style={[styles.urgencyBadge, { backgroundColor: urgencyBgColor }]}>
-            <Text style={[styles.urgencyText, { color: urgencyColor }]}>
-              {item.urgency}
-            </Text>
-          </View>
-          <CountdownTimer createdAt={item.created_at} urgency={item.urgency} />
+          <CountdownTimer createdAt={item.created_at} maxPickupHours={maxPickupHours} />
           <Text style={styles.wasteLabel}>{item.waste_label}</Text>
         </View>
       </TouchableOpacity>
@@ -517,6 +543,7 @@ const ManagerViewScreen = ({ navigation }) => {
               waste_type: 'trash'
             })).filter(c => c.latitude && c.longitude)}
             mode={mapFilter === 'requests' ? 'requests' : 'clients'}
+            maxPickupHours={maxPickupHours}
             onMarkerPress={(item) => {
               if (mapFilter === 'requests') {
                 setSelectedRequest(item);
@@ -550,9 +577,8 @@ const ManagerViewScreen = ({ navigation }) => {
               // Calculate remaining time for each request
               const getTimeLeft = (request) => {
                 const created = new Date(request.created_at);
-                let hoursToAdd = 24;
-                if (request.urgency === '48h') hoursToAdd = 48;
-                if (request.urgency === '72h') hoursToAdd = 72;
+                // Koristi maxPickupHours iz company settings
+                const hoursToAdd = maxPickupHours || 48;
                 const deadline = new Date(created.getTime() + hoursToAdd * 60 * 60 * 1000);
                 return deadline - new Date();
               };
@@ -593,7 +619,7 @@ const ManagerViewScreen = ({ navigation }) => {
                 <View style={styles.detailHeader}>
                   <View style={[
                     styles.detailIcon,
-                    { backgroundColor: getUrgencyBgColor(selectedRequest.urgency) }
+                    { backgroundColor: getUrgencyBgColorByLevel(getUrgencyLevel(selectedRequest.created_at, maxPickupHours)) }
                   ]}>
                     <Text style={styles.detailIconText}>
                       {WASTE_ICONS[selectedRequest.waste_type] || '📦'}
@@ -601,17 +627,7 @@ const ManagerViewScreen = ({ navigation }) => {
                   </View>
                   <View style={styles.detailTitleBox}>
                     <Text style={styles.detailTitle}>{selectedRequest.client_name}</Text>
-                    <View style={[
-                      styles.urgencyBadgeLarge,
-                      { backgroundColor: getUrgencyBgColor(selectedRequest.urgency) }
-                    ]}>
-                      <Text style={[
-                        styles.urgencyTextLarge,
-                        { color: getUrgencyColor(selectedRequest.urgency) }
-                      ]}>
-                        {selectedRequest.urgency}
-                      </Text>
-                    </View>
+                    <CountdownTimer createdAt={selectedRequest.created_at} maxPickupHours={maxPickupHours} />
                   </View>
                   <TouchableOpacity
                     style={styles.closeBtn}

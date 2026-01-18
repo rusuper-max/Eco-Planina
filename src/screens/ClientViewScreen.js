@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,12 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Slider from '@react-native-community/slider';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAppContext } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
 import LocationPicker from '../components/LocationPicker';
+import CountdownTimer from '../components/CountdownTimer';
 
 const COLORS = {
   primary: '#10B981',
@@ -34,52 +37,107 @@ const COLORS = {
   yellowLight: '#FEF9C3',
 };
 
-// Static waste type config (labels will be translated in component)
-const WASTE_TYPE_CONFIG = [
-  { id: 'cardboard', labelKey: 'cardboard', sublabelKey: 'cardboardDesc', icon: '📦', color: '#D97706', bgColor: '#FEF3C7' },
-  { id: 'glass', labelKey: 'glass', sublabelKey: 'glassDesc', icon: '🍾', color: '#059669', bgColor: '#D1FAE5' },
-  { id: 'plastic', labelKey: 'plastic', sublabelKey: 'plasticDesc', icon: '♻️', color: '#7C3AED', bgColor: '#EDE9FE' },
+// Default colors for waste types (cycling through these)
+const WASTE_TYPE_COLORS = [
+  { color: '#D97706', bgColor: '#FEF3C7' }, // amber
+  { color: '#059669', bgColor: '#D1FAE5' }, // emerald
+  { color: '#7C3AED', bgColor: '#EDE9FE' }, // violet
+  { color: '#DC2626', bgColor: '#FEE2E2' }, // red
+  { color: '#2563EB', bgColor: '#DBEAFE' }, // blue
+  { color: '#EA580C', bgColor: '#FFEDD5' }, // orange
 ];
 
-const FILL_LEVEL_CONFIG = [
-  { value: 50, label: '50%', descKey: 'halfFull' },
-  { value: 80, label: '80%', descKey: 'almostFull' },
-  { value: 100, label: '100%', descKey: 'completelyFull' },
+// Country codes za telefon
+const COUNTRY_CODES = [
+  { code: '+381', country: 'Srbija', flag: '🇷🇸' },
+  { code: '+387', country: 'BiH', flag: '🇧🇦' },
+  { code: '+385', country: 'Hrvatska', flag: '🇭🇷' },
+  { code: '+386', country: 'Slovenija', flag: '🇸🇮' },
+  { code: '+382', country: 'Crna Gora', flag: '🇲🇪' },
+  { code: '+389', country: 'S. Makedonija', flag: '🇲🇰' },
+  { code: '+43', country: 'Austrija', flag: '🇦🇹' },
+  { code: '+49', country: 'Nemacka', flag: '🇩🇪' },
+  { code: '+41', country: 'Svajcarska', flag: '🇨🇭' },
 ];
 
-const URGENCY_CONFIG = [
-  { value: '24h', label: '24h', descKey: 'urgent', color: COLORS.red, bgColor: COLORS.redLight },
-  { value: '48h', label: '48h', descKey: 'medium', color: COLORS.orange, bgColor: COLORS.orangeLight },
-  { value: '72h', label: '72h', descKey: 'notUrgent', color: COLORS.primary, bgColor: COLORS.primaryLight },
-];
+// Funkcija za boju na osnovu popunjenosti (0-100) - kao na webu
+const getFillLevelStyle = (value) => {
+  if (value <= 25) return { color: '#10b981', bgLight: '#d1fae5' }; // emerald
+  if (value <= 50) return { color: '#84cc16', bgLight: '#ecfccb' }; // lime
+  if (value <= 75) return { color: '#f59e0b', bgLight: '#fef3c7' }; // amber
+  return { color: '#ef4444', bgLight: '#fee2e2' }; // red
+};
+
+// Labela za nivo popunjenosti
+const getFillLabel = (value) => {
+  if (value <= 25) return 'Skoro prazan';
+  if (value <= 50) return 'Polupun';
+  if (value <= 75) return 'Skoro pun';
+  return 'Potpuno pun';
+};
 
 const ClientViewScreen = ({ navigation }) => {
   const {
     addPickupRequest,
+    removePickupRequest,
     user,
     logout,
     updateClientLocation,
+    updateUserProfile,
     clientRequests,
     fetchClientRequests,
+    fetchWasteTypes,
     processedNotification,
     clearProcessedNotification,
+    maxPickupHours,
+    startChatWithUser,
   } = useAppContext();
   const { language, changeLanguage, t } = useLanguage();
 
   const [selectedWaste, setSelectedWaste] = useState(null);
-  const [fillLevel, setFillLevel] = useState(null);
-  const [urgency, setUrgency] = useState(null);
+  const [fillLevel, setFillLevel] = useState(50); // Default 50% kao na webu
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showMap, setShowMap] = useState(false);
-  const [showFillLevel, setShowFillLevel] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [wasteTypes, setWasteTypes] = useState([]);
+  const [loadingWasteTypes, setLoadingWasteTypes] = useState(true);
+  const [deletingRequestId, setDeletingRequestId] = useState(null);
 
-  // Load requests on mount
+  // Edit profile state
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editCountryCode, setEditCountryCode] = useState('+381');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+
+  // Stil za trenutni nivo popunjenosti
+  const fillStyle = useMemo(() => getFillLevelStyle(fillLevel), [fillLevel]);
+
+  // Load requests and waste types on mount
   useEffect(() => {
     fetchClientRequests();
+    loadWasteTypes();
   }, []);
+
+  const loadWasteTypes = async () => {
+    setLoadingWasteTypes(true);
+    try {
+      const types = await fetchWasteTypes();
+      setWasteTypes(types);
+    } catch (error) {
+      console.error('Error loading waste types:', error);
+    } finally {
+      setLoadingWasteTypes(false);
+    }
+  };
+
+  // Helper to get color for waste type by index
+  const getWasteTypeColor = (index) => {
+    return WASTE_TYPE_COLORS[index % WASTE_TYPE_COLORS.length];
+  };
 
   // Location update state
   const handleLocationSelect = async (location) => {
@@ -94,7 +152,7 @@ const ClientViewScreen = ({ navigation }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await fetchClientRequests();
+    await Promise.all([fetchClientRequests(), loadWasteTypes()]);
     setRefreshing(false);
   };
 
@@ -103,21 +161,17 @@ const ClientViewScreen = ({ navigation }) => {
       Alert.alert(t('error'), t('pleaseSelectWaste'));
       return;
     }
-    if (!urgency) {
-      Alert.alert(t('error'), t('pleaseSelectUrgency'));
-      return;
-    }
 
     setIsSubmitting(true);
 
     try {
-      const wasteInfo = WASTE_TYPE_CONFIG.find((w) => w.id === selectedWaste);
+      const wasteInfo = wasteTypes.find((w) => w.id === selectedWaste);
 
       await addPickupRequest({
         wasteType: selectedWaste,
-        wasteLabel: t(wasteInfo.labelKey),
-        fillLevel: fillLevel?.value || null,
-        urgency: urgency.value,
+        wasteLabel: wasteInfo?.name || 'Nepoznato',
+        fillLevel: fillLevel,
+        urgency: 'standard', // Fiksna hitnost - koristi max_pickup_hours iz firme
         note: note.trim(),
       });
 
@@ -129,8 +183,7 @@ const ClientViewScreen = ({ navigation }) => {
             text: t('ok'),
             onPress: () => {
               setSelectedWaste(null);
-              setFillLevel(null);
-              setUrgency(null);
+              setFillLevel(50);
               setNote('');
               fetchClientRequests();
             },
@@ -160,6 +213,103 @@ const ClientViewScreen = ({ navigation }) => {
     );
   };
 
+  // Parse existing phone number to extract country code
+  const parsePhoneNumber = (phone) => {
+    if (!phone) return { countryCode: '+381', number: '' };
+    for (const cc of COUNTRY_CODES) {
+      if (phone.startsWith(cc.code)) {
+        return { countryCode: cc.code, number: phone.slice(cc.code.length) };
+      }
+    }
+    return { countryCode: '+381', number: phone };
+  };
+
+  const openEditProfile = () => {
+    setEditName(user?.name || '');
+    const parsed = parsePhoneNumber(user?.phone);
+    setEditCountryCode(parsed.countryCode);
+    setEditPhoneNumber(parsed.number);
+    setShowEditProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert(t('error'), 'Unesite ime');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const fullPhone = editPhoneNumber.trim()
+        ? editCountryCode + editPhoneNumber.trim().replace(/^0+/, '')
+        : null;
+
+      await updateUserProfile({
+        name: editName.trim(),
+        phone: fullPhone,
+      });
+
+      setShowEditProfile(false);
+      Alert.alert(t('success'), 'Profil uspešno ažuriran');
+    } catch (error) {
+      Alert.alert(t('error'), 'Greška pri ažuriranju profila');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Handle delete request
+  const handleDeleteRequest = (request) => {
+    // Check if request is assigned to a driver
+    if (request.assignment) {
+      Alert.alert(
+        'Zahtev dodeljen vozaču',
+        `Vaš zahtev je već dodeljen vozaču${request.assignment.driver_name ? ` (${request.assignment.driver_name})` : ''}. Kontaktirajte menadžera za otkazivanje.`,
+        [
+          { text: 'Zatvori', style: 'cancel' },
+          {
+            text: 'Kontaktiraj menadžera',
+            onPress: () => {
+              if (request.assignment.assigned_by_id && startChatWithUser) {
+                startChatWithUser(request.assignment.assigned_by_id);
+                // Navigate to chat if we have navigation
+                // The chat will open in the driver view or wherever chat is handled
+              } else {
+                Alert.alert('Info', 'Kontaktirajte menadžera putem telefona ili emaila.');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    // Request is not assigned, allow deletion
+    Alert.alert(
+      'Obriši zahtev',
+      `Da li ste sigurni da želite da obrišete zahtev za "${request.waste_label || request.waste_type}"?`,
+      [
+        { text: 'Ne', style: 'cancel' },
+        {
+          text: 'Da, obriši',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingRequestId(request.id);
+            try {
+              await removePickupRequest(request.id);
+              await fetchClientRequests();
+              Alert.alert('Uspešno', 'Zahtev je obrisan.');
+            } catch (error) {
+              Alert.alert('Greška', 'Nije moguće obrisati zahtev. Pokušajte ponovo.');
+            } finally {
+              setDeletingRequestId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('sr-RS', {
@@ -177,18 +327,38 @@ const ClientViewScreen = ({ navigation }) => {
     });
   };
 
-  const getUrgencyColor = (urgencyValue) => {
-    switch (urgencyValue) {
-      case '24h': return COLORS.red;
-      case '48h': return COLORS.orange;
+  // Helper za određivanje nivoa hitnosti na osnovu preostalog vremena
+  const getUrgencyLevel = (createdAt) => {
+    if (!createdAt) return 'normal';
+    const created = new Date(createdAt);
+    const hoursToAdd = maxPickupHours || 48;
+    const deadline = new Date(created.getTime() + hoursToAdd * 60 * 60 * 1000);
+    const now = new Date();
+    const diff = deadline - now;
+    if (diff <= 0) return 'expired';
+    const hoursLeft = diff / (1000 * 60 * 60);
+    const percentLeft = hoursLeft / hoursToAdd;
+    if (percentLeft <= 0.25) return 'urgent';
+    if (percentLeft <= 0.50) return 'warning';
+    return 'normal';
+  };
+
+  const getUrgencyColor = (createdAt) => {
+    const level = getUrgencyLevel(createdAt);
+    switch (level) {
+      case 'expired':
+      case 'urgent': return COLORS.red;
+      case 'warning': return COLORS.orange;
       default: return COLORS.primary;
     }
   };
 
-  const getUrgencyBgColor = (urgencyValue) => {
-    switch (urgencyValue) {
-      case '24h': return COLORS.redLight;
-      case '48h': return COLORS.orangeLight;
+  const getUrgencyBgColor = (createdAt) => {
+    const level = getUrgencyLevel(createdAt);
+    switch (level) {
+      case 'expired':
+      case 'urgent': return COLORS.redLight;
+      case 'warning': return COLORS.orangeLight;
       default: return COLORS.primaryLight;
     }
   };
@@ -254,7 +424,7 @@ const ClientViewScreen = ({ navigation }) => {
                   <View style={styles.requestRow}>
                     <View style={styles.requestWasteInfo}>
                       <Text style={styles.requestWasteIcon}>
-                        {WASTE_TYPE_CONFIG.find(w => w.id === request.waste_type)?.icon || '📦'}
+                        {wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}
                       </Text>
                       <View>
                         <Text style={styles.requestWasteLabel}>
@@ -266,21 +436,18 @@ const ClientViewScreen = ({ navigation }) => {
                       </View>
                     </View>
                     <View style={styles.requestBadges}>
-                      <View style={[
-                        styles.urgencyBadgeSmall,
-                        { backgroundColor: getUrgencyBgColor(request.urgency) }
-                      ]}>
-                        <Text style={[
-                          styles.urgencyBadgeTextSmall,
-                          { color: getUrgencyColor(request.urgency) }
-                        ]}>
-                          {request.urgency}
-                        </Text>
-                      </View>
-                      <View style={styles.pendingBadge}>
-                        <View style={styles.pendingDot} />
-                        <Text style={styles.pendingText}>{t('pending')}</Text>
-                      </View>
+                      <CountdownTimer createdAt={request.created_at} maxPickupHours={maxPickupHours} />
+                      {request.assignment ? (
+                        <View style={styles.assignedBadge}>
+                          <Text style={styles.assignedIcon}>🚛</Text>
+                          <Text style={styles.assignedText}>Dodeljen vozač</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.pendingBadge}>
+                          <View style={styles.pendingDot} />
+                          <Text style={styles.pendingText}>{t('pending')}</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                   {request.fill_level && (
@@ -291,6 +458,29 @@ const ClientViewScreen = ({ navigation }) => {
                       <Text style={styles.fillPercentSmall}>{request.fill_level}%</Text>
                     </View>
                   )}
+                  {/* Delete button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteRequestButton,
+                      request.assignment && styles.deleteRequestButtonDisabled
+                    ]}
+                    onPress={() => handleDeleteRequest(request)}
+                    disabled={deletingRequestId === request.id}
+                  >
+                    {deletingRequestId === request.id ? (
+                      <ActivityIndicator size="small" color={COLORS.red} />
+                    ) : (
+                      <>
+                        <Text style={styles.deleteRequestIcon}>🗑️</Text>
+                        <Text style={[
+                          styles.deleteRequestText,
+                          request.assignment && styles.deleteRequestTextDisabled
+                        ]}>
+                          {request.assignment ? 'Kontaktiraj menadžera' : 'Obriši zahtev'}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -310,112 +500,106 @@ const ClientViewScreen = ({ navigation }) => {
             <Text style={styles.sectionTitle}>{t('whatToPickup')}</Text>
             <Text style={styles.sectionSubtitle}>{t('selectWasteTypeDesc')}</Text>
 
-            <View style={styles.wasteGrid}>
-              {WASTE_TYPE_CONFIG.map((waste) => (
-                <TouchableOpacity
-                  key={waste.id}
-                  style={[
-                    styles.wasteCard,
-                    { backgroundColor: waste.bgColor },
-                    selectedWaste === waste.id && styles.wasteCardSelected,
-                    selectedWaste === waste.id && { borderColor: waste.color },
-                  ]}
-                  onPress={() => setSelectedWaste(waste.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.wasteIcon}>{waste.icon}</Text>
-                  <Text style={[styles.wasteLabel, { color: waste.color }]}>
-                    {t(waste.labelKey)}
-                  </Text>
-                  <Text style={styles.wasteSublabel}>{t(waste.sublabelKey)}</Text>
-                  {selectedWaste === waste.id && (
-                    <View style={[styles.checkBadge, { backgroundColor: waste.color }]}>
-                      <Text style={styles.checkMark}>✓</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Fill Level - Collapsible */}
-          <View style={styles.section}>
-            <TouchableOpacity
-              style={styles.collapsibleHeader}
-              onPress={() => setShowFillLevel(!showFillLevel)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.collapsibleTitleContainer}>
-                <Text style={styles.sectionTitle}>{t('fillLevelTitle')}</Text>
-                {fillLevel && (
-                  <View style={styles.selectedBadge}>
-                    <Text style={styles.selectedBadgeText}>{fillLevel.label}</Text>
-                  </View>
-                )}
+            {loadingWasteTypes ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.loadingText}>Ucitavanje...</Text>
               </View>
-              <Text style={styles.expandArrow}>{showFillLevel ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-
-            {showFillLevel && (
-              <>
-                <Text style={styles.sectionSubtitle}>{t('howFullContainer')}</Text>
-                <View style={styles.fillLevelContainer}>
-                  {FILL_LEVEL_CONFIG.map((level) => (
+            ) : wasteTypes.length === 0 ? (
+              <View style={styles.emptyWasteTypes}>
+                <Text style={styles.emptyWasteTypesIcon}>📦</Text>
+                <Text style={styles.emptyWasteTypesText}>
+                  Nema dostupnih vrsta robe
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.wasteGrid}>
+                {wasteTypes.map((waste, index) => {
+                  const colors = getWasteTypeColor(index);
+                  return (
                     <TouchableOpacity
-                      key={level.value}
+                      key={waste.id}
                       style={[
-                        styles.fillLevelCard,
-                        fillLevel?.value === level.value && styles.fillLevelCardSelected,
-                        level.value === 100 && fillLevel?.value === level.value && styles.fillLevelCardUrgent,
+                        styles.wasteCard,
+                        { backgroundColor: colors.bgColor },
+                        selectedWaste === waste.id && styles.wasteCardSelected,
+                        selectedWaste === waste.id && { borderColor: colors.color },
                       ]}
-                      onPress={() => {
-                        setFillLevel(level);
-                        setShowFillLevel(false);
-                      }}
+                      onPress={() => setSelectedWaste(waste.id)}
+                      activeOpacity={0.8}
                     >
-                      <Text style={[
-                        styles.fillLevelValue,
-                        fillLevel?.value === level.value && styles.fillLevelValueSelected,
-                      ]}>
-                        {level.label}
+                      <Text style={styles.wasteIcon}>{waste.icon || '📦'}</Text>
+                      <Text style={[styles.wasteLabel, { color: colors.color }]}>
+                        {waste.name}
                       </Text>
-                      <Text style={[
-                        styles.fillLevelDescription,
-                        fillLevel?.value === level.value && styles.fillLevelDescriptionSelected,
-                      ]}>
-                        {t(level.descKey)}
-                      </Text>
+                      {selectedWaste === waste.id && (
+                        <View style={[styles.checkBadge, { backgroundColor: colors.color }]}>
+                          <Text style={styles.checkMark}>✓</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
-                  ))}
-                </View>
-              </>
+                  );
+                })}
+              </View>
             )}
           </View>
 
-          {/* Urgency Level - 24h/48h/72h */}
+          {/* Fill Level - Slider sa gradijentom kao na webu */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('pickupUrgency')}</Text>
-            <Text style={styles.sectionSubtitle}>{t('whenPickup')}</Text>
+            <View style={styles.sliderHeader}>
+              <Text style={styles.sectionTitle}>{t('fillLevelTitle')}</Text>
+              <View style={[styles.fillLevelBadge, { backgroundColor: fillStyle.bgLight }]}>
+                <Text style={[styles.fillLevelBadgeText, { color: fillStyle.color }]}>
+                  {fillLevel}% - {getFillLabel(fillLevel)}
+                </Text>
+              </View>
+            </View>
 
-            <View style={styles.urgencyContainer}>
-              {URGENCY_CONFIG.map((level) => (
-                <TouchableOpacity
-                  key={level.value}
-                  style={[
-                    styles.urgencyCard,
-                    { borderColor: level.color },
-                    urgency?.value === level.value && { backgroundColor: level.bgColor },
-                  ]}
-                  onPress={() => setUrgency(level)}
-                >
-                  <Text style={[styles.urgencyValue, { color: level.color }]}>
-                    {level.label}
-                  </Text>
-                  <Text style={[styles.urgencyDescription, { color: level.color }]}>
-                    {t(level.descKey)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            {/* Slider sa gradijentom */}
+            <View style={styles.sliderContainer}>
+              {/* Gradijent pozadina */}
+              <LinearGradient
+                colors={['#10b981', '#84cc16', '#f59e0b', '#ef4444']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.sliderGradient}
+              />
+
+              {/* Native slider (transparentan, samo za interakciju) */}
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={fillLevel}
+                onValueChange={setFillLevel}
+                minimumTrackTintColor="transparent"
+                maximumTrackTintColor="transparent"
+                thumbTintColor={fillStyle.color}
+              />
+
+              {/* Thumb indikator sa bojom */}
+              <View
+                style={[
+                  styles.sliderThumb,
+                  {
+                    left: `${fillLevel}%`,
+                    borderColor: fillStyle.color,
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                <View style={[styles.sliderThumbInner, { backgroundColor: fillStyle.color }]} />
+              </View>
+            </View>
+
+            {/* Scale markeri */}
+            <View style={styles.scaleMarkers}>
+              <Text style={styles.scaleText}>0%</Text>
+              <Text style={styles.scaleText}>25%</Text>
+              <Text style={styles.scaleText}>50%</Text>
+              <Text style={styles.scaleText}>75%</Text>
+              <Text style={styles.scaleText}>100%</Text>
             </View>
           </View>
 
@@ -438,10 +622,10 @@ const ClientViewScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[
               styles.submitButton,
-              (!selectedWaste || !urgency) && styles.submitButtonDisabled,
+              !selectedWaste && styles.submitButtonDisabled,
             ]}
             onPress={handleSubmit}
-            disabled={!selectedWaste || !urgency || isSubmitting}
+            disabled={!selectedWaste || isSubmitting}
           >
             {isSubmitting ? (
               <ActivityIndicator color={COLORS.white} />
@@ -477,6 +661,29 @@ const ClientViewScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
+            {/* Profile Section */}
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Profil</Text>
+              <View style={styles.profileInfoRow}>
+                <Text style={styles.profileLabel}>Ime:</Text>
+                <Text style={styles.profileValue}>{user?.name || 'Nije unet'}</Text>
+              </View>
+              <View style={styles.profileInfoRow}>
+                <Text style={styles.profileLabel}>Telefon:</Text>
+                <Text style={styles.profileValue}>{user?.phone || 'Nije unet'}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.editProfileBtn}
+                onPress={() => {
+                  setShowSettings(false);
+                  setTimeout(() => openEditProfile(), 100);
+                }}
+              >
+                <Text style={styles.editProfileBtnText}>✏️ Izmeni profil</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Location Section */}
             <View style={styles.settingsSection}>
               <Text style={styles.settingsSectionTitle}>{t('myLocation')}</Text>
               <Text style={styles.currentAddressLabel}>{t('currentAddress')}:</Text>
@@ -539,6 +746,99 @@ const ClientViewScreen = ({ navigation }) => {
         onSelect={handleLocationSelect}
         initialLocation={user?.latitude && user?.longitude ? { lat: user.latitude, lng: user.longitude } : null}
       />
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={showEditProfile}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <View style={styles.editProfileOverlay}>
+          <View style={styles.editProfileCard}>
+            <View style={styles.editProfileHeader}>
+              <Text style={styles.editProfileTitle}>Izmeni profil</Text>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)}>
+                <Text style={styles.editProfileClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Name Input */}
+            <View style={styles.editProfileField}>
+              <Text style={styles.editProfileLabel}>Ime / Naziv firme</Text>
+              <TextInput
+                style={styles.editProfileInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Unesite ime"
+                placeholderTextColor={COLORS.mediumGray}
+              />
+            </View>
+
+            {/* Phone Input with Country Code */}
+            <View style={styles.editProfileField}>
+              <Text style={styles.editProfileLabel}>Broj telefona</Text>
+              <View style={styles.phoneInputRow}>
+                <TouchableOpacity
+                  style={styles.countryCodeBtn}
+                  onPress={() => setShowCountryPicker(!showCountryPicker)}
+                >
+                  <Text style={styles.countryCodeText}>
+                    {COUNTRY_CODES.find(c => c.code === editCountryCode)?.flag} {editCountryCode}
+                  </Text>
+                  <Text style={styles.countryCodeArrow}>▼</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.phoneNumberInput}
+                  value={editPhoneNumber}
+                  onChangeText={setEditPhoneNumber}
+                  placeholder="61234567"
+                  placeholderTextColor={COLORS.mediumGray}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              {/* Country Code Picker */}
+              {showCountryPicker && (
+                <View style={styles.countryPickerDropdown}>
+                  <ScrollView style={styles.countryPickerScroll} nestedScrollEnabled>
+                    {COUNTRY_CODES.map((cc) => (
+                      <TouchableOpacity
+                        key={cc.code}
+                        style={[
+                          styles.countryPickerItem,
+                          editCountryCode === cc.code && styles.countryPickerItemActive,
+                        ]}
+                        onPress={() => {
+                          setEditCountryCode(cc.code);
+                          setShowCountryPicker(false);
+                        }}
+                      >
+                        <Text style={styles.countryPickerFlag}>{cc.flag}</Text>
+                        <Text style={styles.countryPickerCode}>{cc.code}</Text>
+                        <Text style={styles.countryPickerName}>{cc.country}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            {/* Save Button */}
+            <TouchableOpacity
+              style={[styles.saveProfileBtn, savingProfile && styles.saveProfileBtnDisabled]}
+              onPress={handleSaveProfile}
+              disabled={savingProfile}
+            >
+              {savingProfile ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <Text style={styles.saveProfileBtnText}>Sačuvaj</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -704,6 +1004,51 @@ const styles = StyleSheet.create({
     color: COLORS.orange,
     fontWeight: '500',
   },
+  assignedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  assignedIcon: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  assignedText: {
+    fontSize: 11,
+    color: '#2563EB',
+    fontWeight: '500',
+  },
+  deleteRequestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteRequestButtonDisabled: {
+    backgroundColor: '#F3F4F6',
+    borderColor: '#E5E7EB',
+  },
+  deleteRequestIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  deleteRequestText: {
+    fontSize: 13,
+    color: COLORS.red,
+    fontWeight: '600',
+  },
+  deleteRequestTextDisabled: {
+    color: '#6B7280',
+  },
   fillLevelRowSmall: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -760,38 +1105,6 @@ const styles = StyleSheet.create({
     color: COLORS.mediumGray,
     marginBottom: 15,
   },
-  // Collapsible styles
-  collapsibleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  collapsibleTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  expandArrow: {
-    fontSize: 14,
-    color: COLORS.mediumGray,
-    paddingHorizontal: 8,
-  },
-  selectedBadge: {
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  selectedBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
   wasteGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -824,6 +1137,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 2,
   },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 30,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: COLORS.mediumGray,
+    fontSize: 14,
+  },
+  emptyWasteTypes: {
+    alignItems: 'center',
+    padding: 30,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+  },
+  emptyWasteTypesIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  emptyWasteTypesText: {
+    color: COLORS.mediumGray,
+    fontSize: 14,
+    textAlign: 'center',
+  },
   checkBadge: {
     position: 'absolute',
     top: 8,
@@ -839,64 +1176,71 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  fillLevelContainer: {
+  // Slider styles za fill level
+  sliderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  fillLevelCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 4,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    marginBottom: 16,
   },
-  fillLevelCardSelected: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryLight,
+  fillLevelBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  fillLevelCardUrgent: {
-    borderColor: COLORS.red,
-    backgroundColor: COLORS.redLight,
-  },
-  fillLevelValue: {
-    fontSize: 20,
+  fillLevelBadgeText: {
+    fontSize: 13,
     fontWeight: 'bold',
-    color: COLORS.darkGray,
   },
-  fillLevelValueSelected: {
-    color: COLORS.primary,
+  sliderContainer: {
+    position: 'relative',
+    height: 40,
+    justifyContent: 'center',
   },
-  fillLevelDescription: {
+  sliderGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 12,
+    borderRadius: 6,
+  },
+  slider: {
+    position: 'absolute',
+    left: -8,
+    right: -8,
+    height: 40,
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    borderWidth: 3,
+    marginLeft: -14,
+    top: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sliderThumbInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  scaleMarkers: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingHorizontal: 2,
+  },
+  scaleText: {
     fontSize: 11,
     color: COLORS.mediumGray,
-    marginTop: 4,
-  },
-  fillLevelDescriptionSelected: {
-    color: COLORS.primaryDark,
-  },
-  urgencyContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  urgencyCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 4,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  urgencyValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  urgencyDescription: {
-    fontSize: 11,
-    marginTop: 4,
   },
   noteInput: {
     backgroundColor: COLORS.white,
@@ -1047,6 +1391,166 @@ const styles = StyleSheet.create({
   languageBtnTextActive: {
     color: COLORS.primaryDark,
     fontWeight: '600',
+  },
+  // Profile styles in settings
+  profileInfoRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  profileLabel: {
+    fontSize: 14,
+    color: COLORS.mediumGray,
+    width: 70,
+  },
+  profileValue: {
+    fontSize: 14,
+    color: COLORS.darkGray,
+    fontWeight: '500',
+    flex: 1,
+  },
+  editProfileBtn: {
+    backgroundColor: COLORS.primaryLight,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  editProfileBtnText: {
+    color: COLORS.primaryDark,
+    fontWeight: '600',
+  },
+  // Edit Profile Modal styles
+  editProfileOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  editProfileCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  editProfileHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  editProfileTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.darkGray,
+  },
+  editProfileClose: {
+    fontSize: 20,
+    color: COLORS.mediumGray,
+    padding: 5,
+  },
+  editProfileField: {
+    marginBottom: 16,
+  },
+  editProfileLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+    marginBottom: 8,
+  },
+  editProfileInput: {
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: COLORS.darkGray,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  countryCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  countryCodeText: {
+    fontSize: 16,
+    color: COLORS.darkGray,
+  },
+  countryCodeArrow: {
+    fontSize: 10,
+    color: COLORS.mediumGray,
+  },
+  phoneNumberInput: {
+    flex: 1,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: COLORS.darkGray,
+  },
+  countryPickerDropdown: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: COLORS.lightGray,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  countryPickerScroll: {
+    maxHeight: 200,
+  },
+  countryPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  countryPickerItemActive: {
+    backgroundColor: COLORS.primaryLight,
+  },
+  countryPickerFlag: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  countryPickerCode: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+    width: 50,
+  },
+  countryPickerName: {
+    fontSize: 14,
+    color: COLORS.mediumGray,
+  },
+  saveProfileBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  saveProfileBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveProfileBtnText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

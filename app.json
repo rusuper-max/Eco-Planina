@@ -3,7 +3,7 @@
     "name": "Eco Planina",
     "slug": "EcoPlanina",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -57,6 +57,15 @@
       "eas": {
         "projectId": "f7ec23e5-6fd1-44a2-9273-6e241959e906"
       }
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/f7ec23e5-6fd1-44a2-9273-6e241959e906"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
