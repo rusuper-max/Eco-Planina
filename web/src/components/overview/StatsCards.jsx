@@ -1,4 +1,4 @@
-import { Clock, Truck, Calendar } from 'lucide-react';
+import { Clock, Truck, Calendar, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
 const StatsCards = ({ stats }) => {
   const {
@@ -11,9 +11,9 @@ const StatsCards = ({ stats }) => {
 
   const cards = [
     {
-      label: 'Zahtevi na čekanju',
+      label: 'Nedodeljeni zahtevi',
       value: pendingRequests,
-      trend: pendingRequests > 0 ? `${pendingRequests} aktivnih` : null,
+      trend: pendingRequests > 0 ? `${pendingRequests} za dodelu` : null,
       color: 'text-amber-600',
       bgColor: 'bg-amber-50',
       icon: Clock,
@@ -29,7 +29,11 @@ const StatsCards = ({ stats }) => {
     {
       label: 'Obrađeno danas',
       value: processedToday,
-      trend: trend ? `${trend > 0 ? '+' : ''}${trend}%` : null,
+      value: processedToday,
+      trend: trend, // Now expects a number
+      trendLabel: trend !== null ? `${Math.abs(trend)}%` : null,
+      trendColor: trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-red-600' : 'text-slate-400',
+      trendIcon: trend > 0 ? ArrowUp : trend < 0 ? ArrowDown : Minus,
       color: 'text-blue-600',
       bgColor: 'bg-blue-50',
       icon: Calendar,
@@ -51,6 +55,17 @@ const StatsCards = ({ stats }) => {
               <h3 className="text-3xl font-bold text-slate-800">{stat.value}</h3>
               {stat.sub && (
                 <span className="text-slate-400 text-sm">{stat.sub}</span>
+              )}
+              {/* Trend visual for Processed Today (or any card with trend number) */}
+              {stat.label === 'Obrađeno danas' && stat.trend !== null && (
+                <div className={`flex items-center text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/50 border border-slate-100 ${stat.trendColor}`}>
+                  <stat.trendIcon size={12} className="mr-0.5" />
+                  {stat.trendLabel}
+                </div>
+              )}
+              {/* Fallback for other cards using string trend */}
+              {typeof stat.trend === 'string' && (
+                <span className="text-slate-400 text-sm">{stat.trend}</span>
               )}
             </div>
           </div>

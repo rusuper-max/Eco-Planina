@@ -1,4 +1,5 @@
-import { Clock, MapPin, Plus, ArrowRight, Truck, UserCheck, Package } from 'lucide-react';
+import { Clock, MapPin, Plus, ArrowRight } from 'lucide-react';
+import { RequestStatusBadge } from '../common';
 
 const RequestsFeed = ({ requests = [], assignments = [], onViewAll, onCreateNew, onSelectRequest }) => {
   // Get assignment status for a request
@@ -12,18 +13,7 @@ const RequestsFeed = ({ requests = [], assignments = [], onViewAll, onCreateNew,
   };
 
   // Status badge styles
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case 'assigned':
-        return { bg: 'bg-purple-100', text: 'text-purple-700', icon: UserCheck, label: 'Dodeljeno' };
-      case 'in_progress':
-        return { bg: 'bg-blue-100', text: 'text-blue-700', icon: Truck, label: 'U toku' };
-      case 'picked_up':
-        return { bg: 'bg-amber-100', text: 'text-amber-700', icon: Package, label: 'Preuzeto' };
-      default:
-        return null;
-    }
-  };
+
 
   const getUrgencyStyle = (urgency) => {
     switch (urgency) {
@@ -86,8 +76,14 @@ const RequestsFeed = ({ requests = [], assignments = [], onViewAll, onCreateNew,
           requests.slice(0, 10).map((req) => {
             const urgencyStyle = getUrgencyStyle(req.urgency);
             const assignmentInfo = getAssignmentStatus(req.id);
-            const statusStyle = assignmentInfo ? getStatusStyle(assignmentInfo.status) : null;
-            const StatusIcon = statusStyle?.icon;
+            const assignment = assignments.find(a => a.request_id === req.id);
+            // Default to 'not_assigned' if no assignment found, effectively hiding badge via RequestStatusBadge logic if desired, 
+            // OR we want to show "Nije dodeljeno"?
+            // RequestStatusBadge handles 'not_assigned' by default.
+
+            // Note: RequestStatusBadge expects `status`, `driverName`, `assignment`
+            const status = assignmentInfo ? assignmentInfo.status : 'not_assigned';
+            const driverName = assignmentInfo ? assignmentInfo.driverName : null;
 
             return (
               <div
@@ -123,12 +119,11 @@ const RequestsFeed = ({ requests = [], assignments = [], onViewAll, onCreateNew,
                     </span>
                     <div className="flex items-center gap-2">
                       {/* Status Badge */}
-                      {statusStyle && (
-                        <span className={`text-[10px] px-2 py-1 rounded-full font-bold flex items-center gap-1 ${statusStyle.bg} ${statusStyle.text}`}>
-                          <StatusIcon size={10} />
-                          {statusStyle.label}
-                        </span>
-                      )}
+                      <RequestStatusBadge
+                        status={status}
+                        driverName={driverName}
+                        assignment={assignment}
+                      />
                       <button className="text-slate-300 group-hover:text-emerald-600 transition-colors">
                         <ArrowRight size={18} />
                       </button>

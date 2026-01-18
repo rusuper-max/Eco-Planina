@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Key, Loader2, Eye, EyeOff, AlertTriangle, Check } from 'lucide-react';
+import { X, Key, Eye, EyeOff, AlertTriangle, Check } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * ResetPasswordModal - Modal for resetting user password
@@ -153,7 +154,7 @@ export const ResetPasswordModal = ({ user, onClose, onReset }) => {
                         >
                             {loading ? (
                                 <>
-                                    <Loader2 size={18} className="animate-spin" />
+                                    <RecycleLoader size={18} className="animate-spin" />
                                     Resetujem...
                                 </>
                             ) : (

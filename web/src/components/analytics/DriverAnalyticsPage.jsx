@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Truck, Package, Scale, Calendar, ChevronDown, ChevronUp, Users, RotateCcw, AlertTriangle, Loader2, Download, MapPin } from 'lucide-react';
+import { Truck, Package, Scale, Calendar, ChevronDown, ChevronUp, Users, RotateCcw, AlertTriangle, Download, MapPin } from 'lucide-react';
 import { EmptyState, Modal } from '../common';
 import * as XLSX from 'xlsx';
 
@@ -322,9 +322,9 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                                 <div className="flex items-center gap-4">
                                     {/* Rank badge */}
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${index === 0 ? 'bg-amber-100 text-amber-700' :
-                                            index === 1 ? 'bg-slate-200 text-slate-600' :
-                                                index === 2 ? 'bg-orange-100 text-orange-700' :
-                                                    'bg-slate-100 text-slate-500'
+                                        index === 1 ? 'bg-slate-200 text-slate-600' :
+                                            index === 2 ? 'bg-orange-100 text-orange-700' :
+                                                'bg-slate-100 text-slate-500'
                                         }`}>
                                         {index + 1}
                                     </div>

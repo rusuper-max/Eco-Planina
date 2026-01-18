@@ -3,11 +3,10 @@ import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context';
 import {
     Users, Search, Filter, ChevronDown, Edit3, Trash2, MapPin,
-    UserPlus, Loader2, X, AlertTriangle, ArrowUp, ArrowDown,
     Shield, Truck as TruckIcon, User as UserIcon, Building2,
     LogIn, Eye, Package, Key
 } from 'lucide-react';
-import { EmptyState } from '../common';
+import { EmptyState, RecycleLoader } from '../common';
 import { ResetPasswordModal } from './ResetPasswordModal';
 import toast from 'react-hot-toast';
 
@@ -332,7 +331,7 @@ export const CompanyStaffPage = () => {
             {/* Staff Table */}
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                    <RecycleLoader className="w-8 h-8 text-emerald-600" />
                 </div>
             ) : filteredStaff.length === 0 ? (
                 <EmptyState
@@ -426,7 +425,7 @@ export const CompanyStaffPage = () => {
                                                             title={`Uloguj se kao ${member.name}`}
                                                         >
                                                             {impersonating === member.id ? (
-                                                                <Loader2 size={18} className="animate-spin" />
+                                                                <RecycleLoader size={18} className="animate-spin" />
                                                             ) : (
                                                                 <LogIn size={18} />
                                                             )}
@@ -442,7 +441,7 @@ export const CompanyStaffPage = () => {
                                                             title="Promovi u Menadzera"
                                                         >
                                                             {changingRole === member.id ? (
-                                                                <Loader2 size={18} className="animate-spin" />
+                                                                <RecycleLoader size={18} className="animate-spin" />
                                                             ) : (
                                                                 <ArrowUp size={18} />
                                                             )}
@@ -456,7 +455,7 @@ export const CompanyStaffPage = () => {
                                                             title="Degradiraj u Vozaca"
                                                         >
                                                             {changingRole === member.id ? (
-                                                                <Loader2 size={18} className="animate-spin" />
+                                                                <RecycleLoader size={18} className="animate-spin" />
                                                             ) : (
                                                                 <ArrowDown size={18} />
                                                             )}

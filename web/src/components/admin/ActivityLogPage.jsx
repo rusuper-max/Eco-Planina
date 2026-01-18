@@ -16,6 +16,7 @@ const ACTION_CONFIG = {
     delivered: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-100', label: 'Dostavljeno' },
     completed: { icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100', label: 'Zavrseno' },
     cancelled: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Otkazano' },
+    rejected: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-100', label: 'Odbijen' },
     register: { icon: UserPlus, color: 'text-blue-600', bg: 'bg-blue-100', label: 'Registrovan' },
     role_change: { icon: Shield, color: 'text-orange-600', bg: 'bg-orange-100', label: 'Promena uloge' },
     update: { icon: RefreshCw, color: 'text-slate-600', bg: 'bg-slate-100', label: 'Azuriran' },
@@ -286,7 +287,7 @@ export const ActivityLogPage = ({ companyCode, userRole, onUserClick, onClientCl
                             <option value="assign">Dodeljivanje</option>
                             <option value="picked_up">Preuzimanje</option>
                             <option value="delivered">Dostava</option>
-                            <option value="delete">Brisanje</option>
+                            <option value="rejected">Odbijanje</option>
                             <option value="register">Registracija</option>
                             <option value="role_change">Promena uloge</option>
                         </select>

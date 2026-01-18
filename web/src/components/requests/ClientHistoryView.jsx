@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { History, Loader2, Search, X, ArrowUp, ArrowDown, Send, CheckCircle2, Image, ChevronDown, Download, EyeOff } from 'lucide-react';
-import { Modal, FillLevelBar } from '../common';
+import { History, Search, X, ArrowUp, ArrowDown, Send, CheckCircle2, Image, ChevronDown, Download, EyeOff } from 'lucide-react';
+import { Modal, FillLevelBar, RecycleLoader } from '../common';
 
 /**
  * Client History View - Shows past processed requests with pagination and search
@@ -23,7 +23,7 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
     if (loading) {
         return (
             <div className="bg-white rounded-2xl border p-12 text-center">
-                <Loader2 size={40} className="mx-auto text-emerald-500 mb-4 animate-spin" />
+                <RecycleLoader size={40} className="mx-auto text-emerald-500 mb-4 animate-spin" />
                 <p className="text-slate-500">Učitavanje istorije...</p>
             </div>
         );
@@ -200,7 +200,7 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
                                             title="Sakrij iz istorije"
                                         >
                                             {hidingId === r.id ? (
-                                                <Loader2 size={14} className="animate-spin" />
+                                                <RecycleLoader size={14} className="animate-spin" />
                                             ) : (
                                                 <EyeOff size={14} />
                                             )}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { X, Loader2 } from 'lucide-react';
+import { X } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * User Edit Modal - Edit user details
@@ -114,7 +115,7 @@ export const UserEditModal = ({ user, onClose, onSave }) => {
                             Otkaži
                         </button>
                         <button type="submit" disabled={saving} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50">
-                            {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                            {saving ? <RecycleLoader size={18} className="animate-spin" /> : null}
                             Sačuvaj
                         </button>
                     </div>

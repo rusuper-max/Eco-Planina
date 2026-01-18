@@ -9,3 +9,4 @@ export { RequestStatusBadge } from './RequestStatusBadge';
 export { default as NotificationBell } from './NotificationBell';
 export { HelpTooltip, HelpButton, HelpOverlay } from './HelpTooltip';
 export { default as ErrorBoundary, MapErrorBoundary, AnalyticsErrorBoundary, TableErrorBoundary } from './ErrorBoundary';
+export { RecycleLoader } from './RecycleLoader';

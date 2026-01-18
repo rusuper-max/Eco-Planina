@@ -791,7 +791,7 @@ export const DataProvider = ({ children }) => {
     // Set client location and update all their pending requests
     const setClientLocationWithRequests = async (clientId, latitude, longitude) => {
         if (!user) throw new Error('Niste prijavljeni');
-        if (user.role !== 'manager' && user.role !== 'company_admin') {
+        if (!['manager', 'company_admin', 'admin', 'developer'].includes(user.role)) {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
         const latNum = typeof latitude === 'string' ? parseFloat(latitude) : latitude;
@@ -802,17 +802,15 @@ export const DataProvider = ({ children }) => {
         }
 
         try {
-            // 1. Update client's location in users table
-            const { error: userError } = await supabase
-                .from('users')
-                .update({
-                    latitude: latNum,
-                    longitude: lngNum
-                })
-                .eq('id', clientId)
-                .eq('company_code', companyCode);
+            // 1. Update client's location using SECURITY DEFINER RPC function
+            const { data: success, error: rpcError } = await supabase.rpc('update_client_location', {
+                client_id: clientId,
+                lat: latNum,
+                lng: lngNum
+            });
 
-            if (userError) throw userError;
+            if (rpcError) throw rpcError;
+            if (!success) throw new Error('Nemate dozvolu za ažuriranje lokacije ovog klijenta');
 
             // 2. Update all pending requests for this client with the new location
             const { error: requestsError } = await supabase

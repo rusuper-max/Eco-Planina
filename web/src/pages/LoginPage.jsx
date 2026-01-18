@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context';
-import { Mountain, Phone, Lock, Eye, EyeOff, Loader2, ChevronDown, CheckCircle } from 'lucide-react';
+import { Mountain, Phone, Lock, Eye, EyeOff, ChevronDown, CheckCircle } from 'lucide-react';
+import { RecycleLoader } from '../components/common';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -160,7 +161,7 @@ export default function LoginPage() {
                             disabled={loading}
                             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
                         >
-                            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Prijavi se'}
+                            {loading ? <RecycleLoader size={20} className="text-white" /> : 'Prijavi se'}
                         </button>
                     </form>
 

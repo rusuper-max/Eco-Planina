@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Box, Loader2, CheckCircle2, Package } from 'lucide-react';
-import { ModalWithFooter } from '../common';
+import { Box, CheckCircle2, Package } from 'lucide-react';
+import { ModalWithFooter, RecycleLoader } from '../common';
 
 /**
  * Client Equipment Assignment Modal - Assign equipment, PIB, waste types and notes to client
@@ -76,7 +76,7 @@ export const ClientEquipmentModal = ({ client, equipment, wasteTypes = [], onSav
                         disabled={saving}
                         className="px-6 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50 shadow-sm shadow-emerald-200"
                     >
-                        {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                        {saving ? <RecycleLoader size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                         Sačuvaj
                     </button>
                 </div>

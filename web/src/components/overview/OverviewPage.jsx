@@ -39,17 +39,41 @@ const OverviewPage = ({
     // Count processed today
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const processedToday = processedRequests.filter((r) => {
+
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    let processedToday = 0;
+    let processedYesterday = 0;
+
+    processedRequests.forEach(r => {
       const processedAt = new Date(r.processed_at);
-      return processedAt >= today;
-    }).length;
+      if (processedAt >= today) {
+        processedToday++;
+      } else if (processedAt >= yesterday && processedAt < today) {
+        processedYesterday++;
+      }
+    });
+
+    // Calculate trend percentage
+    let trend = 0;
+    if (processedYesterday > 0) {
+      trend = Math.round(((processedToday - processedYesterday) / processedYesterday) * 100);
+    } else if (processedToday > 0) {
+      trend = 100; // 100% increase if yesterday was 0 and today is > 0
+    }
+
+    // Count unassigned requests
+    const unassignedCount = pickupRequests.filter(req =>
+      !driverAssignments.some(assignment => assignment.request_id === req.id)
+    ).length;
 
     return {
-      pendingRequests: pickupRequests.length,
+      pendingRequests: unassignedCount, // Using same key to minimize prop changes in StatsCards for now, will update label in StatsCards
       activeDrivers,
       totalDrivers,
       processedToday,
-      trend: null,
+      trend, // Percentage value
     };
   }, [pickupRequests, companyDrivers, processedRequests, driverAssignments]);
 

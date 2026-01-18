@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
-import { Modal, EmptyState } from '../common';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
+import { Modal, EmptyState, RecycleLoader } from '../common';
 import ProofsModal from '../common/ProofsModal';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
 import { supabase } from '../../config/supabase';
@@ -623,7 +623,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                                         <span className="text-sm text-slate-700">{req.driver_name}</span>
                                                     </div>
                                                 ) : loadingAssignments ? (
-                                                    <Loader2 size={16} className="animate-spin text-slate-400" />
+                                                    <RecycleLoader size={16} className="animate-spin text-emerald-500" />
                                                 ) : assignment?.driver ? (
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-7 h-7 bg-amber-100 rounded-full flex items-center justify-center">
@@ -818,7 +818,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                 disabled={isDeleting}
                                 className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                             >
-                                {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                                {isDeleting ? <RecycleLoader size={18} className="animate-spin" /> : <Trash2 size={18} />}
                                 Obriši
                             </button>
                         </div>

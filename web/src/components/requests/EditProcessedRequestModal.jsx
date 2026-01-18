@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, Truck, Download, XCircle } from 'lucide-react';
-import { ModalWithFooter } from '../common';
+import { Scale, Image, FileText, X, Upload, CheckCircle2, Truck, Download, XCircle } from 'lucide-react';
+import { ModalWithFooter, RecycleLoader } from '../common';
 import { uploadImage } from '../../utils/storage';
 
 const DEFAULT_WASTE_TYPES = [
@@ -115,7 +115,7 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
                             className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors shadow-sm shadow-emerald-200 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {saving ? (
-                                <><Loader2 size={18} className="animate-spin" /> Čuvanje...</>
+                                <><RecycleLoader size={18} className="animate-spin" /> Čuvanje...</>
                             ) : (
                                 <><CheckCircle2 size={18} /> Sačuvaj</>
                             )}
@@ -308,7 +308,7 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
                                     <label className="cursor-pointer block h-full">
                                         <div className="w-full h-full min-h-[200px] bg-slate-50 rounded-xl flex flex-col items-center justify-center hover:bg-slate-100 transition-all border border-slate-200 hover:border-emerald-300 hover:shadow-inner group">
                                             {uploading ? (
-                                                <Loader2 size={40} className="text-emerald-500 animate-spin" />
+                                                <RecycleLoader size={40} className="text-emerald-500 animate-spin" />
                                             ) : (
                                                 <>
                                                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm group-hover:scale-110 transition-transform">

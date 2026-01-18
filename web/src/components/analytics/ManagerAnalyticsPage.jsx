@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users, RotateCcw, AlertTriangle, Loader2, Download, Truck } from 'lucide-react';
-import { EmptyState, Modal } from '../common';
+import { UserCheck, TrendingUp, Package, Scale, Calendar, ChevronDown, ChevronUp, BarChart3, Users, RotateCcw, AlertTriangle, Download, Truck } from 'lucide-react';
+import { EmptyState, Modal, RecycleLoader } from '../common';
 import * as XLSX from 'xlsx';
 
 /**
@@ -347,12 +347,11 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                             >
                                 <div className="flex items-center gap-4">
                                     {/* Rank badge */}
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
-                                        index === 0 ? 'bg-amber-100 text-amber-700' :
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${index === 0 ? 'bg-amber-100 text-amber-700' :
                                         index === 1 ? 'bg-slate-200 text-slate-600' :
-                                        index === 2 ? 'bg-orange-100 text-orange-700' :
-                                        'bg-slate-100 text-slate-500'
-                                    }`}>
+                                            index === 2 ? 'bg-orange-100 text-orange-700' :
+                                                'bg-slate-100 text-slate-500'
+                                        }`}>
                                         {index + 1}
                                     </div>
 
@@ -581,7 +580,7 @@ export const ManagerAnalyticsPage = ({ processedRequests = [], members = [], was
                             >
                                 {resetting ? (
                                     <>
-                                        <Loader2 size={18} className="animate-spin" />
+                                        <RecycleLoader size={18} className="text-white" />
                                         Brisanje...
                                     </>
                                 ) : (

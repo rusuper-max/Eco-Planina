@@ -12,8 +12,8 @@ import {
     // Icons
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
-    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList,
+    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
+    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList, RecycleLoader,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -1510,7 +1510,7 @@ export default function Dashboard() {
                 </header>
                 <main className={`flex-1 overflow-y-auto relative z-10 ${activeTab === 'map' || activeTab === 'dashboard' ? 'p-0 overflow-hidden' : 'p-6 lg:p-8'}`}>
                     <div className={`${activeTab === 'map' || activeTab === 'dashboard' ? 'w-full h-full flex flex-col' : 'max-w-7xl mx-auto'}`}>
-                        {activeTab !== 'map' && activeTab !== 'dashboard' && <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>}
+                        {activeTab !== 'map' && activeTab !== 'dashboard' && activeTab !== 'regions' && activeTab !== 'history' && activeTab !== 'drivers' && activeTab !== 'analytics' && activeTab !== 'equipment' && activeTab !== 'wastetypes' && activeTab !== 'codes' && <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'visual' ? 'Vizuelni Editor' : ''}</h1></div>}
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>

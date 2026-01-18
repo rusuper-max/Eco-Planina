@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
-import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X, Loader2, Users } from 'lucide-react';
-import { Modal } from '../common';
+import { Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X, Users } from 'lucide-react';
+import { Modal, RecycleLoader } from '../common';
 import { normalizePhone, validatePhone, COUNTRY_CODES } from '../../utils/phoneUtils';
 import * as XLSX from 'xlsx';
 
@@ -349,7 +349,7 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
                 {/* Step: Importing */}
                 {step === 'importing' && (
                     <div className="flex flex-col items-center justify-center py-8">
-                        <Loader2 size={48} className="animate-spin text-emerald-600 mb-4" />
+                        <RecycleLoader size={48} className="text-emerald-600 mb-4" />
                         <p className="text-lg font-medium text-slate-700">Importujem klijente...</p>
                         <p className="text-sm text-slate-500">Molimo sačekajte</p>
                     </div>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Search, CheckCircle2, Circle, Users, Package, Plus, Minus, X, Loader2, AlertTriangle } from 'lucide-react';
-import { Modal } from '../common';
+import { Search, CheckCircle2, Circle, Users, Package, Plus, Minus, X, AlertTriangle } from 'lucide-react';
+import { Modal, RecycleLoader } from '../common';
 
 /**
  * BulkWasteTypeModal - Bulk assign/remove waste types to multiple clients
@@ -111,8 +111,8 @@ export const BulkWasteTypeModal = ({ open, onClose, wasteTypes = [], clients = [
                     <button
                         onClick={() => setMode('add')}
                         className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors ${mode === 'add'
-                                ? 'bg-emerald-600 text-white shadow'
-                                : 'text-slate-600 hover:bg-slate-200'
+                            ? 'bg-emerald-600 text-white shadow'
+                            : 'text-slate-600 hover:bg-slate-200'
                             }`}
                     >
                         <Plus size={16} />
@@ -121,8 +121,8 @@ export const BulkWasteTypeModal = ({ open, onClose, wasteTypes = [], clients = [
                     <button
                         onClick={() => setMode('remove')}
                         className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-colors ${mode === 'remove'
-                                ? 'bg-red-600 text-white shadow'
-                                : 'text-slate-600 hover:bg-slate-200'
+                            ? 'bg-red-600 text-white shadow'
+                            : 'text-slate-600 hover:bg-slate-200'
                             }`}
                     >
                         <Minus size={16} />
@@ -151,10 +151,10 @@ export const BulkWasteTypeModal = ({ open, onClose, wasteTypes = [], clients = [
                                     key={wt.id}
                                     onClick={() => toggleWasteType(wt.id)}
                                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all ${isSelected
-                                            ? mode === 'add'
-                                                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                                : 'border-red-500 bg-red-50 text-red-700'
-                                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                        ? mode === 'add'
+                                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                            : 'border-red-500 bg-red-50 text-red-700'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                                         }`}
                                 >
                                     {wt.customImage ? (
@@ -232,8 +232,8 @@ export const BulkWasteTypeModal = ({ open, onClose, wasteTypes = [], clients = [
                                         key={client.id}
                                         onClick={() => toggleClient(client.id)}
                                         className={`w-full flex items-center gap-3 p-2 rounded-lg text-left transition-colors ${isSelected
-                                                ? 'bg-emerald-50 border border-emerald-200'
-                                                : 'hover:bg-slate-50 border border-transparent'
+                                            ? 'bg-emerald-50 border border-emerald-200'
+                                            : 'hover:bg-slate-50 border border-transparent'
                                             }`}
                                     >
                                         {isSelected ? (
@@ -275,13 +275,13 @@ export const BulkWasteTypeModal = ({ open, onClose, wasteTypes = [], clients = [
                     onClick={handleApply}
                     disabled={loading || selectedWasteTypes.length === 0 || selectedClients.length === 0}
                     className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${mode === 'add'
-                            ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white'
-                            : 'bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white'
+                        ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white'
+                        : 'bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white'
                         }`}
                 >
                     {loading ? (
                         <>
-                            <Loader2 size={18} className="animate-spin" />
+                            <RecycleLoader size={18} className="text-white" />
                             Ažuriram...
                         </>
                     ) : (

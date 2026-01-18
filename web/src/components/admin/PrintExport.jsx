@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Printer, Download, FileSpreadsheet, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Truck, History, FileText, Loader2 } from 'lucide-react';
-import { FillLevelBar, CountdownTimer } from '../common';
+import { Printer, Download, FileSpreadsheet, Search, ArrowUpDown, ArrowUp, ArrowDown, Users, Truck, History, FileText } from 'lucide-react';
+import { FillLevelBar, CountdownTimer, RecycleLoader } from '../common';
 import { getRemainingTime } from '../../utils/timeUtils';
 
 // Default waste types
@@ -398,7 +398,7 @@ export const PrintExport = ({ clients, requests, processedRequests, wasteTypes =
                             disabled={filteredData.length === 0 || isExporting}
                             className="px-4 py-2 bg-green-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-green-700 disabled:opacity-50"
                         >
-                            {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
+                            {isExporting ? <RecycleLoader size={18} className="animate-spin" /> : <FileSpreadsheet size={18} />}
                             <span className="hidden sm:inline">{isExporting ? 'Eksportovanje...' : 'Excel'}</span>
                         </button>
                         <button

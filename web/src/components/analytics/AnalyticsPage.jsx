@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { BarChart3, Scale, Truck, CheckCircle2, Recycle, Clock, Calendar, Users, Filter, ChevronDown, X, Printer, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { BarChart3, Scale, Truck, CheckCircle2, Recycle, Clock, Calendar, Users, Filter, ChevronDown, X, Printer, FileSpreadsheet } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 // Paleta boja za vrste otpada - automatski se dodeljuju po redosledu
 const WASTE_TYPE_COLORS = [
@@ -1000,9 +1001,9 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                                         <tr key={idx} className="border-t hover:bg-slate-50">
                                             <td className="py-3 px-5">
                                                 <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-amber-100 text-amber-700' :
-                                                        idx === 1 ? 'bg-slate-200 text-slate-700' :
-                                                            idx === 2 ? 'bg-orange-100 text-orange-700' :
-                                                                'bg-slate-100 text-slate-600'
+                                                    idx === 1 ? 'bg-slate-200 text-slate-700' :
+                                                        idx === 2 ? 'bg-orange-100 text-orange-700' :
+                                                            'bg-slate-100 text-slate-600'
                                                     }`}>
                                                     {idx + 1}
                                                 </span>
@@ -1152,11 +1153,10 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                                         {EXCEL_SHEET_OPTIONS.map(sheet => (
                                             <label
                                                 key={sheet.key}
-                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                                                    excelSheets[sheet.key]
-                                                        ? 'bg-emerald-50 border-emerald-300'
-                                                        : 'bg-white border-slate-200 hover:border-slate-300'
-                                                }`}
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm ${excelSheets[sheet.key]
+                                                    ? 'bg-emerald-50 border-emerald-300'
+                                                    : 'bg-white border-slate-200 hover:border-slate-300'
+                                                    }`}
                                             >
                                                 <input
                                                     type="checkbox"
@@ -1202,15 +1202,14 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                             <button
                                 onClick={reportMode === 'print' ? handlePrint : handleExportExcel}
                                 disabled={getReportData().length === 0 || isExporting}
-                                className={`px-5 py-2 rounded-xl font-medium flex items-center gap-2 transition-colors disabled:opacity-50 ${
-                                    reportMode === 'print'
-                                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                                        : 'bg-green-600 hover:bg-green-700 text-white'
-                                }`}
+                                className={`px-5 py-2 rounded-xl font-medium flex items-center gap-2 transition-colors disabled:opacity-50 ${reportMode === 'print'
+                                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                    }`}
                             >
                                 {isExporting ? (
                                     <>
-                                        <Loader2 size={18} className="animate-spin" />
+                                        <RecycleLoader size={18} />
                                         Generisanje...
                                     </>
                                 ) : (

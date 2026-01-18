@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useAdmin } from '../../context';
-import { Copy, Trash2, Plus, Lock, Unlock, Scale, EyeOff, Eye, Edit3, X, FileText, Loader2 } from 'lucide-react';
+import { Copy, Trash2, Plus, Lock, Unlock, Scale, EyeOff, Eye, Edit3, X, FileText } from 'lucide-react';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
-import { EmptyState } from '../common';
+import { EmptyState, RecycleLoader } from '../common';
 
 export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDeveloper, isAdmin, onUpdatePrice }) => {
     const { toggleCompanyStatus } = useAdmin();
@@ -181,7 +181,7 @@ export const MasterCodesTable = ({ codes, onGenerate, onCopy, onDelete, isDevelo
                                                 className={`p-2 rounded-lg ${c.companyStatus === 'frozen' ? 'bg-red-50 text-red-600' : 'hover:bg-slate-100 text-slate-400'}`}
                                                 title={c.companyStatus === 'frozen' ? 'Odmrzni firmu' : 'Zamrzni firmu'}
                                             >
-                                                {freezing === c.id ? <Loader2 size={16} className="animate-spin" /> : c.companyStatus === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
+                                                {freezing === c.id ? <RecycleLoader size={16} /> : c.companyStatus === 'frozen' ? <Lock size={16} /> : <Unlock size={16} />}
                                             </button>
                                         )}
 

@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { Upload, Image, X, Loader2 } from 'lucide-react';
+import { Upload, Image, X } from 'lucide-react';
 import { uploadImage, deleteImage } from '../../utils/storage';
+import { RecycleLoader } from './RecycleLoader';
 
 /**
  * Image upload component with preview and validation
@@ -77,7 +78,7 @@ export const ImageUploader = ({ currentImage, onUpload, onRemove, label = "Koris
                         disabled={uploading}
                     />
                     {uploading ? (
-                        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                        <RecycleLoader size={32} className="text-emerald-600" />
                     ) : (
                         <>
                             <Upload className="w-8 h-8 text-slate-400 mb-2" />

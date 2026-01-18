@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { X, Search, Check, ChevronLeft, ChevronRight, Loader2, Users, CheckCircle2 } from 'lucide-react';
+import { X, Search, Check, ChevronLeft, ChevronRight, Users, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { RecycleLoader } from '../common';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -213,11 +214,10 @@ export const WasteTypeClientsModal = ({ wasteType, clients, onClose, onSave }) =
                                 return (
                                     <label
                                         key={client.id}
-                                        className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
-                                            isSelected
-                                                ? 'bg-emerald-50 border-2 border-emerald-500'
-                                                : 'bg-slate-50 border-2 border-transparent hover:bg-slate-100'
-                                        }`}
+                                        className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${isSelected
+                                            ? 'bg-emerald-50 border-2 border-emerald-500'
+                                            : 'bg-slate-50 border-2 border-transparent hover:bg-slate-100'
+                                            }`}
                                     >
                                         <input
                                             type="checkbox"
@@ -281,7 +281,7 @@ export const WasteTypeClientsModal = ({ wasteType, clients, onClose, onSave }) =
                         disabled={saving}
                         className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                        {saving ? <RecycleLoader size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                         Sačuvaj ({selectedClients.length} klijenata)
                     </button>
                 </div>

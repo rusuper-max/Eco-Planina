@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { X, Building2, Lock, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Building2, Lock, Trash2, AlertTriangle } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * Company Edit Modal - Edit company details with delete option
@@ -68,7 +69,7 @@ export const CompanyEditModal = ({ company, onClose, onSave, onDelete }) => {
                         <div className="flex gap-3">
                             <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }} className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium">Odustani</button>
                             <button onClick={handleDelete} disabled={deleteInput !== 'DELETE' || deleting} className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-bold">
-                                {deleting ? <Loader2 className="animate-spin mx-auto" size={20} /> : 'Obriši'}
+                                {deleting ? <RecycleLoader className="mx-auto text-white" size={20} /> : 'Obriši'}
                             </button>
                         </div>
                     </div>
@@ -113,7 +114,7 @@ export const CompanyEditModal = ({ company, onClose, onSave, onDelete }) => {
                                     Otkaži
                                 </button>
                                 <button type="submit" disabled={saving} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50">
-                                    {saving ? <Loader2 size={18} className="animate-spin" /> : null}
+                                    {saving ? <RecycleLoader size={18} className="animate-spin" /> : null}
                                     Sačuvaj
                                 </button>
                             </div>

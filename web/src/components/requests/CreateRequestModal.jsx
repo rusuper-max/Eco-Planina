@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Plus, AlertCircle, Loader2 } from 'lucide-react';
-import { Modal } from '../common';
+import { Plus, AlertCircle } from 'lucide-react';
+import { Modal, RecycleLoader } from '../common';
 
 /**
  * Modal for manager to create request on behalf of a client (phone call scenario)
@@ -255,7 +255,7 @@ export const CreateRequestModal = ({
                         className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {submitting ? (
-                            <Loader2 size={18} className="animate-spin" />
+                            <RecycleLoader size={18} className="animate-spin" />
                         ) : (
                             <Plus size={18} />
                         )}

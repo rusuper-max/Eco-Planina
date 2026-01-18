@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context';
-import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, Loader2, ArrowLeft, UserCog, Users, ChevronDown, Search, Truck } from 'lucide-react';
+import { Mountain, Phone, Lock, MapPin, Building2, Eye, EyeOff, ArrowLeft, UserCog, Users, ChevronDown, Search, Truck } from 'lucide-react';
+import { RecycleLoader } from '../components/common';
 
 const COUNTRY_CODES = [
     { code: '+381', country: 'Srbija', flag: '🇷🇸' },
@@ -356,7 +357,9 @@ export default function RegisterPage() {
                                             required
                                         />
                                         {addressLoading && (
-                                            <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 animate-spin" />
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                <RecycleLoader size={20} className="text-slate-400" />
+                                            </div>
                                         )}
                                         {!addressLoading && formData.latitude && (
                                             <div className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
@@ -426,7 +429,7 @@ export default function RegisterPage() {
                                 disabled={loading}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl shadow-lg shadow-emerald-200 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Registruj se'}
+                                {loading ? <RecycleLoader size={20} className="text-white" /> : 'Registruj se'}
                             </button>
                         </form>
                     )}

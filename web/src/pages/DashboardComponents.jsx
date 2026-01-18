@@ -20,7 +20,7 @@ export { default as L } from 'leaflet';
 export {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
-    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, Loader2, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
+    RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
     Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network, UserCheck, ClipboardList
 } from 'lucide-react';
 
@@ -31,7 +31,7 @@ export { uploadImage, deleteImage } from '../utils/storage';
 export { getFillLevelColor } from '../utils/styleUtils';
 
 // Re-export common components
-export { Modal, ModalWithFooter, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge, NotificationBell, HelpButton, HelpOverlay } from '../components/common';
+export { Modal, ModalWithFooter, StatCard, EmptyState, SidebarItem, CountdownTimer, FillLevelBar, ImageUploader, RequestStatusBadge, NotificationBell, HelpButton, HelpOverlay, RecycleLoader } from '../components/common';
 
 // Re-export map components
 export { MapView, DraggableMarker, LocationPicker, FitBounds } from '../components/map';

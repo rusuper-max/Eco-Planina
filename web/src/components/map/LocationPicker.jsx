@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet';
 import { DraggableMarker } from './DraggableMarker';
-import { Search, Loader2, MapPin, X } from 'lucide-react';
+import { Search, MapPin, X } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * Helper component to fly to position when it changes
@@ -177,7 +178,7 @@ export const LocationPicker = ({ initialPosition, onSave, onCancel, clientName }
                         </button>
                     )}
                     {searchLoading && (
-                        <Loader2 size={18} className="absolute right-10 top-1/2 -translate-y-1/2 text-emerald-500 animate-spin" />
+                        <RecycleLoader size={18} className="absolute right-10 top-1/2 -translate-y-1/2 text-emerald-500" />
                     )}
                 </div>
 

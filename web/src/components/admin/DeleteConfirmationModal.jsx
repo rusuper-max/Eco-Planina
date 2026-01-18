@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * Delete Confirmation Modal - Generic confirmation modal for delete operations
@@ -35,7 +36,7 @@ export const DeleteConfirmationModal = ({ title, warning, expectedInput, onClose
                             disabled={input !== expectedInput || loading}
                             className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-red-200"
                         >
-                            {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Trajno obriši'}
+                            {loading ? <RecycleLoader className="mx-auto text-white" /> : 'Trajno obriši'}
                         </button>
                     </div>
                 </div>

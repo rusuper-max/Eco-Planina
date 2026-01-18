@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { MapPin, Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, AlertTriangle, Truck } from 'lucide-react';
-import { ModalWithFooter, CountdownTimer } from '../common';
+import { MapPin, Scale, Image, FileText, X, Upload, CheckCircle2, AlertTriangle, Truck } from 'lucide-react';
+import { ModalWithFooter, CountdownTimer, RecycleLoader } from '../common';
 import { uploadImage } from '../../utils/storage';
 
 const DEFAULT_WASTE_TYPES = [
@@ -124,7 +124,7 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                         className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {processing ? (
-                            <><Loader2 size={18} className="animate-spin" /> Obrada...</>
+                            <><RecycleLoader size={18} className="animate-spin" /> Obrada...</>
                         ) : (
                             <><CheckCircle2 size={18} /> Označi kao obrađeno</>
                         )}
@@ -351,7 +351,7 @@ export const ProcessRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_TYPES,
                                 <label className="block mt-2 cursor-pointer group">
                                     <div className="w-full h-24 bg-white rounded-xl flex flex-col items-center justify-center border border-slate-200 group-hover:border-emerald-400 group-hover:shadow-md transition-all">
                                         {uploading ? (
-                                            <Loader2 size={24} className="text-emerald-500 animate-spin" />
+                                            <RecycleLoader size={24} className="text-emerald-500 animate-spin" />
                                         ) : (
                                             <>
                                                 <Upload size={24} className="text-slate-400 group-hover:text-emerald-500 mb-2 transition-colors" />

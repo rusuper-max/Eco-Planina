@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context';
 import { useData } from '../../context/DataContext';
-import { MapPin, Plus, Edit3, Trash2, Users, Loader2, Search, X, AlertTriangle, User, Truck, Check, Building2, LayoutGrid, UserPlus, Network } from 'lucide-react';
-import { EmptyState } from '../common';
+import { MapPin, Plus, Edit3, Trash2, Users, Search, X, AlertTriangle, User, Truck, Check, Building2, LayoutGrid, UserPlus, Network } from 'lucide-react';
+import { EmptyState, RecycleLoader } from '../common';
 import { RegionNodeEditor } from './RegionNodeEditor';
 import toast from 'react-hot-toast';
 
@@ -165,33 +165,30 @@ export const RegionsPage = () => {
             <div className="flex border-b border-slate-200">
                 <button
                     onClick={() => setActiveTab('regions')}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${
-                        activeTab === 'regions'
-                            ? 'border-b-2 border-emerald-500 text-emerald-600'
-                            : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${activeTab === 'regions'
+                        ? 'border-b-2 border-emerald-500 text-emerald-600'
+                        : 'text-slate-500 hover:text-slate-700'
+                        }`}
                 >
                     <LayoutGrid size={18} />
                     Filijale ({regions.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('assign')}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${
-                        activeTab === 'assign'
-                            ? 'border-b-2 border-emerald-500 text-emerald-600'
-                            : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${activeTab === 'assign'
+                        ? 'border-b-2 border-emerald-500 text-emerald-600'
+                        : 'text-slate-500 hover:text-slate-700'
+                        }`}
                 >
                     <UserPlus size={18} />
                     Dodeli Korisnike
                 </button>
                 <button
                     onClick={() => setActiveTab('visual')}
-                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${
-                        activeTab === 'visual'
-                            ? 'border-b-2 border-emerald-500 text-emerald-600'
-                            : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors ${activeTab === 'visual'
+                        ? 'border-b-2 border-emerald-500 text-emerald-600'
+                        : 'text-slate-500 hover:text-slate-700'
+                        }`}
                 >
                     <Network size={18} />
                     Vizuelni Pregled
@@ -270,7 +267,7 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
     if (loading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                <RecycleLoader size={32} className="text-emerald-600" />
             </div>
         );
     }
@@ -317,13 +314,13 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setExpanded(expanded === region.id ? null : region.id)}
-                                className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                                title="Prikaži korisnike"
-                            >
-                                {expanded === region.id ? <X size={18} /> : <Users size={18} />}
-                            </button>
+                                    <button
+                                        onClick={() => setExpanded(expanded === region.id ? null : region.id)}
+                                        className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                        title="Prikaži korisnike"
+                                    >
+                                        {expanded === region.id ? <X size={18} /> : <Users size={18} />}
+                                    </button>
                                     <button
                                         onClick={() => onEdit(region)}
                                         className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
@@ -333,11 +330,10 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                     </button>
                                     <button
                                         onClick={() => onDelete(region)}
-                                        className={`p-2 rounded-lg transition-colors ${
-                                            region.userCount > 0 || totalRegions <= 1
-                                                ? 'text-slate-300 cursor-not-allowed'
-                                                : 'text-red-500 hover:bg-red-50'
-                                        }`}
+                                        className={`p-2 rounded-lg transition-colors ${region.userCount > 0 || totalRegions <= 1
+                                            ? 'text-slate-300 cursor-not-allowed'
+                                            : 'text-red-500 hover:bg-red-50'
+                                            }`}
                                         title={
                                             totalRegions <= 1
                                                 ? 'Ne može se obrisati poslednja filijala'
@@ -594,11 +590,10 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                                 <button
                                     key={region.id}
                                     onClick={() => setSelectedRegion(region)}
-                                    className={`w-full p-3 rounded-xl text-left transition-all ${
-                                        selectedRegion?.id === region.id
-                                            ? 'bg-emerald-500 text-white'
-                                            : 'bg-slate-50 hover:bg-slate-100'
-                                    }`}
+                                    className={`w-full p-3 rounded-xl text-left transition-all ${selectedRegion?.id === region.id
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-slate-50 hover:bg-slate-100'
+                                        }`}
                                 >
                                     <p className="font-medium">{region.name}</p>
                                     <p className={`text-xs ${selectedRegion?.id === region.id ? 'text-emerald-100' : 'text-slate-400'}`}>
@@ -616,7 +611,7 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                                 disabled={!selectedRegion || assigning}
                                 className="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                {assigning ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                                {assigning ? <RecycleLoader size={18} className="text-white" /> : <Check size={18} />}
                                 Dodeli ({selectedUsers.size})
                             </button>
                             <button
@@ -642,11 +637,10 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                             <button
                                 key={city}
                                 onClick={() => setAddressFilter(city)}
-                                className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                                    addressFilter === city
-                                        ? 'bg-emerald-500 text-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                }`}
+                                className={`px-3 py-1.5 text-sm rounded-full transition-colors ${addressFilter === city
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
                             >
                                 {city}
                             </button>
@@ -731,7 +725,7 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                     {/* List */}
                     {loading ? (
                         <div className="p-12 flex items-center justify-center">
-                            <Loader2 size={32} className="animate-spin text-emerald-600" />
+                            <RecycleLoader size={32} className="text-emerald-600" />
                         </div>
                     ) : allUsers.length === 0 ? (
                         <div className="p-12 text-center text-slate-400">
@@ -745,9 +739,8 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
                                 return (
                                     <label
                                         key={user.id}
-                                        className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 transition-colors ${
-                                            selectedUsers.has(user.id) ? 'bg-emerald-50' : ''
-                                        }`}
+                                        className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 transition-colors ${selectedUsers.has(user.id) ? 'bg-emerald-50' : ''
+                                            }`}
                                     >
                                         <input
                                             type="checkbox"
@@ -888,7 +881,7 @@ const RegionModal = ({ title, initialName = '', onClose, onSubmit }) => {
                             disabled={saving || !name.trim()}
                             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50"
                         >
-                            {saving && <Loader2 size={18} className="animate-spin" />}
+                            {saving && <RecycleLoader size={18} className="animate-spin" />}
                             Sačuvaj
                         </button>
                     </div>

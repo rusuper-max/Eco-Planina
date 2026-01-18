@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { MessageCircle, Plus, X, Users, ChevronRight, ArrowLeft, Loader2, AlertCircle, Send, Trash2 } from 'lucide-react';
+import { MessageCircle, Plus, X, Users, ChevronRight, ArrowLeft, AlertCircle, Send, Trash2 } from 'lucide-react';
+import { RecycleLoader } from '../common';
 
 /**
  * Chat Interface - Real-time messaging between users
@@ -217,7 +218,7 @@ export const ChatInterface = ({
                     </div>
                     <div className="flex-1 overflow-y-auto">
                         {loading ? (
-                            <div className="flex items-center justify-center h-32"><Loader2 className="animate-spin text-emerald-600" size={24} /></div>
+                            <div className="flex items-center justify-center h-32"><RecycleLoader className="text-emerald-600" size={24} /></div>
                         ) : conversations.length === 0 ? (
                             <div className="p-8 text-center">
                                 <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -352,7 +353,7 @@ export const ChatInterface = ({
                                         disabled={sending || !newMessage.trim()}
                                         className="px-5 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                                     >
-                                        {sending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                                        {sending ? <RecycleLoader size={20} className="animate-spin" /> : <Send size={20} />}
                                     </button>
                                 </div>
                             </div>
@@ -457,7 +458,7 @@ export const ChatInterface = ({
                                     disabled={sendingToAdmin || !adminMessage.trim()}
                                     className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
                                 >
-                                    {sendingToAdmin ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                                    {sendingToAdmin ? <RecycleLoader size={18} className="animate-spin" /> : <Send size={18} />}
                                     Pošalji
                                 </button>
                             </div>

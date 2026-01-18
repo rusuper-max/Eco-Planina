@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Trash2, Eye, LogIn, Edit3, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Lock, Unlock, AlertTriangle, Users, Loader2, Key } from 'lucide-react';
-import { EmptyState } from '../common';
+import { Trash2, Eye, LogIn, Edit3, ArrowUpDown, ArrowUp, ArrowDown, Search, X, Lock, Unlock, AlertTriangle, Users, Key } from 'lucide-react';
+import { EmptyState, RecycleLoader } from '../common';
 import { UserDetailsModal } from './UserDetailsModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
@@ -242,7 +242,7 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
                                                     className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                                                     title={u.role === 'client' ? 'Promovi u Vozača' : 'Promovi u Menadžera'}
                                                 >
-                                                    {changingRole === u.id ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+                                                    {changingRole === u.id ? <RecycleLoader size={18} /> : <ArrowUp size={18} />}
                                                 </button>
                                             )}
                                             {/* Demote button (manager->driver, driver->client) */}
@@ -261,7 +261,7 @@ export const AdminUsersTable = ({ users, onDelete, isDeveloper, onImpersonate, o
                                                     className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                                                     title={u.role === 'manager' ? 'Degradiraj u Vozača' : 'Degradiraj u Klijenta'}
                                                 >
-                                                    {changingRole === u.id ? <Loader2 size={18} className="animate-spin" /> : <ArrowDown size={18} />}
+                                                    {changingRole === u.id ? <RecycleLoader size={18} /> : <ArrowDown size={18} />}
                                                 </button>
                                             )}
                                             {/* Reset password button - for admin/developer */}

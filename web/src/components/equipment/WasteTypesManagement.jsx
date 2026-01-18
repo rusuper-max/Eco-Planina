@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Plus, Recycle, Edit3, Trash2, Users, UserPlus, Loader2 } from 'lucide-react';
-import { EmptyState } from '../common';
+import { Plus, Recycle, Edit3, Trash2, Users, UserPlus } from 'lucide-react';
+import { EmptyState, RecycleLoader } from '../common';
 import { WasteTypeClientsModal } from './WasteTypeClientsModal';
 import { BulkWasteTypeModal } from './BulkWasteTypeModal';
 import { uploadImage, deleteImage } from '../../utils/storage';
@@ -201,7 +201,7 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                                 <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploading ? 'bg-slate-50 border-slate-300' : 'border-slate-300 hover:border-emerald-500 hover:bg-emerald-50'}`}>
                                     <input type="file" accept="image/*" onChange={handleNewImageUpload} className="hidden" disabled={uploading} />
                                     {uploading ? (
-                                        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                                        <RecycleLoader size={32} className="text-emerald-600" />
                                     ) : (
                                         <>
                                             <span className="text-2xl mb-1">📷</span>
@@ -259,14 +259,14 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                                         disabled={uploading}
                                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 disabled:opacity-50"
                                     >
-                                        {uploading ? <Loader2 size={12} className="animate-spin" /> : '×'}
+                                        {uploading ? <RecycleLoader size={12} className="text-white" /> : '×'}
                                     </button>
                                 </div>
                             ) : (
                                 <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploading ? 'bg-slate-50 border-slate-300' : 'border-slate-300 hover:border-blue-500 hover:bg-blue-50'}`}>
                                     <input type="file" accept="image/*" onChange={handleEditImageUpload} className="hidden" disabled={uploading} />
                                     {uploading ? (
-                                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                        <RecycleLoader size={32} className="text-blue-600" />
                                     ) : (
                                         <>
                                             <span className="text-2xl mb-1">📷</span>

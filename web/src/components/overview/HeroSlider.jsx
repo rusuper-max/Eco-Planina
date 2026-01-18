@@ -68,7 +68,7 @@ const HeroSlider = ({ pendingCount = 0 }) => {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 6000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [slides.length]);
 
@@ -77,9 +77,8 @@ const HeroSlider = ({ pendingCount = 0 }) => {
       {slides.map((slide, index) => (
         <div
           key={slide.id}
-          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            index === currentSlide ? 'opacity-100' : 'opacity-0'
-          }`}
+          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${index === currentSlide ? 'opacity-100' : 'opacity-0'
+            }`}
         >
           {/* Background Image with Fallback Gradient */}
           <div
@@ -89,23 +88,25 @@ const HeroSlider = ({ pendingCount = 0 }) => {
             } : undefined}
           />
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-slate-900/40" />
-
-          {/* Content */}
-          <div className="absolute inset-0 flex items-center px-6 lg:px-10 text-white">
-            <div className="max-w-2xl">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-xs font-bold uppercase tracking-wider mb-3 border border-white/30">
-                <Building2 size={12} /> {companyName || 'Eco-Planina'}
-              </span>
-              <h1 className="text-3xl lg:text-4xl font-bold mb-2 leading-tight">
-                {slide.title}
-              </h1>
-              <p className="text-base text-slate-100 opacity-90 max-w-lg">
-                {slide.subtitle}
-              </p>
-            </div>
-          </div>
         </div>
       ))}
+
+      {/* Static Content Overlay */}
+      <div className="absolute inset-0 flex items-center px-6 lg:px-10 text-white z-10 pointer-events-none">
+        <div className="max-w-2xl pointer-events-auto">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm text-xs font-bold uppercase tracking-wider mb-3 border border-white/30">
+            <Building2 size={12} /> {companyName || 'Eco-Planina'}
+          </span>
+          <h1 className="text-3xl lg:text-4xl font-bold mb-2 leading-tight">
+            {`Dobrodošli, ${user?.name?.split(' ')[0] || 'Menadžeru'}!`}
+          </h1>
+          <p className="text-base text-slate-100 opacity-90 max-w-lg">
+            {pendingCount > 0
+              ? `Trenutno imate ${pendingCount} novih zahteva za obradu.`
+              : 'Svi zahtevi su obrađeni. Sistem funkcioniše optimalno.'}
+          </p>
+        </div>
+      </div>
 
       {/* Slider Indicators */}
       <div className="absolute bottom-4 left-6 lg:left-10 flex gap-2">
@@ -113,11 +114,10 @@ const HeroSlider = ({ pendingCount = 0 }) => {
           <button
             key={idx}
             onClick={() => setCurrentSlide(idx)}
-            className={`h-1.5 rounded-full transition-all duration-300 ${
-              idx === currentSlide
-                ? 'w-8 bg-white'
-                : 'w-2 bg-white/40 hover:bg-white/60'
-            }`}
+            className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentSlide
+              ? 'w-8 bg-white'
+              : 'w-2 bg-white/40 hover:bg-white/60'
+              }`}
           />
         ))}
       </div>
