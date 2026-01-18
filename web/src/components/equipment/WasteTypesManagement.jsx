@@ -44,31 +44,18 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
     };
 
     const startEdit = (wt) => {
-        // Remove custom_image_url to avoid conflict with customImage
-        // Ensure customImage is set from custom_image_url if not already present
         const { custom_image_url, ...rest } = wt;
-        const editData = {
+        setEditingType({
             ...rest,
             customImage: rest.customImage || custom_image_url || null
-        };
-        console.log('[WasteTypes] startEdit - original:', wt);
-        console.log('[WasteTypes] startEdit - editData:', editData);
-        setEditingType(editData);
+        });
         setShowAddForm(false);
     };
 
     // Direct image upload for editing - uploads, deletes old, saves to DB immediately
     const handleEditImageUpload = async (e) => {
         const file = e.target.files?.[0];
-        if (!file || !editingType) return;
-
-        console.log('[WasteTypes] handleEditImageUpload - editingType:', editingType);
-        console.log('[WasteTypes] handleEditImageUpload - editingType.id:', editingType.id);
-
-        if (!editingType.id) {
-            toast.error('Greška: Nedostaje ID vrste');
-            return;
-        }
+        if (!file || !editingType?.id) return;
 
         if (!file.type.startsWith('image/')) {
             toast.error('Molimo izaberite sliku');
@@ -85,25 +72,19 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
         try {
             // Delete old image first if exists
             if (editingType.customImage) {
-                console.log('[WasteTypes] Deleting old image:', editingType.customImage);
                 await deleteImage(editingType.customImage, 'assets');
             }
 
             // Upload new image
-            console.log('[WasteTypes] Uploading new image...');
             const url = await uploadImage(file, 'uploads', 'assets');
-            console.log('[WasteTypes] New image URL:', url);
 
             // Update local state and save to DB immediately
             const updated = { ...editingType, customImage: url };
             setEditingType(updated);
-            console.log('[WasteTypes] Saving to DB with id:', updated.id, 'data:', updated);
-            const result = await onEdit(updated);
-            console.log('[WasteTypes] Save result:', result);
+            await onEdit(updated);
 
             toast.success('Slika sačuvana');
         } catch (err) {
-            console.error('[WasteTypes] Error:', err);
             toast.error('Greška: ' + err.message);
         } finally {
             setUploading(false);

@@ -594,25 +594,18 @@ export default function Dashboard() {
         }
     };
     const handleEditWasteType = async (updatedType) => {
-        console.log('[Dashboard] handleEditWasteType called with:', updatedType);
-        console.log('[Dashboard] updatedType.id:', updatedType.id, 'type:', typeof updatedType.id);
         try {
-            const dataToSend = {
-                id: updatedType.id,
+            const updated = await updateWasteType(updatedType.id, {
                 label: updatedType.label,
                 icon: updatedType.icon,
                 customImage: updatedType.customImage,
                 name: updatedType.name,
                 description: updatedType.description,
                 region_id: updatedType.region_id
-            };
-            console.log('[Dashboard] Calling updateWasteType with id:', updatedType.id, 'data:', dataToSend);
-            const updated = await updateWasteType(updatedType.id, dataToSend);
-            console.log('[Dashboard] updateWasteType returned:', updated);
+            });
             setWasteTypes(prev => prev.map(wt => wt.id === updated.id ? updated : wt));
             return updated;
         } catch (e) {
-            console.error('[Dashboard] handleEditWasteType error:', e);
             toast.error('Greška pri izmeni: ' + e.message);
             throw e;
         }
