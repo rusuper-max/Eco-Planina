@@ -51,7 +51,7 @@ export const NewRequestForm = ({ onSubmit, loading, wasteTypes = WASTE_TYPES }) 
                         >
                             {w.customImage ? (
                                 <>
-                                    <img src={w.customImage} alt={w.label} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                    <img src={`${w.customImage}${w.customImage.includes('?') ? '&' : '?'}v=${w.updated_at || Date.now()}`} alt={w.label} className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                                     <div className={`absolute inset-0 flex items-end justify-center p-2 ${wasteType === w.id ? 'bg-black/40' : 'bg-black/20 group-hover:bg-black/30'}`}>
                                         <span className="text-white text-sm font-bold drop-shadow-md text-center leading-tight">{w.label}</span>
                                     </div>

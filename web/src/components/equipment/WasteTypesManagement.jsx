@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Plus, Recycle, Edit3, Trash2, Users, UserPlus } from 'lucide-react';
-import { EmptyState, ImageUploader } from '../common';
+import { Plus, Recycle, Edit3, Trash2, Users, UserPlus, Loader2 } from 'lucide-react';
+import { EmptyState } from '../common';
 import { WasteTypeClientsModal } from './WasteTypeClientsModal';
 import { BulkWasteTypeModal } from './BulkWasteTypeModal';
+import { uploadImage, deleteImage } from '../../utils/storage';
+import toast from 'react-hot-toast';
 
 /**
  * Waste Types Management - CRUD for waste types
@@ -11,17 +13,15 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingType, setEditingType] = useState(null);
     const [newType, setNewType] = useState({ label: '', icon: '📦', customImage: null });
-    const [managingClientsFor, setManagingClientsFor] = useState(null); // waste type for client management
+    const [managingClientsFor, setManagingClientsFor] = useState(null);
     const [showBulkModal, setShowBulkModal] = useState(false);
+    const [uploading, setUploading] = useState(false);
 
-    // Izračunaj koliko klijenata ima pristup svakoj vrsti robe
     const getClientCountForWasteType = (wasteTypeId) => {
         return clients.filter(client => {
-            // Ako je allowed_waste_types null ili prazno, klijent ima sve vrste
             if (!client.allowed_waste_types || client.allowed_waste_types.length === 0) {
                 return true;
             }
-            // Inače, proveri da li ima ovu vrstu
             return client.allowed_waste_types.includes(wasteTypeId);
         }).length;
     };
@@ -38,17 +38,122 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
 
     const handleEdit = () => {
         if (editingType && editingType.label) {
-            console.log('DEBUG WasteTypesManagement handleEdit - editingType:', editingType);
-            console.log('DEBUG WasteTypesManagement handleEdit - customImage:', editingType.customImage);
-            console.log('DEBUG WasteTypesManagement handleEdit - all keys:', Object.keys(editingType));
             onEdit(editingType);
             setEditingType(null);
         }
     };
 
     const startEdit = (wt) => {
-        setEditingType({ ...wt });
+        // Remove custom_image_url to avoid conflict with customImage
+        // Ensure customImage is set from custom_image_url if not already present
+        const { custom_image_url, ...rest } = wt;
+        const editData = {
+            ...rest,
+            customImage: rest.customImage || custom_image_url || null
+        };
+        console.log('[WasteTypes] startEdit - original:', wt);
+        console.log('[WasteTypes] startEdit - editData:', editData);
+        setEditingType(editData);
         setShowAddForm(false);
+    };
+
+    // Direct image upload for editing - uploads, deletes old, saves to DB immediately
+    const handleEditImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !editingType) return;
+
+        console.log('[WasteTypes] handleEditImageUpload - editingType:', editingType);
+        console.log('[WasteTypes] handleEditImageUpload - editingType.id:', editingType.id);
+
+        if (!editingType.id) {
+            toast.error('Greška: Nedostaje ID vrste');
+            return;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            toast.error('Molimo izaberite sliku');
+            return;
+        }
+
+        const sizeMB = file.size / 1024 / 1024;
+        if (sizeMB > 2) {
+            toast.error(`Slika je prevelika: ${sizeMB.toFixed(2)}MB (max 2MB)`);
+            return;
+        }
+
+        setUploading(true);
+        try {
+            // Delete old image first if exists
+            if (editingType.customImage) {
+                console.log('[WasteTypes] Deleting old image:', editingType.customImage);
+                await deleteImage(editingType.customImage, 'assets');
+            }
+
+            // Upload new image
+            console.log('[WasteTypes] Uploading new image...');
+            const url = await uploadImage(file, 'uploads', 'assets');
+            console.log('[WasteTypes] New image URL:', url);
+
+            // Update local state and save to DB immediately
+            const updated = { ...editingType, customImage: url };
+            setEditingType(updated);
+            console.log('[WasteTypes] Saving to DB with id:', updated.id, 'data:', updated);
+            const result = await onEdit(updated);
+            console.log('[WasteTypes] Save result:', result);
+
+            toast.success('Slika sačuvana');
+        } catch (err) {
+            console.error('[WasteTypes] Error:', err);
+            toast.error('Greška: ' + err.message);
+        } finally {
+            setUploading(false);
+            e.target.value = '';
+        }
+    };
+
+    // Direct image upload for new type
+    const handleNewImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast.error('Molimo izaberite sliku');
+            return;
+        }
+
+        const sizeMB = file.size / 1024 / 1024;
+        if (sizeMB > 2) {
+            toast.error(`Slika je prevelika: ${sizeMB.toFixed(2)}MB (max 2MB)`);
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const url = await uploadImage(file, 'uploads', 'assets');
+            setNewType({ ...newType, customImage: url });
+        } catch (err) {
+            toast.error('Greška: ' + err.message);
+        } finally {
+            setUploading(false);
+            e.target.value = '';
+        }
+    };
+
+    const handleRemoveEditImage = async () => {
+        if (!editingType?.customImage) return;
+
+        setUploading(true);
+        try {
+            await deleteImage(editingType.customImage, 'assets');
+            const updated = { ...editingType, customImage: null };
+            setEditingType(updated);
+            await onEdit(updated);
+            toast.success('Slika uklonjena');
+        } catch (err) {
+            toast.error('Greška: ' + err.message);
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -100,13 +205,30 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                             </div>
                         </div>
                         <div>
-                            <ImageUploader
-                                currentImage={newType.customImage}
-                                onUpload={(url) => setNewType({ ...newType, customImage: url })}
-                                onRemove={() => setNewType({ ...newType, customImage: null })}
-                                label="Koristi svoju sliku"
-                                bucket="assets"
-                            />
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Koristi svoju sliku</label>
+                            {newType.customImage ? (
+                                <div className="relative inline-block">
+                                    <img src={newType.customImage} alt="Preview" className="w-32 h-32 object-cover rounded-xl" />
+                                    <button
+                                        onClick={() => setNewType({ ...newType, customImage: null })}
+                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ) : (
+                                <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploading ? 'bg-slate-50 border-slate-300' : 'border-slate-300 hover:border-emerald-500 hover:bg-emerald-50'}`}>
+                                    <input type="file" accept="image/*" onChange={handleNewImageUpload} className="hidden" disabled={uploading} />
+                                    {uploading ? (
+                                        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <span className="text-2xl mb-1">📷</span>
+                                            <span className="text-sm text-slate-500">Klikni za upload</span>
+                                        </>
+                                    )}
+                                </label>
+                            )}
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -147,13 +269,31 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                             </div>
                         </div>
                         <div>
-                            <ImageUploader
-                                currentImage={editingType.customImage}
-                                onUpload={(url) => setEditingType({ ...editingType, customImage: url })}
-                                onRemove={() => setEditingType({ ...editingType, customImage: null })}
-                                label="Koristi svoju sliku"
-                                bucket="assets"
-                            />
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Koristi svoju sliku</label>
+                            {editingType.customImage ? (
+                                <div className="relative inline-block">
+                                    <img src={editingType.customImage} alt="Preview" className="w-32 h-32 object-cover rounded-xl" />
+                                    <button
+                                        onClick={handleRemoveEditImage}
+                                        disabled={uploading}
+                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 disabled:opacity-50"
+                                    >
+                                        {uploading ? <Loader2 size={12} className="animate-spin" /> : '×'}
+                                    </button>
+                                </div>
+                            ) : (
+                                <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${uploading ? 'bg-slate-50 border-slate-300' : 'border-slate-300 hover:border-blue-500 hover:bg-blue-50'}`}>
+                                    <input type="file" accept="image/*" onChange={handleEditImageUpload} className="hidden" disabled={uploading} />
+                                    {uploading ? (
+                                        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <span className="text-2xl mb-1">📷</span>
+                                            <span className="text-sm text-slate-500">Klikni za upload</span>
+                                        </>
+                                    )}
+                                </label>
+                            )}
                         </div>
                     </div>
                     <div className="flex gap-3">
@@ -215,7 +355,6 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                 </div>
             )}
 
-            {/* Modal za upravljanje klijentima */}
             {managingClientsFor && onUpdateClientWasteTypes && (
                 <WasteTypeClientsModal
                     wasteType={managingClientsFor}
@@ -225,7 +364,6 @@ export const WasteTypesManagement = ({ wasteTypes, onAdd, onDelete, onEdit, clie
                 />
             )}
 
-            {/* Bulk Update Modal */}
             <BulkWasteTypeModal
                 open={showBulkModal}
                 onClose={() => setShowBulkModal(false)}

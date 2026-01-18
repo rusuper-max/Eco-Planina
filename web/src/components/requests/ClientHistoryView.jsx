@@ -11,13 +11,14 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
     const [hidingId, setHidingId] = useState(null);
     const itemsPerPage = 10;
 
-    // Reset to page 1 when search changes
+    // Reset to page 1 when search or period changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery]);
+    }, [searchQuery, periodFilter]);
 
     if (loading) {
         return (
@@ -38,9 +39,22 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
         );
     }
 
-    // Filter by search query
-    const filtered = searchQuery.trim()
-        ? history.filter(r => {
+    // Filter by period helper
+    const filterByPeriod = (r) => {
+        if (periodFilter === 'all') return true;
+        const now = new Date();
+        const cutoff = new Date();
+        if (periodFilter === 'month') cutoff.setMonth(now.getMonth() - 1);
+        if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
+        return new Date(r.processed_at) >= cutoff;
+    };
+
+    // Filter by period and search query
+    const filtered = history.filter(r => {
+        // Period filter first
+        if (!filterByPeriod(r)) return false;
+        // Then search filter
+        if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             return (
                 (r.waste_label || '').toLowerCase().includes(query) ||
@@ -51,8 +65,9 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
                 new Date(r.processed_at).toLocaleDateString('sr-RS').includes(query) ||
                 new Date(r.created_at).toLocaleDateString('sr-RS').includes(query)
             );
-        })
-        : history;
+        }
+        return true;
+    });
 
     const sorted = [...filtered].sort((a, b) => {
         let cmp = 0;
@@ -75,8 +90,19 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
             <div className="bg-white rounded-2xl border overflow-hidden">
                 <div className="p-4 border-b bg-slate-50 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-4">
-                        <h2 className="font-bold text-lg">Istorija zahteva ({filtered.length}{searchQuery && ` od ${history.length}`})</h2>
-                        <div className="flex gap-2">
+                        <h2 className="font-bold text-lg">Istorija zahteva ({filtered.length}{(searchQuery || periodFilter !== 'all') && ` od ${history.length}`})</h2>
+                        <div className="flex flex-wrap gap-2">
+                            {/* Period filter */}
+                            <select
+                                value={periodFilter}
+                                onChange={(e) => setPeriodFilter(e.target.value)}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 focus:border-emerald-500 outline-none"
+                            >
+                                <option value="all">Svi periodi</option>
+                                <option value="month">Poslednjih mesec dana</option>
+                                <option value="week">Poslednjih 7 dana</option>
+                            </select>
+                            {/* Sort buttons */}
                             {[{ key: 'processed_at', label: 'Datum obrade' }, { key: 'created_at', label: 'Datum zahteva' }, { key: 'type', label: 'Tip' }].map(s => (
                                 <button
                                     key={s.key}
@@ -305,12 +331,14 @@ export const ClientHistoryView = ({ history, loading, wasteTypes, onHide }) => {
             )}
 
             {/* No results message */}
-            {filtered.length === 0 && searchQuery && (
+            {filtered.length === 0 && (searchQuery || periodFilter !== 'all') && (
                 <div className="bg-white rounded-2xl border p-8 text-center">
                     <Search size={40} className="mx-auto text-slate-300 mb-3" />
-                    <p className="text-slate-600 font-medium">Nema rezultata za "{searchQuery}"</p>
-                    <button onClick={() => setSearchQuery('')} className="mt-3 text-emerald-600 hover:underline text-sm">
-                        Obriši pretragu
+                    <p className="text-slate-600 font-medium">
+                        {searchQuery ? `Nema rezultata za "${searchQuery}"` : 'Nema rezultata za izabrani period'}
+                    </p>
+                    <button onClick={() => { setSearchQuery(''); setPeriodFilter('all'); }} className="mt-3 text-emerald-600 hover:underline text-sm">
+                        Obriši filtere
                     </button>
                 </div>
             )}

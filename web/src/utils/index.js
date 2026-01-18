@@ -8,7 +8,7 @@ export {
     WASTE_ICONS_MAP,
     markerStyles
 } from './mapUtils';
-export { uploadImage } from './storage';
+export { uploadImage, deleteImage } from './storage';
 export { getFillLevelColor } from './styleUtils';
 export {
     cyrillicToLatin,

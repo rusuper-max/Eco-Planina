@@ -15,18 +15,7 @@ export const useAdmin = () => {
 export const AdminProvider = ({ children }) => {
     const { user, isAdmin, isDeveloper } = useAuth();
 
-    // DEBUG: Test get_my_role function
-    const testMyRole = async () => {
-        const { data, error } = await supabase.rpc('get_my_role');
-        console.log('TEST get_my_role:', data, 'error:', error);
-        return data;
-    };
-
     const generateMasterCode = async () => {
-        // DEBUG: Test role before generating
-        const myRole = await testMyRole();
-        console.log('My role before generate:', myRole);
-
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -275,16 +264,12 @@ export const AdminProvider = ({ children }) => {
     const deleteMasterCode = async (id) => {
         if (!isAdmin()) throw new Error('Nemate dozvolu za ovu akciju');
         try {
-            console.log('DEBUG deleteMasterCode - attempting delete for id:', id);
-
             // First check if this master code is linked to a company
             const { data: code, error: fetchError } = await supabase
                 .from('master_codes')
                 .select('id, code, status, used_by_company')
                 .eq('id', id)
                 .single();
-
-            console.log('DEBUG deleteMasterCode - fetched code:', code, 'fetchError:', fetchError);
 
             if (fetchError) {
                 throw new Error('Kod nije pronađen');
@@ -320,10 +305,7 @@ export const AdminProvider = ({ children }) => {
                 .delete()
                 .eq('id', id);
 
-            console.log('DEBUG deleteMasterCode - deleteError:', deleteError);
-
             if (deleteError) {
-                console.error('Delete master code error:', deleteError);
                 throw new Error(deleteError.message || 'Greška pri brisanju koda');
             }
 
@@ -334,13 +316,10 @@ export const AdminProvider = ({ children }) => {
                 .eq('id', id)
                 .maybeSingle();
 
-            console.log('DEBUG deleteMasterCode - stillExists:', stillExists);
-
             if (stillExists) {
                 throw new Error('Brisanje nije uspelo - nemate dozvolu ili postoji zavisnost u bazi');
             }
 
-            console.log('DEBUG deleteMasterCode - SUCCESS');
             return { success: true };
         } catch (error) {
             console.error('deleteMasterCode catch:', error);

@@ -18,6 +18,7 @@ export const DataProvider = ({ children }) => {
     const [pickupRequests, setPickupRequests] = useState([]);
     const [clientRequests, setClientRequests] = useState([]);
     const [driverAssignments, setDriverAssignments] = useState([]); // All active assignments for company
+    const [driverLocations, setDriverLocations] = useState([]); // Real-time driver locations
     const [processedNotification, setProcessedNotification] = useState(null);
 
     // Real-time subscriptions for pickup requests and driver assignments
@@ -41,6 +42,71 @@ export const DataProvider = ({ children }) => {
             supabase.removeChannel(channelAssignments);
         };
     }, [companyCode, user?.region_id]);
+
+    // Refresh data when tab becomes visible again (handles minimize, tab switch, etc.)
+    useEffect(() => {
+        if (!companyCode) return;
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Tab is now visible - refresh data
+                fetchPickupRequests(companyCode);
+                fetchDriverAssignments(companyCode);
+                if (['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
+                    fetchDriverLocations(companyCode);
+                }
+            }
+        };
+
+        const handleFocus = () => {
+            // Window regained focus - refresh data
+            fetchPickupRequests(companyCode);
+            fetchDriverAssignments(companyCode);
+            if (['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
+                fetchDriverLocations(companyCode);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [companyCode, user?.role]);
+
+    // Real-time subscriptions for driver locations
+    useEffect(() => {
+        if (!companyCode || !['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) return;
+        fetchDriverLocations(companyCode);
+
+        const channelLocations = supabase
+            .channel(`driver_locations_web_${companyCode}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_locations', filter: `company_code=eq.${companyCode}` }, () => fetchDriverLocations(companyCode))
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channelLocations);
+        };
+    }, [companyCode, user?.role]);
+
+    // Fetch driver locations
+    const fetchDriverLocations = async (code = companyCode) => {
+        if (!code) return;
+        try {
+            const { data, error } = await supabase
+                .from('driver_locations')
+                .select('*, driver:driver_id(id, name, phone, role)')
+                .eq('company_code', code)
+                .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // Last 30 minutes
+
+            if (error) throw error;
+            setDriverLocations(data || []);
+        } catch (error) {
+            console.error('Error fetching driver locations:', error);
+        }
+    };
 
     // Real-time for client requests
     useEffect(() => {
@@ -177,7 +243,6 @@ export const DataProvider = ({ children }) => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            console.log('[DEBUG fetchDriverAssignments]', data?.length);
             setDriverAssignments(data || []);
         } catch (error) {
             console.error('Error fetching driver assignments:', error);
@@ -201,14 +266,7 @@ export const DataProvider = ({ children }) => {
                 query = query.eq('region_id', user.region_id);
             }
 
-            console.log('[DEBUG fetchPickupRequests]', {
-                role: user?.role,
-                userRegionId: user?.region_id,
-                companyCode: code
-            });
-
             const { data, error } = await query;
-            console.log('[DEBUG fetchPickupRequests] result:', { count: data?.length, error });
             if (error) throw error;
             setPickupRequests(data || []);
         } catch (error) {
@@ -221,6 +279,50 @@ export const DataProvider = ({ children }) => {
             const { error } = await supabase.from('pickup_requests').delete().eq('id', id);
             if (error) throw error;
             setPickupRequests(prev => prev.filter(req => req.id !== id));
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Reject request - moves to history with "rejected" status instead of deleting
+    const rejectPickupRequest = async (request, rejectionNote = null) => {
+        try {
+            const processedRecord = {
+                company_code: request.company_code,
+                client_id: request.user_id,
+                client_name: request.client_name,
+                client_address: request.client_address,
+                waste_type: request.waste_type,
+                waste_label: request.waste_label,
+                fill_level: request.fill_level,
+                urgency: request.urgency,
+                note: request.note,
+                processing_note: rejectionNote || 'Zahtev odbijen',
+                created_at: request.created_at,
+                request_id: request.id,
+                request_code: request.request_code,
+                region_id: request.region_id,
+                processed_by_id: user?.id || null,
+                processed_by_name: user?.name || null,
+                status: 'rejected', // Mark as rejected
+            };
+
+            const { error: insertError } = await supabase.from('processed_requests').insert([processedRecord]);
+            if (insertError) throw insertError;
+
+            // Delete driver assignment if exists
+            await supabase
+                .from('driver_assignments')
+                .update({ deleted_at: new Date().toISOString(), status: 'cancelled' })
+                .eq('request_id', request.id)
+                .is('deleted_at', null);
+
+            // Delete the original request
+            const { error: deleteError } = await supabase.from('pickup_requests').delete().eq('id', request.id);
+            if (deleteError) throw deleteError;
+
+            setPickupRequests(prev => prev.filter(req => req.id !== request.id));
+            return { success: true };
         } catch (error) {
             throw error;
         }
@@ -277,13 +379,9 @@ export const DataProvider = ({ children }) => {
             };
 
             if (weightData) {
-                console.log('weightData received:', weightData);
-                // Store weight directly in the weight column (which exists in DB)
                 processedRecord.weight = weightData.weight;
                 processedRecord.weight_unit = weightData.weight_unit || 'kg';
             }
-
-            console.log('Inserting processedRecord:', processedRecord);
             const { error: insertError } = await supabase.from('processed_requests').insert([processedRecord]);
             if (insertError) throw insertError;
 
@@ -359,7 +457,6 @@ export const DataProvider = ({ children }) => {
                 throw new Error('Zahtev nije pronađen ili nemate dozvolu za brisanje');
             }
 
-            console.log('Soft deleted processed request:', id);
             return { success: true };
         } catch (error) {
             console.error('deleteProcessedRequest failed:', error);
@@ -368,7 +465,6 @@ export const DataProvider = ({ children }) => {
     };
 
     const fetchCompanyClients = async () => {
-        console.log('DEBUG fetchCompanyClients, companyCode:', companyCode);
         if (!companyCode) return [];
         try {
             let query = supabase
@@ -386,7 +482,6 @@ export const DataProvider = ({ children }) => {
             }
 
             const { data, error } = await query;
-            console.log('DEBUG fetchCompanyClients result:', { count: data?.length, error });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -396,7 +491,6 @@ export const DataProvider = ({ children }) => {
     };
 
     const fetchCompanyMembers = async () => {
-        console.log('DEBUG fetchCompanyMembers, companyCode:', companyCode);
         if (!companyCode) return [];
         try {
             const { data, error } = await supabase
@@ -405,7 +499,6 @@ export const DataProvider = ({ children }) => {
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('role', { ascending: false });
-            console.log('DEBUG fetchCompanyMembers result:', { count: data?.length, error });
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -417,7 +510,6 @@ export const DataProvider = ({ children }) => {
     const fetchProcessedRequests = async ({ page = 1, pageSize = 10, filters = {} } = {}) => {
         if (!companyCode) return { data: [], count: 0 };
         try {
-            console.log('DEBUG inside fetchProcessedRequests', { page, pageSize, filters });
             let query = supabase
                 .from('processed_requests')
                 .select('*', { count: 'exact' })
@@ -1026,6 +1118,7 @@ export const DataProvider = ({ children }) => {
     const value = {
         pickupRequests,
         driverAssignments,
+        driverLocations,
         clientRequests,
         processedNotification,
         clearProcessedNotification,
@@ -1033,6 +1126,7 @@ export const DataProvider = ({ children }) => {
         fetchClientHistory,
         hideClientHistoryItem,
         removePickupRequest,
+        rejectPickupRequest,
         markRequestAsProcessed,
         updateProcessedRequest,
         deleteProcessedRequest,
@@ -1043,6 +1137,7 @@ export const DataProvider = ({ children }) => {
         addPickupRequest,
         createRequestForClient,
         fetchPickupRequests,
+        fetchDriverAssignments,
         deleteClient,
         // Region functions
         fetchCompanyRegions,

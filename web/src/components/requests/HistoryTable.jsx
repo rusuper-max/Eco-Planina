@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Loader2, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
 import ProofsModal from '../common/ProofsModal';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
@@ -19,6 +19,8 @@ const DEFAULT_WASTE_TYPES = [
 export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdit, onDelete, showDetailedView = false, drivers = [], onAssignDriverToProcessed, page = 1, totalPages = 1, totalCount = 0, onPageChange, loading = false }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
+    const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
+    const [statusFilter, setStatusFilter] = useState('all'); // all, completed, rejected
     const [sortBy, setSortBy] = useState('processed_at');
     const [sortDir, setSortDir] = useState('desc');
     const [viewingProof, setViewingProof] = useState(null);
@@ -274,17 +276,18 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                 });
             }
 
-            // 5. Processed by manager
+            // 5. Processed/Rejected by manager
             if (request.processed_at) {
+                const isRejected = request.status === 'rejected';
                 steps.push({
                     key: 'processed',
-                    label: 'Obrađeno',
+                    label: isRejected ? 'Odbijeno' : 'Obrađeno',
                     actor: request.processed_by_name || 'Menadžer',
                     time: request.processed_at,
-                    icon: CheckCircle2,
-                    color: 'bg-emerald-500',
-                    bgColor: 'bg-emerald-50',
-                    textColor: 'text-emerald-700'
+                    icon: isRejected ? XCircle : CheckCircle2,
+                    color: isRejected ? 'bg-red-500' : 'bg-emerald-500',
+                    bgColor: isRejected ? 'bg-red-50' : 'bg-emerald-50',
+                    textColor: isRejected ? 'text-red-700' : 'text-emerald-700'
                 });
             }
 
@@ -388,8 +391,26 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
 
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
+    // Filter by period helper
+    const filterByPeriod = (req) => {
+        if (periodFilter === 'all') return true;
+        const now = new Date();
+        const cutoff = new Date();
+        if (periodFilter === 'month') cutoff.setMonth(now.getMonth() - 1);
+        if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
+        return new Date(req.processed_at) >= cutoff;
+    };
+
     // Filter requests
     let filtered = requests.filter(req => {
+        // Period filter
+        if (!filterByPeriod(req)) return false;
+        // Status filter
+        if (statusFilter !== 'all') {
+            const reqStatus = req.status || 'completed'; // Default to completed for old records
+            if (statusFilter !== reqStatus) return false;
+        }
+        // Search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             const matchesName = req.client_name?.toLowerCase().includes(query);
@@ -455,6 +476,24 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                     />
                 </div>
                 <select
+                    value={periodFilter}
+                    onChange={(e) => setPeriodFilter(e.target.value)}
+                    className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
+                >
+                    <option value="all">Svi periodi</option>
+                    <option value="month">Poslednjih mesec dana</option>
+                    <option value="week">Poslednjih 7 dana</option>
+                </select>
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
+                >
+                    <option value="all">Svi statusi</option>
+                    <option value="completed">✅ Obrađeni</option>
+                    <option value="rejected">❌ Odbijeni</option>
+                </select>
+                <select
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
                     className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
@@ -467,8 +506,8 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             {/* Results count */}
             <div className="text-sm text-slate-500">
                 Prikazano {filtered.length} od {requests.length} zahteva
-                {(searchQuery || filterType !== 'all') && (
-                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
+                {(searchQuery || filterType !== 'all' || periodFilter !== 'all' || statusFilter !== 'all') && (
+                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); setPeriodFilter('all'); setStatusFilter('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
                         Obriši filtere
                     </button>
                 )}
@@ -533,10 +572,20 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                                 </div>
                                             </td>
                                             <td className="px-3 md:px-4 py-3">
-                                                <div className="flex items-center gap-2 text-emerald-600">
-                                                    <CheckCircle2 size={14} />
-                                                    <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
-                                                </div>
+                                                {req.status === 'rejected' ? (
+                                                    <div className="flex items-center gap-2 text-red-600">
+                                                        <XCircle size={14} />
+                                                        <div>
+                                                            <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
+                                                            <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded">ODBIJENO</span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 text-emerald-600">
+                                                        <CheckCircle2 size={14} />
+                                                        <span className="text-xs md:text-sm">{formatDateTime(req.processed_at)}</span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="hidden sm:table-cell px-4 py-3 text-center">
                                                 {req.weight ? (

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, Trash2, UserPlus, X, ChevronDown } from 'lucide-react';
+import { Truck, Search, ArrowUpDown, ArrowUp, ArrowDown, Info, CheckCircle2, XCircle, UserPlus, X, ChevronDown } from 'lucide-react';
 import { EmptyState, FillLevelBar, RequestStatusBadge, CountdownTimer } from '../common';
 import { getRemainingTime } from '../../utils/timeUtils';
 
@@ -360,7 +360,7 @@ export const ManagerRequestsTable = ({
                                                     <button onClick={() => onProcess(req)} className="p-1.5 md:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Obradi"><CheckCircle2 size={18} /></button>
                                                 )}
                                                 {!readOnly && onDelete && (
-                                                    <button onClick={() => onDelete(req.id)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Obriši"><Trash2 size={18} /></button>
+                                                    <button onClick={() => onDelete(req)} className="p-1.5 md:p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Odbij"><XCircle size={18} /></button>
                                                 )}
                                             </div>
                                         </td>

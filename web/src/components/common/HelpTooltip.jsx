@@ -8,6 +8,27 @@ import { useHelpMode } from '../../context';
  * Ključ je data-help atribut, vrednost je title i description
  */
 const HELP_DEFINITIONS = {
+    // Sidebar groups
+    'sidebar-group-requests': {
+        title: 'Zahtevi',
+        description: 'Sekcija za upravljanje zahtevima za odvoz. Uključuje aktivne zahteve koji čekaju obradu, istoriju završenih odvoza i evidenciju svih aktivnosti.'
+    },
+    'sidebar-group-analytics': {
+        title: 'Analitika',
+        description: 'Sekcija za praćenje statistike i izveštaja. Ovde možete videti grafikone, uporedne analize učinka zaposlenih i generisati izveštaje za štampu ili Excel.'
+    },
+    'sidebar-group-admin': {
+        title: 'Administracija',
+        description: 'Sekcija za upravljanje firmom. Ovde dodajete osoblje (menadžere, vozače), kreirate filijale i vizuelno pregledavate organizacionu strukturu.'
+    },
+    'sidebar-group-people': {
+        title: 'Ljudstvo',
+        description: 'Sekcija za upravljanje ljudima. Ovde pristupate listi klijenata vaše filijale i upravljate vozačima koji izvršavaju odvoz.'
+    },
+    'sidebar-group-settings': {
+        title: 'Podešavanja',
+        description: 'Sekcija za konfiguraciju sistema. Ovde definišete tipove opreme (kontejneri) i vrste sekundarnih sirovina koje firma sakuplja.'
+    },
     // Sidebar items - Manager
     'sidebar-dashboard': {
         title: 'Kontrolna tabla',

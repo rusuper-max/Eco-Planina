@@ -35,11 +35,12 @@ import {
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 import DriverDashboard from './DriverDashboard';
+import { OverviewPage } from '../components/overview';
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients } = useAuth();
-    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, driverAssignments, hideClientHistoryItem } = useData();
+    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, rejectPickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients } = useAuth();
+    const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, driverAssignments, fetchDriverAssignments, hideClientHistoryItem } = useData();
 
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState(() => {
@@ -60,7 +61,7 @@ export default function Dashboard() {
     const [masterCodes, setMasterCodes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitLoading, setSubmitLoading] = useState(false);
-    const [selectedRequest, setSelectedRequest] = useState(null);
+    const [selectedRequestId, setSelectedRequestId] = useState(null);
     const [processingRequest, setProcessingRequest] = useState(null);
     const [selectedClient, setSelectedClient] = useState(null);
     const [editingClientLocation, setEditingClientLocation] = useState(null);
@@ -250,11 +251,9 @@ export default function Dashboard() {
                 }
 
                 if (userRole === 'company_admin') {
-                    console.log('DEBUG company_admin loadInitialData, companyCode:', companyCode);
                     const clientsData = await fetchCompanyClients();
                     const membersData = await fetchCompanyMembers();
                     const regionsData = await fetchCompanyRegions();
-                    console.log('DEBUG company_admin data:', { clients: clientsData?.length, members: membersData?.length, regions: regionsData?.length });
                     setClients(clientsData || []);
                     setRegions(regionsData || []);
                     setCompanyMembers(membersData || []);
@@ -336,22 +335,17 @@ export default function Dashboard() {
     // Quick assign single request to driver (from requests table)
     const handleQuickAssignDriver = async (requestId, driverId) => {
         try {
-            console.log('DEBUG handleQuickAssignDriver: calling RPC with', { requestId, driverId, companyCode });
             const { data, error } = await supabase.rpc('assign_requests_to_driver', {
                 p_request_ids: [requestId],
                 p_driver_id: driverId,
                 p_company_code: companyCode
             });
 
-            console.log('DEBUG handleQuickAssignDriver: RPC response', { data, error });
-
             if (error) throw error;
 
             // RPC returns JSON object with success and assigned_count
             const result = typeof data === 'string' ? JSON.parse(data) : data;
-            console.log('DEBUG handleQuickAssignDriver: parsed result', result);
 
-            // VAŽNO: Proveri da li je assigned_count > 0
             if (!result?.success) {
                 throw new Error(result?.error || 'Nemate dozvolu za ovu akciju');
             }
@@ -360,13 +354,11 @@ export default function Dashboard() {
                 throw new Error('Zahtev nije pronađen ili ne pripada vašoj firmi');
             }
 
-            console.log('DEBUG handleQuickAssignDriver: assigned_count =', result?.assigned_count);
-
-            // Refresh assignments
-            console.log('DEBUG handleQuickAssignDriver: assignments auto-update via Context');
-
             const driver = companyDrivers.find(d => d.id === driverId);
             toast.success(`Zahtev dodeljen vozaču: ${driver?.name || 'Nepoznato'}`);
+
+            // Refresh driver assignments to update UI immediately
+            await fetchDriverAssignments(companyCode);
         } catch (err) {
             console.error('Error quick assigning driver:', err);
             toast.error('Greška pri dodeli vozača: ' + err.message);
@@ -477,7 +469,17 @@ export default function Dashboard() {
     const handleConfirmProcess = async (req, proofImageUrl, note, weightData, retroactiveDriverInfo = null) => {
         await markRequestAsProcessed(req, proofImageUrl, note, weightData, retroactiveDriverInfo);
     };
-    const handleDeleteRequest = async (id) => { if (window.confirm('Obrisati?')) try { await removePickupRequest(id); } catch (err) { toast.error(err.message); } };
+    const handleRejectRequest = async (request) => {
+        const note = window.prompt('Unesite razlog odbijanja (opciono):', '');
+        if (note === null) return; // User clicked Cancel
+
+        try {
+            await rejectPickupRequest(request, note || null);
+            toast.success('Zahtev odbijen');
+        } catch (err) {
+            toast.error(err.message);
+        }
+    };
     const handleDeleteClient = async (id) => {
         if (!window.confirm('Obrisati klijenta?')) return;
         const previousClients = clients;
@@ -592,11 +594,9 @@ export default function Dashboard() {
         }
     };
     const handleEditWasteType = async (updatedType) => {
-        console.log('DEBUG Dashboard handleEditWasteType - updatedType:', updatedType);
-        console.log('DEBUG Dashboard handleEditWasteType - customImage value:', updatedType.customImage);
-        console.log('DEBUG Dashboard handleEditWasteType - all keys:', Object.keys(updatedType));
+        console.log('[Dashboard] handleEditWasteType called with:', updatedType);
+        console.log('[Dashboard] updatedType.id:', updatedType.id, 'type:', typeof updatedType.id);
         try {
-            // Pass explicit object to ensure all properties are included
             const dataToSend = {
                 id: updatedType.id,
                 label: updatedType.label,
@@ -606,12 +606,15 @@ export default function Dashboard() {
                 description: updatedType.description,
                 region_id: updatedType.region_id
             };
-            console.log('DEBUG Dashboard - dataToSend:', dataToSend);
+            console.log('[Dashboard] Calling updateWasteType with id:', updatedType.id, 'data:', dataToSend);
             const updated = await updateWasteType(updatedType.id, dataToSend);
+            console.log('[Dashboard] updateWasteType returned:', updated);
             setWasteTypes(prev => prev.map(wt => wt.id === updated.id ? updated : wt));
-            toast.success('Vrsta robe ažurirana');
+            return updated;
         } catch (e) {
+            console.error('[Dashboard] handleEditWasteType error:', e);
             toast.error('Greška pri izmeni: ' + e.message);
+            throw e;
         }
     };
 
@@ -619,12 +622,6 @@ export default function Dashboard() {
     const handleSaveClientLocation = async (position) => {
         if (editingClientLocation) {
             try {
-                // Debug: proveri auth
-                const { data: authData } = await supabase.auth.getUser();
-                console.log('DEBUG - Auth user:', authData?.user?.id);
-                console.log('DEBUG - Client ID:', editingClientLocation.id);
-                console.log('DEBUG - Position:', position);
-
                 // Reverse geocode to get address
                 let newAddress = editingClientLocation.address || '';
                 try {
@@ -782,6 +779,7 @@ export default function Dashboard() {
             {
                 label: 'Upravljanje Zahtevima',
                 icon: ClipboardList,
+                helpKey: 'sidebar-group-requests',
                 children: [
                     { id: 'requests', icon: Truck, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
                     { id: 'history', icon: History, label: 'Istorija zahteva', helpKey: 'sidebar-history' },
@@ -791,6 +789,7 @@ export default function Dashboard() {
             {
                 label: 'Analitika',
                 icon: BarChart3,
+                helpKey: 'sidebar-group-analytics',
                 children: [
                     { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
                     { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera', helpKey: 'sidebar-manager-analytics' },
@@ -801,6 +800,7 @@ export default function Dashboard() {
             {
                 label: 'Administracija',
                 icon: Users,
+                helpKey: 'sidebar-group-admin',
                 children: [
                     { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
                     { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
@@ -815,6 +815,7 @@ export default function Dashboard() {
             {
                 label: 'Zahtevi',
                 icon: ClipboardList,
+                helpKey: 'sidebar-group-requests',
                 children: [
                     { id: 'requests', icon: Truck, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
                     { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
@@ -824,6 +825,7 @@ export default function Dashboard() {
             {
                 label: 'Ljudstvo',
                 icon: Users,
+                helpKey: 'sidebar-group-people',
                 children: [
                     { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
                     { id: 'drivers', icon: Truck, label: 'Vozači', helpKey: 'sidebar-drivers' }
@@ -832,6 +834,7 @@ export default function Dashboard() {
             {
                 label: 'Analitika',
                 icon: BarChart3,
+                helpKey: 'sidebar-group-analytics',
                 children: [
                     { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
                     { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
@@ -840,6 +843,7 @@ export default function Dashboard() {
             {
                 label: 'Podešavanja',
                 icon: Settings,
+                helpKey: 'sidebar-group-settings',
                 children: [
                     { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
                     { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' }
@@ -877,6 +881,16 @@ export default function Dashboard() {
     const menu = getMenu();
     const statCards = getStats();
     const pending = useMemo(() => pickupRequests?.filter(r => r.status === 'pending') || [], [pickupRequests]);
+
+    // Get selected request from ID - this keeps the modal stable during refreshes
+    const selectedRequest = useMemo(() => {
+        if (!selectedRequestId) return null;
+        return pickupRequests?.find(r => r.id === selectedRequestId) || null;
+    }, [selectedRequestId, pickupRequests]);
+
+    const setSelectedRequest = (request) => {
+        setSelectedRequestId(request?.id || null);
+    };
 
     // Export functions - using semicolon as separator for Excel compatibility in Serbian locale
     const exportToCSV = (data, filename, headers) => {
@@ -941,15 +955,9 @@ export default function Dashboard() {
         }
         if (userRole === 'client') {
             // Filter waste types based on client's allowed types (null/empty = all allowed)
-            // Debug: Log what we're filtering
-            console.log('[Client WasteTypes] user.allowed_waste_types:', user?.allowed_waste_types);
-            console.log('[Client WasteTypes] wasteTypes:', wasteTypes?.map(wt => ({ id: wt.id, name: wt.name, label: wt.label })));
-
             const clientWasteTypes = user?.allowed_waste_types?.length > 0
                 ? wasteTypes.filter(wt => user.allowed_waste_types.includes(wt.id))
                 : wasteTypes;
-
-            console.log('[Client WasteTypes] Filtered result:', clientWasteTypes?.length, 'types');
 
             if (activeTab === 'requests') return <ClientRequestsView requests={clientRequests} wasteTypes={wasteTypes} onDeleteRequest={removePickupRequest} />;
             if (activeTab === 'history') return <ClientHistoryView history={clientHistory} loading={historyLoading} wasteTypes={wasteTypes} onHide={async (id) => {
@@ -1093,7 +1101,7 @@ export default function Dashboard() {
                             <Plus size={18} /> Kreiraj zahtev
                         </button>
                     </div>
-                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} />
+                    <ManagerRequestsTable requests={pending} onProcess={handleProcessRequest} onDelete={handleRejectRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} initialUrgencyFilter={urgencyFilter} onUrgencyFilterChange={setUrgencyFilter} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} />
                 </div>
             );
             if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
@@ -1150,13 +1158,22 @@ export default function Dashboard() {
                 </div>
             );
 
-            // Sort by remaining time (most urgent first) for dashboard preview
-            const sortedByUrgency = [...pending].sort((a, b) => {
-                const remA = getRemainingTime(a.created_at, a.urgency);
-                const remB = getRemainingTime(b.created_at, b.urgency);
-                return remA.ms - remB.ms;
-            });
-            return <div className="space-y-8"><div className="grid md:grid-cols-3 gap-6">{statCards.map((s, i) => <StatCard key={i} {...s} />)}</div>{pending.length > 0 && <div><div className="flex justify-between mb-4"><h2 className="text-lg font-bold">Najhitniji zahtevi</h2><button onClick={() => setActiveTab('requests')} className="text-emerald-600 text-sm font-medium">Vidi sve ({pending.length}) <ChevronRight size={16} className="inline" /></button></div><ManagerRequestsTable requests={sortedByUrgency.slice(0, 5)} onProcess={handleProcessRequest} onDelete={handleDeleteRequest} onView={setSelectedRequest} onClientClick={handleClientClick} wasteTypes={wasteTypes} assignments={driverAssignments} drivers={companyDrivers} onQuickAssign={handleQuickAssignDriver} /></div>}</div>;
+            // New Overview Page for manager dashboard
+            return (
+                <OverviewPage
+                    onNavigate={(tab, params) => {
+                        setActiveTab(tab);
+                        if (params?.action === 'create') setShowCreateRequestModal(true);
+                        if (params?.selectedId) {
+                            const req = pending.find(r => r.id === params.selectedId);
+                            if (req) setSelectedRequest(req);
+                        }
+                    }}
+                    companyMembers={companyMembers}
+                    processedRequests={processedRequests}
+                    companyDrivers={companyDrivers}
+                />
+            );
         }
         // Company Admin - bird's eye view of company (no operations)
         if (userRole === 'company_admin') {
@@ -1274,86 +1291,20 @@ export default function Dashboard() {
                     </div>
                 </div>
             );
-            // Company Admin Dashboard - Overview stats
-            const staffCount = companyMembers?.filter(m => ['manager', 'driver'].includes(m.role)).length || 0;
-            const managerCount = companyMembers?.filter(m => m.role === 'manager').length || 0;
-            const driverCount = companyMembers?.filter(m => m.role === 'driver').length || 0;
+            // Company Admin Dashboard - New Overview Page
             return (
-                <div className="space-y-6">
-                    <h1 className="text-2xl font-bold">Pregled firme</h1>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('map')}>
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                                    <Truck className="w-6 h-6 text-emerald-600" />
-                                </div>
-                                <div>
-                                    <p className="text-3xl font-bold text-slate-800">{pending.length}</p>
-                                    <p className="text-sm text-slate-500">Aktivnih zahteva</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('staff')}>
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                                    <Users className="w-6 h-6 text-blue-600" />
-                                </div>
-                                <div>
-                                    <p className="text-3xl font-bold text-slate-800">{staffCount}</p>
-                                    <p className="text-sm text-slate-500">{managerCount} menadž. / {driverCount} voz.</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5 cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setActiveTab('regions')}>
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                                    <MapPin className="w-6 h-6 text-purple-600" />
-                                </div>
-                                <div>
-                                    <p className="text-3xl font-bold text-slate-800">{regions.length}</p>
-                                    <p className="text-sm text-slate-500">Filijala</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-2xl border p-5">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                                    <Building2 className="w-6 h-6 text-amber-600" />
-                                </div>
-                                <div>
-                                    <p className="text-3xl font-bold text-slate-800">{clients.length}</p>
-                                    <p className="text-sm text-slate-500">Klijenata</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {/* Quick actions */}
-                    <div className="bg-white rounded-2xl border p-6">
-                        <h2 className="font-bold mb-4">Brze akcije</h2>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <button onClick={() => setActiveTab('map')} className="p-4 bg-slate-50 rounded-xl hover:bg-emerald-50 text-left transition-colors">
-                                <Globe size={20} className="mb-3 text-slate-500" />
-                                <p className="font-semibold">Pregled mape</p>
-                                <p className="text-xs text-slate-500">Svi zahtevi na mapi</p>
-                            </button>
-                            <button onClick={() => setActiveTab('staff')} className="p-4 bg-slate-50 rounded-xl hover:bg-blue-50 text-left transition-colors">
-                                <Users size={20} className="mb-3 text-slate-500" />
-                                <p className="font-semibold">Upravljaj osobljem</p>
-                                <p className="text-xs text-slate-500">Menadžeri i vozači</p>
-                            </button>
-                            <button onClick={() => setActiveTab('regions')} className="p-4 bg-slate-50 rounded-xl hover:bg-purple-50 text-left transition-colors">
-                                <MapPin size={20} className="mb-3 text-slate-500" />
-                                <p className="font-semibold">Filijale</p>
-                                <p className="text-xs text-slate-500">Upravljanje lokacijama</p>
-                            </button>
-                            <button onClick={() => setActiveTab('settings')} className="p-4 bg-slate-50 rounded-xl hover:bg-amber-50 text-left transition-colors">
-                                <Settings size={20} className="mb-3 text-slate-500" />
-                                <p className="font-semibold">Podešavanja</p>
-                                <p className="text-xs text-slate-500">Tipovi otpada, oprema</p>
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <OverviewPage
+                    onNavigate={(tab, params) => {
+                        setActiveTab(tab);
+                        if (params?.selectedId) {
+                            const req = pending.find(r => r.id === params.selectedId);
+                            if (req) setSelectedRequest(req);
+                        }
+                    }}
+                    companyMembers={companyMembers}
+                    processedRequests={processedRequests}
+                    companyDrivers={companyDrivers}
+                />
             );
         }
         if (userRole === 'admin') {
@@ -1564,9 +1515,9 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </header>
-                <main className={`flex-1 overflow-y-auto relative z-10 ${activeTab === 'map' ? 'p-0 overflow-hidden' : 'p-6 lg:p-8'}`}>
-                    <div className={`${activeTab === 'map' ? 'w-full h-full flex flex-col' : 'max-w-7xl mx-auto'}`}>
-                        {activeTab !== 'map' && <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'dashboard' ? `Dobrodošli, ${user?.name?.split(' ')[0]}!` : activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>}
+                <main className={`flex-1 overflow-y-auto relative z-10 ${activeTab === 'map' || activeTab === 'dashboard' ? 'p-0 overflow-hidden' : 'p-6 lg:p-8'}`}>
+                    <div className={`${activeTab === 'map' || activeTab === 'dashboard' ? 'w-full h-full flex flex-col' : 'max-w-7xl mx-auto'}`}>
+                        {activeTab !== 'map' && activeTab !== 'dashboard' && <div className="mb-8"><h1 className="text-2xl font-bold">{activeTab === 'new' ? 'Novi zahtev' : activeTab === 'requests' ? 'Zahtevi' : activeTab === 'drivers' ? 'Vozači' : activeTab === 'history' ? 'Istorija zahteva' : activeTab === 'analytics' ? 'Analitika' : activeTab === 'clients' ? 'Klijenti' : activeTab === 'print' ? 'Štampaj / Export' : activeTab === 'equipment' ? 'Upravljanje opremom' : activeTab === 'wastetypes' ? 'Vrste robe' : activeTab === 'messages' ? 'Poruke' : activeTab === 'companies' ? 'Firme' : activeTab === 'users' ? 'Korisnici' : activeTab === 'regions' ? 'Filijale' : activeTab === 'visual' ? 'Vizuelni Editor' : activeTab === 'codes' ? 'Master kodovi' : ''}</h1></div>}
                         {loading ? <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-600" size={32} /></div> : renderContent()}
                     </div>
                 </main>

@@ -49,13 +49,10 @@ export const CompanyProvider = ({ children }) => {
             // First try new waste_types table
             const { data: tableData, error: tableError } = await supabase
                 .from('waste_types')
-                .select('id, name, icon, description, region_id, custom_image_url')
+                .select('id, name, icon, description, region_id, custom_image_url, updated_at')
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('name');
-
-            console.log('DEBUG fetchCompanyWasteTypes - tableData:', tableData);
-            console.log('DEBUG fetchCompanyWasteTypes - tableError:', tableError);
 
             // If waste_types table exists and has data, use it
             // Map 'name' to 'label' and 'custom_image_url' to 'customImage' for UI compatibility
@@ -65,7 +62,6 @@ export const CompanyProvider = ({ children }) => {
                     label: wt.name, // UI uses 'label', DB uses 'name'
                     customImage: wt.custom_image_url, // UI uses 'customImage', DB uses 'custom_image_url'
                 }));
-                console.log('DEBUG fetchCompanyWasteTypes - mapped result:', mapped);
                 return mapped;
             }
 
@@ -136,43 +132,56 @@ export const CompanyProvider = ({ children }) => {
 
     const updateWasteType = async (wasteTypeId, wasteTypeData) => {
         if (!wasteTypeId) throw new Error('Nedostaje ID vrste');
-        try {
-            console.log('DEBUG updateWasteType - input:', { wasteTypeId, wasteTypeData });
-            console.log('DEBUG updateWasteType - wasteTypeData keys:', Object.keys(wasteTypeData || {}));
-            console.log('DEBUG updateWasteType - customImage in wasteTypeData:', wasteTypeData?.customImage);
-            console.log('DEBUG updateWasteType - wasteTypeData JSON:', JSON.stringify(wasteTypeData, null, 2));
-            const updates = {};
-            // UI sends 'label', DB expects 'name'; UI sends 'customImage', DB expects 'custom_image_url'
-            if (wasteTypeData.name !== undefined) updates.name = wasteTypeData.name?.trim();
-            if (wasteTypeData.label !== undefined) updates.name = wasteTypeData.label?.trim();
-            if (wasteTypeData.icon !== undefined) updates.icon = wasteTypeData.icon;
-            if (wasteTypeData.description !== undefined) updates.description = wasteTypeData.description?.trim() || null;
-            if (wasteTypeData.region_id !== undefined) updates.region_id = wasteTypeData.region_id;
-            if (wasteTypeData.customImage !== undefined) updates.custom_image_url = wasteTypeData.customImage || null;
-            if (wasteTypeData.custom_image_url !== undefined) updates.custom_image_url = wasteTypeData.custom_image_url || null;
-            console.log('DEBUG updateWasteType - updates to send:', updates);
 
-            const { data, error } = await supabase
-                .from('waste_types')
-                .update(updates)
-                .eq('id', wasteTypeId)
-                .select('*')
-                .single();
-            if (error) throw error;
+        try {
+            // Prepare parameters for RPC function
+            const name = (wasteTypeData.name || wasteTypeData.label)?.trim() || null;
+            const icon = wasteTypeData.icon || null;
+            const description = wasteTypeData.description?.trim() || null;
+            const region_id = wasteTypeData.region_id || null;
+            // customImage (UI field) takes priority over custom_image_url (DB field)
+            let custom_image_url = null;
+            if (wasteTypeData.customImage !== undefined) {
+                custom_image_url = wasteTypeData.customImage || null;
+            } else if (wasteTypeData.custom_image_url !== undefined) {
+                custom_image_url = wasteTypeData.custom_image_url || null;
+            }
+
+            // Use RPC function to bypass RLS
+            const { data: rpcResult, error: rpcError } = await supabase.rpc('update_waste_type', {
+                p_waste_type_id: wasteTypeId,
+                p_name: name,
+                p_icon: icon,
+                p_description: description,
+                p_region_id: region_id,
+                p_custom_image_url: custom_image_url
+            });
+
+            if (rpcError) throw rpcError;
+            if (!rpcResult) throw new Error('No data returned from update');
+
             // Map back to UI format
-            return { ...data, label: data.name, customImage: data.custom_image_url };
+            return {
+                ...rpcResult,
+                label: rpcResult.name,
+                customImage: rpcResult.custom_image_url,
+                updated_at: rpcResult.updated_at
+            };
         } catch (error) {
+            console.error('Error updating waste type:', error);
             throw error;
         }
     };
 
     const deleteWasteType = async (wasteTypeId) => {
         if (!wasteTypeId) throw new Error('Nedostaje ID vrste');
+        if (!companyCode) throw new Error('Nema kompanije');
         try {
             const { error } = await supabase
                 .from('waste_types')
                 .update({ deleted_at: new Date().toISOString() })
-                .eq('id', wasteTypeId);
+                .eq('id', wasteTypeId)
+                .eq('company_code', companyCode);
             if (error) throw error;
             return { success: true };
         } catch (error) {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, Truck, Download } from 'lucide-react';
+import { Scale, Image, FileText, X, Upload, Loader2, CheckCircle2, Truck, Download, XCircle } from 'lucide-react';
 import { ModalWithFooter } from '../common';
 import { uploadImage } from '../../utils/storage';
 
@@ -26,6 +26,9 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
     // Check if driver actually worked on this request (has picked_up_at or delivered_at)
     // If so, we should NOT allow changing the driver
     const driverActuallyWorked = driverAssignment && (driverAssignment.picked_up_at || driverAssignment.delivered_at);
+
+    // Check if this is a rejected request
+    const isRejected = request?.status === 'rejected';
 
     if (!request) return null;
 
@@ -95,7 +98,7 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
             <ModalWithFooter
                 open={!!request}
                 onClose={onClose}
-                title="Dopuni podatke o obradi"
+                title={isRejected ? "Detalji odbijenog zahteva" : "Dopuni podatke o obradi"}
                 size="xl"
                 footer={
                     <div className="flex justify-end gap-3">
@@ -124,11 +127,16 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
                     {/* LEFT COLUMN: request info, weight, driver */}
                     <div className="space-y-6">
                         {/* Request summary */}
-                        <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                        <div className={`flex items-center gap-4 p-4 rounded-xl border ${isRejected ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
                             <span className="text-4xl">{wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}</span>
                             <div className="flex-1">
                                 <h3 className="font-bold text-lg text-slate-800">{request.waste_label}</h3>
                                 <p className="text-sm text-slate-500 font-medium">{request.client_name}</p>
+                                {isRejected && (
+                                    <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded">
+                                        <XCircle size={12} /> ODBIJENO
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -161,10 +169,10 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
 
                         {/* Driver selection (retroactive assignment) */}
                         {drivers.length > 0 && (
-                            <div className={`p-5 rounded-xl border ${driverActuallyWorked ? 'bg-amber-50/50 border-amber-200' : 'bg-purple-50/50 border-purple-100'}`}>
+                            <div className={`p-5 rounded-xl border ${driverActuallyWorked ? 'bg-amber-50/50 border-amber-200' : isRejected ? 'bg-slate-50/50 border-slate-200' : 'bg-purple-50/50 border-purple-100'}`}>
                                 <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                                    <Truck size={18} className={driverActuallyWorked ? 'text-amber-600' : 'text-purple-600'} />
-                                    Vozač koji je obradio zahtev
+                                    <Truck size={18} className={driverActuallyWorked ? 'text-amber-600' : isRejected ? 'text-slate-500' : 'text-purple-600'} />
+                                    {isRejected ? 'Vozač koji je bio dodeljen' : 'Vozač koji je obradio zahtev'}
                                 </p>
 
                                 {driverActuallyWorked ? (
@@ -319,12 +327,14 @@ export const EditProcessedRequestModal = ({ request, wasteTypes = DEFAULT_WASTE_
 
                         {/* Optional note */}
                         <div>
-                            <label className="text-sm font-bold text-slate-700 mb-2 block">Napomena</label>
+                            <label className="text-sm font-bold text-slate-700 mb-2 block">
+                                {isRejected ? 'Razlog odbijanja' : 'Napomena'}
+                            </label>
                             <textarea
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
-                                placeholder="Dodatne informacije o obradi..."
-                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm resize-none bg-slate-50 focus:bg-white transition-colors"
+                                placeholder={isRejected ? "Razlog zašto je zahtev odbijen..." : "Dodatne informacije o obradi..."}
+                                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 outline-none text-sm resize-none transition-colors ${isRejected ? 'border-red-200 bg-red-50/50 focus:ring-red-500/20 focus:border-red-500 focus:bg-white' : 'border-slate-200 bg-slate-50 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white'}`}
                                 rows={3}
                             />
                         </div>

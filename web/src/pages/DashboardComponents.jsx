@@ -27,7 +27,7 @@ export {
 // Re-export utilities
 export { getRemainingTime, getCurrentUrgency } from '../utils/timeUtils';
 export { createIcon, createCustomIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, markerStyles, getStablePosition } from '../utils/mapUtils';
-export { uploadImage } from '../utils/storage';
+export { uploadImage, deleteImage } from '../utils/storage';
 export { getFillLevelColor } from '../utils/styleUtils';
 
 // Re-export common components

@@ -148,7 +148,7 @@ export const WasteTypeClientsModal = ({ wasteType, clients, onClose, onSave }) =
                 <div className="p-4 border-b flex items-center justify-between bg-slate-50 rounded-t-2xl">
                     <div className="flex items-center gap-3">
                         {wasteType.customImage ? (
-                            <img src={wasteType.customImage} alt={wasteType.label} className="w-10 h-10 rounded-lg object-cover" />
+                            <img src={`${wasteType.customImage}${wasteType.customImage.includes('?') ? '&' : '?'}v=${wasteType.updated_at || Date.now()}`} alt={wasteType.label} className="w-10 h-10 rounded-lg object-cover" />
                         ) : (
                             <span className="text-3xl">{wasteType.icon}</span>
                         )}
