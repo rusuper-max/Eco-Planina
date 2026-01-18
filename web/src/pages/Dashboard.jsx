@@ -800,30 +800,51 @@ export default function Dashboard() {
             },
             {
                 label: 'Administracija',
-                icon: Settings,
+                icon: Users,
                 children: [
                     { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
                     { id: 'regions', icon: MapPin, label: 'Filijale', helpKey: 'sidebar-regions' },
-                    { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' },
-                    { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
-                    { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
+                    { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' }
                 ]
-            }
+            },
+            { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
         ];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
-            { id: 'requests', icon: Truck, label: 'Zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
-            { id: 'drivers', icon: Users, label: 'Vozači', helpKey: 'sidebar-drivers' },
-            { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
-            { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' },
-            { id: 'analytics', icon: BarChart3, label: 'Analitika', helpKey: 'sidebar-analytics' },
-            { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
-
-            { id: 'messages', icon: MessageCircle, label: 'Poruke', badge: unreadCount > 0 ? unreadCount : null, helpKey: 'sidebar-messages' },
-            { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' },
-            { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
-            { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' },
-            { id: 'map', icon: MapPin, label: 'Mapa', helpKey: 'sidebar-map' }
+            { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
+            {
+                label: 'Zahtevi',
+                icon: ClipboardList,
+                children: [
+                    { id: 'requests', icon: Truck, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
+                    { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
+                    { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' }
+                ]
+            },
+            {
+                label: 'Ljudstvo',
+                icon: Users,
+                children: [
+                    { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
+                    { id: 'drivers', icon: Truck, label: 'Vozači', helpKey: 'sidebar-drivers' }
+                ]
+            },
+            {
+                label: 'Analitika',
+                icon: BarChart3,
+                children: [
+                    { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
+                    { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
+                ]
+            },
+            {
+                label: 'Podešavanja',
+                icon: Settings,
+                children: [
+                    { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
+                    { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' }
+                ]
+            }
         ];
         // Default: client menu - "Novi zahtev" is the main/home page for clients
         return [
