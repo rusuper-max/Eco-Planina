@@ -46,9 +46,12 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     // Filters
     const [selectedWarehouse, setSelectedWarehouse] = useState('all');
 
+    const isSupervisor = user?.role === 'supervisor';
+    const isManager = user?.role === 'manager';
     const isCompanyAdmin = user?.role === 'company_admin' || user?.is_owner;
     const isAdmin = ['admin', 'developer'].includes(user?.role);
-    const canManage = isCompanyAdmin || isAdmin;
+    const canManage = isCompanyAdmin || isAdmin; // Only company_admin/admin can CREATE/EDIT/DELETE
+    const showDisabledButton = isSupervisor || isManager; // These roles see disabled button
 
     // Load data
     useEffect(() => {
@@ -272,7 +275,7 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
                         <Download size={16} />
                         <span className="hidden sm:inline">Excel</span>
                     </button>
-                    {canManage && (
+                    {canManage ? (
                         <button
                             onClick={() => setShowAddModal(true)}
                             className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5"
@@ -280,7 +283,16 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
                             <Plus size={16} />
                             Novo skladište
                         </button>
-                    )}
+                    ) : showDisabledButton ? (
+                        <button
+                            disabled
+                            title="Ovu funkciju može koristiti samo Admin vaše firme"
+                            className="px-4 py-2 bg-slate-200 text-slate-400 rounded-xl text-sm font-medium cursor-not-allowed flex items-center gap-1.5"
+                        >
+                            <Plus size={16} />
+                            Novo skladište
+                        </button>
+                    ) : null}
                 </div>
             </div>
 

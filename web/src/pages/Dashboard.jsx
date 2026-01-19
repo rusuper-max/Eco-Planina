@@ -97,6 +97,7 @@ export default function Dashboard() {
             developer: 'Developer',
             admin: 'Administrator',
             company_admin: 'Admin firme',
+            supervisor: 'Supervizor',
             manager: 'Menadžer',
             driver: 'Vozač',
             client: 'Klijent'
@@ -236,7 +237,7 @@ export default function Dashboard() {
         try {
             if (userRole === 'admin') {
                 setStats(await getAdminStats());
-            } else if (userRole === 'manager' || userRole === 'client' || userRole === 'company_admin') {
+            } else if (userRole === 'manager' || userRole === 'client' || userRole === 'company_admin' || userRole === 'supervisor') {
                 // Fetch company specific settings - only once
                 // No fallback to hardcoded defaults - show real DB data
                 const companyWasteTypes = await fetchCompanyWasteTypes();
@@ -248,6 +249,17 @@ export default function Dashboard() {
                     setRegions(await fetchCompanyRegions() || []);
                     // Driver assignments are now auto-fetched via DataContext
                     // Fetch drivers for map assignment
+                    await fetchCompanyDrivers();
+                }
+
+                if (userRole === 'supervisor') {
+                    // Supervisor loads similar data to company_admin but filtered by assigned regions
+                    const clientsData = await fetchCompanyClients();
+                    const membersData = await fetchCompanyMembers();
+                    const regionsData = await fetchCompanyRegions();
+                    setClients(clientsData || []);
+                    setRegions(regionsData || []);
+                    setCompanyMembers(membersData || []);
                     await fetchCompanyDrivers();
                 }
 
@@ -272,8 +284,8 @@ export default function Dashboard() {
             setInitialDataLoaded(true);
 
             // Check if user needs to select a region (first login without region)
-            // Only for manager, driver, client - not company_admin
-            if (user?.role && user.role !== 'company_admin' && !user.region_id && companyCode) {
+            // Only for manager, driver, client - not company_admin or supervisor
+            if (user?.role && !['company_admin', 'supervisor'].includes(user.role) && !user.region_id && companyCode) {
                 // Fetch regions to check if company has any
                 const regionsData = await fetchCompanyRegions();
                 if (regionsData && regionsData.length > 0) {
@@ -817,6 +829,56 @@ export default function Dashboard() {
             },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
         ];
+        if (userRole === 'supervisor') return [
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
+            { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
+            {
+                label: 'Zahtevi',
+                icon: ClipboardList,
+                helpKey: 'sidebar-group-requests',
+                children: [
+                    { id: 'requests', icon: Truck, label: 'Aktivni zahtevi', badge: pickupRequests?.filter(r => r.status === 'pending')?.length, helpKey: 'sidebar-requests' },
+                    { id: 'history', icon: History, label: 'Istorija', helpKey: 'sidebar-history' },
+                    { id: 'activity-log', icon: History, label: 'Aktivnosti', helpKey: 'sidebar-activity-log' }
+                ]
+            },
+            {
+                label: 'Ljudstvo',
+                icon: Users,
+                helpKey: 'sidebar-group-people',
+                children: [
+                    { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
+                    { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
+                    { id: 'drivers', icon: Truck, label: 'Vozači', helpKey: 'sidebar-drivers' }
+                ]
+            },
+            {
+                label: 'Skladište',
+                icon: Warehouse,
+                helpKey: 'sidebar-group-inventory',
+                children: [
+                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' }
+                ]
+            },
+            {
+                label: 'Analitika',
+                icon: BarChart3,
+                helpKey: 'sidebar-group-analytics',
+                children: [
+                    { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
+                    { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
+                ]
+            },
+            {
+                label: 'Podešavanja',
+                icon: Settings,
+                helpKey: 'sidebar-group-settings',
+                children: [
+                    { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
+                    { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' }
+                ]
+            }
+        ];
         if (userRole === 'manager') return [
             { id: 'dashboard', icon: LayoutDashboard, label: 'Pregled', helpKey: 'sidebar-dashboard' },
             { id: 'map', icon: Globe, label: 'Mapa', helpKey: 'sidebar-map' },
@@ -881,6 +943,14 @@ export default function Dashboard() {
                 { label: 'Zahtevi', value: p.length, icon: <Truck className="w-6 h-6 text-emerald-600" />, onClick: () => { setUrgencyFilter('all'); setActiveTab('requests'); } },
                 { label: 'Klijenti', value: clients.length, icon: <Users className="w-6 h-6 text-blue-600" />, onClick: () => setActiveTab('clients') },
                 { label: 'Hitni', value: p.filter(r => getCurrentUrgency(r.created_at, r.urgency) === '24h').length, icon: <AlertCircle className="w-6 h-6 text-red-600" />, onClick: () => { setUrgencyFilter('24h'); setActiveTab('requests'); } }
+            ];
+        }
+        if (userRole === 'supervisor') {
+            const p = pickupRequests?.filter(r => r.status === 'pending') || [];
+            return [
+                { label: 'Zahtevi', value: p.length, icon: <Truck className="w-6 h-6 text-emerald-600" />, onClick: () => setActiveTab('requests') },
+                { label: 'Klijenti', value: clients.length, icon: <Users className="w-6 h-6 text-blue-600" />, onClick: () => setActiveTab('clients') },
+                { label: 'Osoblje', value: companyMembers.length, icon: <Users className="w-6 h-6 text-purple-600" />, onClick: () => setActiveTab('staff') }
             ];
         }
         return [{ label: 'Aktivni zahtevi', value: clientRequests?.length || 0, icon: <Truck className="w-6 h-6 text-emerald-600" />, onClick: () => setActiveTab('requests') }];
@@ -1137,7 +1207,7 @@ export default function Dashboard() {
                     toast.error('Greška pri brisanju: ' + (err.message || 'Nepoznata greška'));
                 }
             }} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} clients={clients} wasteTypes={wasteTypes} drivers={companyDrivers} pickupRequests={pending} regions={regions} />;
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} onImport={() => setShowImportClientsModal(true)} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={userRole === 'company_admin'} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
@@ -1183,6 +1253,98 @@ export default function Dashboard() {
                 />
             );
         }
+        // Supervisor - FULL access to assigned regions (like manager but multiple regions)
+        if (userRole === 'supervisor') {
+            if (activeTab === 'requests') return (
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h1 className="text-2xl font-bold">Aktivni zahtevi</h1>
+                            <p className="text-slate-500">Zahtevi iz vaših dodeljenih filijala</p>
+                        </div>
+                        <button
+                            onClick={() => setShowCreateRequestModal(true)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium flex items-center gap-2"
+                        >
+                            <Plus size={18} /> Novi zahtev
+                        </button>
+                    </div>
+                    <ManagerRequestsTable
+                        requests={pending}
+                        wasteTypes={wasteTypes}
+                        onView={setSelectedRequest}
+                        onClientClick={handleClientClick}
+                        assignments={driverAssignments}
+                        drivers={companyDrivers}
+                        onProcess={handleProcessRequest}
+                        onReject={handleRejectRequest}
+                        onAssignDriver={handleQuickAssignDriver}
+                        readOnly={false}
+                    />
+                </div>
+            );
+            if (activeTab === 'staff') return <CompanyStaffPage />;
+            if (activeTab === 'drivers') return <DriverManagement wasteTypes={wasteTypes} />;
+            if (activeTab === 'history') return (
+                <div className="space-y-4">
+                    <h1 className="text-2xl font-bold">Istorija zahteva</h1>
+                    <HistoryTable
+                        requests={processedRequests}
+                        wasteTypes={wasteTypes}
+                        onView={setSelectedRequest}
+                        showDetailedView={true}
+                        drivers={companyDrivers}
+                        onUpdateWeight={handleUpdateProcessedWeight}
+                        onRetroAssignDriver={handleRetroAssignDriver}
+                    />
+                </div>
+            );
+            if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
+            if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={true} />;
+            if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} pickupRequests={pending} regions={regions} />;
+            if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
+            if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
+            if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} onBulkUpdate={handleBulkWasteTypeUpdate} />;
+            if (activeTab === 'map') return (
+                <div className="flex flex-col h-full">
+                    <div className="flex gap-2 p-3 bg-white border-b shrink-0">
+                        <button onClick={() => setMapType('requests')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'requests' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Zahtevi ({pending.length})</button>
+                        <button onClick={() => setMapType('clients')} className={`px-4 py-2 rounded-xl text-sm font-medium ${mapType === 'clients' ? 'bg-emerald-600 text-white' : 'bg-white border'}`}>Klijenti ({clients.length})</button>
+                    </div>
+                    <MapView
+                        requests={pending}
+                        clients={clients}
+                        type={mapType}
+                        onClientLocationEdit={setEditingClientLocation}
+                        wasteTypes={wasteTypes}
+                        drivers={companyDrivers}
+                        onAssignDriver={handleAssignDriverFromMap}
+                        driverAssignments={driverAssignments}
+                        onSetClientLocation={async (clientId, lat, lng) => {
+                            await setClientLocationWithRequests(clientId, lat, lng);
+                            await fetchCompanyClients();
+                        }}
+                    />
+                </div>
+            );
+            // Supervisor Dashboard - Overview Page
+            return (
+                <OverviewPage
+                    onNavigate={(tab, params) => {
+                        setActiveTab(tab);
+                        if (params?.action === 'create') setShowCreateRequestModal(true);
+                        if (params?.selectedId) {
+                            const req = pending.find(r => r.id === params.selectedId);
+                            if (req) setSelectedRequest(req);
+                        }
+                    }}
+                    companyMembers={companyMembers}
+                    processedRequests={processedRequests}
+                    companyDrivers={companyDrivers}
+                />
+            );
+        }
         // Company Admin - bird's eye view of company (no operations)
         if (userRole === 'company_admin') {
             if (activeTab === 'requests') return (
@@ -1205,7 +1367,7 @@ export default function Dashboard() {
             if (activeTab === 'staff') return <CompanyStaffPage />;
             if (activeTab === 'regions') return <RegionsPage />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
-            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} equipment={equipment} pickupRequests={pending} />;
+            if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} equipment={equipment} pickupRequests={pending} regions={regions} />;
             if (activeTab === 'manager-analytics') return (
                 <ManagerAnalyticsPage
                     processedRequests={processedRequests}

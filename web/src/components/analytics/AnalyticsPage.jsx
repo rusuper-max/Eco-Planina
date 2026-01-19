@@ -37,11 +37,12 @@ const getAvailableMonths = (requests) => {
 // Month names in Serbian
 const MONTH_NAMES = ['Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'];
 
-export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [] }) => {
+export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [], regions = [] }) => {
     const [dateRange, setDateRange] = useState('month');
     const [selectedMonth, setSelectedMonth] = useState(''); // Format: "2026-01" for specific month
     const [selectedWasteType, setSelectedWasteType] = useState('all');
     const [selectedClient, setSelectedClient] = useState('all');
+    const [selectedRegion, setSelectedRegion] = useState('all');
 
     // Available months for dropdown
     const availableMonths = useMemo(() => getAvailableMonths(processedRequests), [processedRequests]);
@@ -124,6 +125,9 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
         }
         if (selectedClient !== 'all') {
             filtered = filtered.filter(r => r.client_id === selectedClient || r.client_name === selectedClient);
+        }
+        if (selectedRegion !== 'all') {
+            filtered = filtered.filter(r => r.region_id === selectedRegion);
         }
         return filtered;
     };
@@ -649,6 +653,18 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
+                        {regions.length > 0 && (
+                            <select
+                                value={selectedRegion}
+                                onChange={(e) => setSelectedRegion(e.target.value)}
+                                className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 outline-none bg-white"
+                            >
+                                <option value="all">Sve filijale</option>
+                                {regions.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+                        )}
                         <div className="flex gap-2 ml-2">
                             <button
                                 onClick={() => handleOpenReport('print')}
@@ -668,7 +684,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                     </div>
                 </div>
                 {/* Active filters display */}
-                {(selectedWasteType !== 'all' || selectedClient !== 'all' || selectedMonth) && (
+                {(selectedWasteType !== 'all' || selectedClient !== 'all' || selectedMonth || selectedRegion !== 'all') && (
                     <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                         <span className="text-sm text-slate-500">Aktivni filteri:</span>
                         {selectedMonth && (
@@ -692,6 +708,14 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                             <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                                 {uniqueClients.find(c => c.id === selectedClient)?.name || selectedClient}
                                 <button onClick={() => setSelectedClient('all')} className="hover:text-blue-900">
+                                    <X size={14} />
+                                </button>
+                            </span>
+                        )}
+                        {selectedRegion !== 'all' && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
+                                {regions.find(r => r.id === selectedRegion)?.name || selectedRegion}
+                                <button onClick={() => setSelectedRegion('all')} className="hover:text-orange-900">
                                     <X size={14} />
                                 </button>
                             </span>

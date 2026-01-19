@@ -4,7 +4,7 @@ import { useAuth } from '../../context';
 import {
     Users, Search, Filter, ChevronDown, Edit3, Trash2, MapPin,
     Shield, Truck as TruckIcon, User as UserIcon, Building2,
-    LogIn, Eye, Package, Key, ArrowUp, ArrowDown, AlertTriangle
+    LogIn, Eye, Package, Key, ArrowUp, ArrowDown, AlertTriangle, X, Check, UserCog
 } from 'lucide-react';
 import { EmptyState, RecycleLoader } from '../common';
 import { ResetPasswordModal } from './ResetPasswordModal';
@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 
 // Role configuration
 const ROLE_CONFIG = {
+    supervisor: { label: 'Supervizor', color: 'bg-purple-100 text-purple-700', avatarBg: 'bg-purple-600', icon: UserCog },
     manager: { label: 'Menadzer', color: 'bg-emerald-100 text-emerald-700', avatarBg: 'bg-emerald-600', icon: Shield },
     driver: { label: 'Vozac', color: 'bg-amber-100 text-amber-700', avatarBg: 'bg-amber-600', icon: TruckIcon },
     client: { label: 'Klijent', color: 'bg-blue-100 text-blue-700', avatarBg: 'bg-blue-600', icon: UserIcon }
@@ -36,6 +37,8 @@ export const CompanyStaffPage = () => {
     const [changingRole, setChangingRole] = useState(null);
     const [impersonating, setImpersonating] = useState(null);
     const [resetPasswordModal, setResetPasswordModal] = useState(null);
+    const [promotingToSupervisor, setPromotingToSupervisor] = useState(null); // For supervisor promotion modal
+    const [supervisorRegions, setSupervisorRegions] = useState({}); // {userId: [regionId, ...]} - cached supervisor regions
 
     // Fetch staff and regions
     const fetchData = async () => {
@@ -46,7 +49,7 @@ export const CompanyStaffPage = () => {
                     .from('users')
                     .select('id, name, phone, role, region_id, address, created_at')
                     .eq('company_code', companyCode)
-                    .in('role', ['manager', 'driver', 'client']) // Include clients
+                    .in('role', ['supervisor', 'manager', 'driver', 'client']) // Include supervisor
                     .is('deleted_at', null)
                     .order('role')
                     .order('name'),
@@ -63,6 +66,23 @@ export const CompanyStaffPage = () => {
 
             setStaff(staffRes.data || []);
             setRegions(regionsRes.data || []);
+
+            // Fetch supervisor regions for all supervisors
+            const supervisors = (staffRes.data || []).filter(s => s.role === 'supervisor');
+            if (supervisors.length > 0) {
+                const { data: supRegions } = await supabase
+                    .from('supervisor_regions')
+                    .select('supervisor_id, region_id')
+                    .in('supervisor_id', supervisors.map(s => s.id));
+
+                // Group by supervisor_id
+                const grouped = {};
+                (supRegions || []).forEach(sr => {
+                    if (!grouped[sr.supervisor_id]) grouped[sr.supervisor_id] = [];
+                    grouped[sr.supervisor_id].push(sr.region_id);
+                });
+                setSupervisorRegions(grouped);
+            }
         } catch (error) {
             console.error('Error fetching staff:', error);
             toast.error('Greska pri ucitavanju');
@@ -76,7 +96,7 @@ export const CompanyStaffPage = () => {
     }, [companyCode]);
 
     // Role order for sorting
-    const roleOrder = { manager: 1, driver: 2, client: 3 };
+    const roleOrder = { supervisor: 0, manager: 1, driver: 2, client: 3 };
 
     // Filter and sort staff
     const filteredStaff = useMemo(() => {
@@ -153,9 +173,16 @@ export const CompanyStaffPage = () => {
         }
     };
 
-    // Change role (manager <-> driver)
+    // Change role (manager <-> driver, or demote supervisor to manager)
     const handleChangeRole = async (userId, newRole) => {
-        if (!['manager', 'driver'].includes(newRole)) return;
+        if (!['manager', 'driver', 'supervisor'].includes(newRole)) return;
+
+        // For promotion to supervisor, open modal to select regions
+        if (newRole === 'supervisor') {
+            const member = staff.find(s => s.id === userId);
+            setPromotingToSupervisor(member);
+            return;
+        }
 
         setChangingRole(userId);
         try {
@@ -166,14 +193,114 @@ export const CompanyStaffPage = () => {
 
             if (error) throw error;
 
+            // If demoting from supervisor, remove their region assignments
+            const oldMember = staff.find(s => s.id === userId);
+            if (oldMember?.role === 'supervisor') {
+                await supabase
+                    .from('supervisor_regions')
+                    .delete()
+                    .eq('supervisor_id', userId);
+                // Remove from local cache
+                setSupervisorRegions(prev => {
+                    const copy = { ...prev };
+                    delete copy[userId];
+                    return copy;
+                });
+            }
+
             setStaff(prev => prev.map(s =>
                 s.id === userId ? { ...s, role: newRole } : s
             ));
-            toast.success(`Uloga promenjena u ${newRole === 'manager' ? 'Menadzer' : 'Vozac'}`);
+            toast.success(`Uloga promenjena u ${ROLE_CONFIG[newRole]?.label || newRole}`);
         } catch (error) {
             toast.error('Greska: ' + error.message);
         } finally {
             setChangingRole(null);
+        }
+    };
+
+    // Promote to supervisor with region selection
+    const handlePromoteToSupervisor = async (userId, selectedRegionIds) => {
+        if (!selectedRegionIds || selectedRegionIds.length === 0) {
+            toast.error('Morate izabrati bar jednu filijalu');
+            return;
+        }
+
+        setChangingRole(userId);
+        try {
+            // Update role to supervisor
+            const { error: roleError } = await supabase
+                .from('users')
+                .update({ role: 'supervisor', region_id: null }) // Supervisor doesn't have single region
+                .eq('id', userId);
+
+            if (roleError) throw roleError;
+
+            // Insert supervisor_regions
+            const inserts = selectedRegionIds.map(regionId => ({
+                supervisor_id: userId,
+                region_id: regionId,
+                assigned_by: user.id
+            }));
+
+            const { error: regionsError } = await supabase
+                .from('supervisor_regions')
+                .insert(inserts);
+
+            if (regionsError) throw regionsError;
+
+            // Update local state
+            setStaff(prev => prev.map(s =>
+                s.id === userId ? { ...s, role: 'supervisor', region_id: null } : s
+            ));
+            setSupervisorRegions(prev => ({
+                ...prev,
+                [userId]: selectedRegionIds
+            }));
+
+            toast.success('Korisnik promovisan u Supervizora');
+            setPromotingToSupervisor(null);
+        } catch (error) {
+            toast.error('Greska: ' + error.message);
+        } finally {
+            setChangingRole(null);
+        }
+    };
+
+    // Update supervisor regions (edit assigned regions)
+    const handleUpdateSupervisorRegions = async (userId, selectedRegionIds) => {
+        try {
+            // Delete existing
+            await supabase
+                .from('supervisor_regions')
+                .delete()
+                .eq('supervisor_id', userId);
+
+            // Insert new
+            if (selectedRegionIds.length > 0) {
+                const inserts = selectedRegionIds.map(regionId => ({
+                    supervisor_id: userId,
+                    region_id: regionId,
+                    assigned_by: user.id
+                }));
+
+                const { error } = await supabase
+                    .from('supervisor_regions')
+                    .insert(inserts);
+
+                if (error) throw error;
+            }
+
+            // Update local cache
+            setSupervisorRegions(prev => ({
+                ...prev,
+                [userId]: selectedRegionIds
+            }));
+
+            toast.success('Filijale supervizora azurirane');
+            setPromotingToSupervisor(null);
+        } catch (error) {
+            toast.error('Greska: ' + error.message);
         }
     };
 
@@ -222,10 +349,11 @@ export const CompanyStaffPage = () => {
     // Stats
     const stats = useMemo(() => ({
         total: staff.length,
+        supervisors: staff.filter(s => s.role === 'supervisor').length,
         managers: staff.filter(s => s.role === 'manager').length,
         drivers: staff.filter(s => s.role === 'driver').length,
         clients: staff.filter(s => s.role === 'client').length,
-        unassigned: staff.filter(s => !s.region_id).length
+        unassigned: staff.filter(s => !s.region_id && s.role !== 'supervisor').length // Supervisors have many regions, not one
     }), [staff]);
 
     if (!isCompanyAdmin() && !isAdmin() && user?.role !== 'manager') {
@@ -247,7 +375,7 @@ export const CompanyStaffPage = () => {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                 <div className="bg-white rounded-xl border p-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
@@ -256,6 +384,17 @@ export const CompanyStaffPage = () => {
                         <div>
                             <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
                             <p className="text-xs text-slate-500">Ukupno</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-white rounded-xl border p-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                            <UserCog className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-slate-800">{stats.supervisors}</p>
+                            <p className="text-xs text-slate-500">Supervizora</p>
                         </div>
                     </div>
                 </div>
@@ -312,6 +451,7 @@ export const CompanyStaffPage = () => {
                     className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
                 >
                     <option value="all">Sve uloge</option>
+                    <option value="supervisor">Supervizori</option>
                     <option value="manager">Menadzeri</option>
                     <option value="driver">Vozaci</option>
                     <option value="client">Klijenti</option>
@@ -403,20 +543,57 @@ export const CompanyStaffPage = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                {/* Dropdown for region selection */}
-                                                <select
-                                                    value={member.region_id || ''}
-                                                    onChange={(e) => handleUpdateRegion(member.id, e.target.value || null)}
-                                                    className="text-sm px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none border-purple-200 bg-purple-50 text-purple-700"
-                                                >
-                                                    {regions.map(r => (
-                                                        <option key={r.id} value={r.id}>{r.name}</option>
-                                                    ))}
-                                                </select>
+                                                {/* Supervisor has multiple regions - show as badges with edit button */}
+                                                {member.role === 'supervisor' ? (
+                                                    <div className="flex flex-wrap items-center gap-1">
+                                                        {(supervisorRegions[member.id] || []).length > 0 ? (
+                                                            <>
+                                                                {(supervisorRegions[member.id] || []).slice(0, 2).map(rId => {
+                                                                    const region = regions.find(r => r.id === rId);
+                                                                    return region ? (
+                                                                        <span key={rId} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full">
+                                                                            {region.name}
+                                                                        </span>
+                                                                    ) : null;
+                                                                })}
+                                                                {(supervisorRegions[member.id] || []).length > 2 && (
+                                                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                                                                        +{(supervisorRegions[member.id] || []).length - 2}
+                                                                    </span>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => setPromotingToSupervisor(member)}
+                                                                    className="p-1 text-purple-600 hover:bg-purple-50 rounded"
+                                                                    title="Izmeni filijale"
+                                                                >
+                                                                    <Edit3 size={14} />
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setPromotingToSupervisor(member)}
+                                                                className="text-xs text-purple-600 hover:underline"
+                                                            >
+                                                                Dodeli filijale
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    /* Regular users have single region dropdown */
+                                                    <select
+                                                        value={member.region_id || ''}
+                                                        onChange={(e) => handleUpdateRegion(member.id, e.target.value || null)}
+                                                        className="text-sm px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none border-purple-200 bg-purple-50 text-purple-700"
+                                                    >
+                                                        {regions.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.name}</option>
+                                                        ))}
+                                                    </select>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-end gap-1">
-                                                    {/* Impersonate button - only for managers and drivers */}
+                                                    {/* Impersonate button - for supervisors, managers and drivers */}
                                                     {member.role !== 'client' && (
                                                         <button
                                                             onClick={() => handleImpersonate(member)}
@@ -432,7 +609,7 @@ export const CompanyStaffPage = () => {
                                                         </button>
                                                     )}
 
-                                                    {/* Promote/Demote buttons - only for managers and drivers */}
+                                                    {/* Promote driver to manager */}
                                                     {member.role === 'driver' && (
                                                         <button
                                                             onClick={() => handleChangeRole(member.id, 'manager')}
@@ -447,12 +624,44 @@ export const CompanyStaffPage = () => {
                                                             )}
                                                         </button>
                                                     )}
+
+                                                    {/* Manager: promote to supervisor OR demote to driver */}
                                                     {member.role === 'manager' && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleChangeRole(member.id, 'supervisor')}
+                                                                disabled={changingRole === member.id}
+                                                                className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                                title="Promovi u Supervizora"
+                                                            >
+                                                                {changingRole === member.id ? (
+                                                                    <RecycleLoader size={18} className="animate-spin" />
+                                                                ) : (
+                                                                    <UserCog size={18} />
+                                                                )}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleChangeRole(member.id, 'driver')}
+                                                                disabled={changingRole === member.id}
+                                                                className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                                                title="Degradiraj u Vozaca"
+                                                            >
+                                                                {changingRole === member.id ? (
+                                                                    <RecycleLoader size={18} className="animate-spin" />
+                                                                ) : (
+                                                                    <ArrowDown size={18} />
+                                                                )}
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    {/* Supervisor: demote to manager */}
+                                                    {member.role === 'supervisor' && (
                                                         <button
-                                                            onClick={() => handleChangeRole(member.id, 'driver')}
+                                                            onClick={() => handleChangeRole(member.id, 'manager')}
                                                             disabled={changingRole === member.id}
                                                             className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                                                            title="Degradiraj u Vozaca"
+                                                            title="Degradiraj u Menadzera"
                                                         >
                                                             {changingRole === member.id ? (
                                                                 <RecycleLoader size={18} className="animate-spin" />
@@ -540,6 +749,165 @@ export const CompanyStaffPage = () => {
                     }}
                 />
             )}
+
+            {/* Supervisor Region Selection Modal */}
+            {promotingToSupervisor && (
+                <SupervisorRegionModal
+                    user={promotingToSupervisor}
+                    regions={regions}
+                    initialSelectedRegions={supervisorRegions[promotingToSupervisor.id] || []}
+                    isEditing={promotingToSupervisor.role === 'supervisor'}
+                    onClose={() => setPromotingToSupervisor(null)}
+                    onSave={(selectedRegionIds) => {
+                        if (promotingToSupervisor.role === 'supervisor') {
+                            handleUpdateSupervisorRegions(promotingToSupervisor.id, selectedRegionIds);
+                        } else {
+                            handlePromoteToSupervisor(promotingToSupervisor.id, selectedRegionIds);
+                        }
+                    }}
+                    loading={changingRole === promotingToSupervisor.id}
+                />
+            )}
+        </div>
+    );
+};
+
+/**
+ * SupervisorRegionModal - Modal for selecting supervisor regions
+ */
+const SupervisorRegionModal = ({ user, regions, initialSelectedRegions = [], isEditing, onClose, onSave, loading }) => {
+    const [selectedRegions, setSelectedRegions] = useState(new Set(initialSelectedRegions));
+
+    const toggleRegion = (regionId) => {
+        setSelectedRegions(prev => {
+            const next = new Set(prev);
+            if (next.has(regionId)) {
+                next.delete(regionId);
+            } else {
+                next.add(regionId);
+            }
+            return next;
+        });
+    };
+
+    const toggleAll = () => {
+        if (selectedRegions.size === regions.length) {
+            setSelectedRegions(new Set());
+        } else {
+            setSelectedRegions(new Set(regions.map(r => r.id)));
+        }
+    };
+
+    const handleSave = () => {
+        onSave(Array.from(selectedRegions));
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden">
+                <div className="p-6 border-b flex justify-between items-center bg-purple-50">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center">
+                            <UserCog className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-800">
+                                {isEditing ? 'Izmeni filijale supervizora' : 'Promoviši u Supervizora'}
+                            </h3>
+                            <p className="text-sm text-slate-500">{user.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-purple-100 rounded-lg">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    <p className="text-sm text-slate-600 mb-4">
+                        Izaberite filijale kojima ce supervizor imati pristup:
+                    </p>
+
+                    {/* Select All */}
+                    <button
+                        onClick={toggleAll}
+                        className="w-full mb-3 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                        {selectedRegions.size === regions.length ? (
+                            <>
+                                <X size={16} /> Odznači sve
+                            </>
+                        ) : (
+                            <>
+                                <Check size={16} /> Izaberi sve
+                            </>
+                        )}
+                    </button>
+
+                    {/* Region Checkboxes */}
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {regions.map(region => (
+                            <label
+                                key={region.id}
+                                className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
+                                    selectedRegions.has(region.id)
+                                        ? 'bg-purple-100 border-2 border-purple-400'
+                                        : 'bg-slate-50 border-2 border-transparent hover:bg-slate-100'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selectedRegions.has(region.id)}
+                                    onChange={() => toggleRegion(region.id)}
+                                    className="w-5 h-5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                <div className="flex items-center gap-2">
+                                    <MapPin size={16} className={selectedRegions.has(region.id) ? 'text-purple-600' : 'text-slate-400'} />
+                                    <span className={selectedRegions.has(region.id) ? 'text-purple-700 font-medium' : 'text-slate-700'}>
+                                        {region.name}
+                                    </span>
+                                </div>
+                            </label>
+                        ))}
+                    </div>
+
+                    {regions.length === 0 && (
+                        <div className="text-center py-8 text-slate-500">
+                            Nema kreiranih filijala
+                        </div>
+                    )}
+
+                    {/* Selected count */}
+                    <div className="mt-4 text-sm text-slate-500 text-center">
+                        Izabrano: {selectedRegions.size} od {regions.length} filijala
+                    </div>
+                </div>
+
+                <div className="p-6 border-t bg-slate-50 flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 bg-white border hover:bg-slate-50 rounded-xl font-medium text-slate-700"
+                    >
+                        Otkazi
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={selectedRegions.size === 0 || loading}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl font-medium flex items-center gap-2"
+                    >
+                        {loading ? (
+                            <>
+                                <RecycleLoader size={18} className="animate-spin" />
+                                Cuvanje...
+                            </>
+                        ) : (
+                            <>
+                                <Check size={18} />
+                                {isEditing ? 'Sacuvaj izmene' : 'Promoviši'}
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 };
