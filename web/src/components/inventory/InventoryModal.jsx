@@ -1,17 +1,48 @@
-import { useState } from 'react';
-import { Warehouse, Eye, EyeOff } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Warehouse, Eye, EyeOff, MapPin, Check, X } from 'lucide-react';
 import { Modal } from '../common';
 
 /**
  * InventoryModal - Create/Edit inventory (warehouse)
+ * @param {Object} inventory - Existing inventory for edit mode
+ * @param {Array} regions - All company regions
+ * @param {Array} assignedRegionIds - Region IDs already assigned to this inventory
+ * @param {Function} onClose - Close modal handler
+ * @param {Function} onSave - Save handler (receives {data, selectedRegionIds})
  */
-export const InventoryModal = ({ inventory, onClose, onSave }) => {
+export const InventoryModal = ({ inventory, regions = [], assignedRegionIds = [], onClose, onSave }) => {
     const [name, setName] = useState(inventory?.name || '');
     const [description, setDescription] = useState(inventory?.description || '');
     const [managerVisibility, setManagerVisibility] = useState(inventory?.manager_visibility || 'full');
+    const [selectedRegions, setSelectedRegions] = useState(new Set(assignedRegionIds));
     const [saving, setSaving] = useState(false);
 
     const isEdit = !!inventory;
+
+    // Update selected regions when assignedRegionIds changes
+    useEffect(() => {
+        setSelectedRegions(new Set(assignedRegionIds));
+    }, [assignedRegionIds]);
+
+    const toggleRegion = (regionId) => {
+        setSelectedRegions(prev => {
+            const next = new Set(prev);
+            if (next.has(regionId)) {
+                next.delete(regionId);
+            } else {
+                next.add(regionId);
+            }
+            return next;
+        });
+    };
+
+    const toggleAllRegions = () => {
+        if (selectedRegions.size === regions.length) {
+            setSelectedRegions(new Set());
+        } else {
+            setSelectedRegions(new Set(regions.map(r => r.id)));
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -20,9 +51,12 @@ export const InventoryModal = ({ inventory, onClose, onSave }) => {
         setSaving(true);
         try {
             await onSave({
-                name: name.trim(),
-                description: description.trim(),
-                manager_visibility: managerVisibility
+                data: {
+                    name: name.trim(),
+                    description: description.trim(),
+                    manager_visibility: managerVisibility
+                },
+                selectedRegionIds: Array.from(selectedRegions)
             });
         } finally {
             setSaving(false);
@@ -129,14 +163,59 @@ export const InventoryModal = ({ inventory, onClose, onSave }) => {
                     </div>
                 </div>
 
-                {/* Info box */}
-                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                    <p className="text-xs text-blue-700">
-                        <strong>Napomena:</strong> Nakon kreiranja skladišta, potrebno je dodeliti regione
-                        tom skladištu kroz stranicu Regioni. Samo zahtevi iz dodeljenih regiona će se računati
-                        u ovo skladište.
-                    </p>
-                </div>
+                {/* Regions Selection */}
+                {regions.length > 0 && (
+                    <div>
+                        <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-slate-700">
+                                Filijale koje pripadaju skladištu
+                            </label>
+                            <button
+                                type="button"
+                                onClick={toggleAllRegions}
+                                className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                            >
+                                {selectedRegions.size === regions.length ? 'Odznači sve' : 'Označi sve'}
+                            </button>
+                        </div>
+                        <div className="space-y-2 max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-3">
+                            {regions.map(region => (
+                                <label
+                                    key={region.id}
+                                    className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                                        selectedRegions.has(region.id)
+                                            ? 'bg-emerald-50 border border-emerald-200'
+                                            : 'hover:bg-slate-50 border border-transparent'
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedRegions.has(region.id)}
+                                        onChange={() => toggleRegion(region.id)}
+                                        className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <MapPin size={16} className={selectedRegions.has(region.id) ? 'text-emerald-600' : 'text-slate-400'} />
+                                    <span className={selectedRegions.has(region.id) ? 'text-emerald-700 font-medium' : 'text-slate-700'}>
+                                        {region.name}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Izabrano: {selectedRegions.size} od {regions.length} filijala
+                        </p>
+                    </div>
+                )}
+
+                {/* Info box - only show if no regions */}
+                {regions.length === 0 && (
+                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
+                        <p className="text-xs text-amber-700">
+                            <strong>Napomena:</strong> Nema kreiranih filijala. Prvo kreirajte filijale kroz
+                            Podešavanja → Filijale, zatim ih možete dodeliti ovom skladištu.
+                        </p>
+                    </div>
+                )}
 
                 {/* Buttons */}
                 <div className="flex gap-3 pt-2">

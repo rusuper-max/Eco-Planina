@@ -26,7 +26,8 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
         deleteInventory,
         fetchInventoryItems,
         fetchInventoryTransactions,
-        getInventoryStatsByRegion
+        getInventoryStatsByRegion,
+        assignRegionToInventory
     } = useData();
 
     const [activeTab, setActiveTab] = useState('warehouses'); // warehouses, stock, transactions
@@ -151,9 +152,17 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     }, [filteredStock]);
 
     // Handle create inventory
-    const handleCreate = async (data) => {
+    const handleCreate = async ({ data, selectedRegionIds }) => {
         try {
-            await createInventory(data);
+            const newInventory = await createInventory(data);
+
+            // Assign selected regions to this inventory
+            if (selectedRegionIds && selectedRegionIds.length > 0 && newInventory?.id) {
+                for (const regionId of selectedRegionIds) {
+                    await assignRegionToInventory(regionId, newInventory.id);
+                }
+            }
+
             toast.success('Skladište kreirano');
             setShowAddModal(false);
             loadData();
@@ -163,9 +172,27 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     };
 
     // Handle update inventory
-    const handleUpdate = async (data) => {
+    const handleUpdate = async ({ data, selectedRegionIds }) => {
         try {
             await updateInventory(editingInventory.id, data);
+
+            // Update region assignments
+            // First, unassign all regions currently assigned to this inventory
+            const currentlyAssigned = regions.filter(r => r.inventory_id === editingInventory.id);
+            for (const region of currentlyAssigned) {
+                if (!selectedRegionIds.includes(region.id)) {
+                    await assignRegionToInventory(region.id, null);
+                }
+            }
+
+            // Then assign newly selected regions
+            for (const regionId of selectedRegionIds) {
+                const region = regions.find(r => r.id === regionId);
+                if (region?.inventory_id !== editingInventory.id) {
+                    await assignRegionToInventory(regionId, editingInventory.id);
+                }
+            }
+
             toast.success('Skladište ažurirano');
             setEditingInventory(null);
             loadData();
@@ -586,6 +613,11 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
             {(showAddModal || editingInventory) && (
                 <InventoryModal
                     inventory={editingInventory}
+                    regions={regions}
+                    assignedRegionIds={editingInventory
+                        ? regions.filter(r => r.inventory_id === editingInventory.id).map(r => r.id)
+                        : []
+                    }
                     onClose={() => {
                         setShowAddModal(false);
                         setEditingInventory(null);
