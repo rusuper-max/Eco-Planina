@@ -104,6 +104,7 @@ const ClientViewScreen = ({ navigation }) => {
   const [wasteTypes, setWasteTypes] = useState([]);
   const [loadingWasteTypes, setLoadingWasteTypes] = useState(true);
   const [deletingRequestId, setDeletingRequestId] = useState(null);
+  const [activeTab, setActiveTab] = useState('new'); // 'new' or 'requests'
 
   // Edit profile state
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -392,6 +393,26 @@ const ClientViewScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
+          {/* Tab Selector */}
+          <View style={styles.tabContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'requests' && styles.tabActive]}
+              onPress={() => setActiveTab('requests')}
+            >
+              <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
+                Moji zahtevi {clientRequests.length > 0 && `(${clientRequests.length})`}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'new' && styles.tabActive]}
+              onPress={() => setActiveTab('new')}
+            >
+              <Text style={[styles.tabText, activeTab === 'new' && styles.tabTextActive]}>
+                Novi zahtev
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Processed Notification Banner */}
           {processedNotification && (
             <View style={styles.processedBanner}>
@@ -413,12 +434,17 @@ const ClientViewScreen = ({ navigation }) => {
             </View>
           )}
 
-          {/* Active Requests Section */}
-          {clientRequests.length > 0 && (
+          {/* TAB: Moji zahtevi */}
+          {activeTab === 'requests' && (
             <View style={styles.activeRequestsSection}>
-              <Text style={styles.activeRequestsTitle}>
-                {t('myRequests')} ({clientRequests.length})
-              </Text>
+              {clientRequests.length === 0 ? (
+                <View style={styles.emptyRequests}>
+                  <Text style={styles.emptyRequestsIcon}>📋</Text>
+                  <Text style={styles.emptyRequestsTitle}>Nema aktivnih zahteva</Text>
+                  <Text style={styles.emptyRequestsText}>Kreirajte novi zahtev u tabu "Novi zahtev"</Text>
+                </View>
+              ) : (
+                <>
               {clientRequests.map((request) => (
                 <View key={request.id} style={styles.activeRequestCard}>
                   <View style={styles.requestRow}>
@@ -426,10 +452,15 @@ const ClientViewScreen = ({ navigation }) => {
                       <Text style={styles.requestWasteIcon}>
                         {wasteTypes.find(w => w.id === request.waste_type)?.icon || '📦'}
                       </Text>
-                      <View>
-                        <Text style={styles.requestWasteLabel}>
-                          {request.waste_label || request.waste_type}
-                        </Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          {request.request_code && (
+                            <Text style={styles.requestCodeBadge}>{request.request_code}</Text>
+                          )}
+                          <Text style={styles.requestWasteLabel}>
+                            {request.waste_label || request.waste_type}
+                          </Text>
+                        </View>
                         <Text style={styles.requestDateSmall}>
                           {formatDate(request.created_at)} {formatTime(request.created_at)}
                         </Text>
@@ -483,18 +514,14 @@ const ClientViewScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
               ))}
+                </>
+              )}
             </View>
           )}
 
-          {/* Divider */}
-          {clientRequests.length > 0 && (
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('newRequest')}</Text>
-              <View style={styles.dividerLine} />
-            </View>
-          )}
-
+          {/* TAB: Novi zahtev */}
+          {activeTab === 'new' && (
+            <>
           {/* Waste Type Selection */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('whatToPickup')}</Text>
@@ -636,6 +663,8 @@ const ClientViewScreen = ({ navigation }) => {
               </>
             )}
           </TouchableOpacity>
+            </>
+          )}
 
           <View style={styles.bottomPadding} />
         </ScrollView>
@@ -885,6 +914,60 @@ const styles = StyleSheet.create({
   settingsIcon: {
     fontSize: 22,
   },
+  // Tab styles
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: COLORS.lightGray,
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabActive: {
+    backgroundColor: COLORS.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.mediumGray,
+  },
+  tabTextActive: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  // Empty requests state
+  emptyRequests: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyRequestsIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  emptyRequestsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+    marginBottom: 8,
+  },
+  emptyRequestsText: {
+    fontSize: 14,
+    color: COLORS.mediumGray,
+    textAlign: 'center',
+  },
   // Processed notification banner
   processedBanner: {
     backgroundColor: COLORS.primaryLight,
@@ -969,10 +1052,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.darkGray,
   },
+  requestCodeBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  regionIdBadge: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#7C3AED',
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
   requestDateSmall: {
     fontSize: 11,
     color: COLORS.mediumGray,
-    marginTop: 2,
   },
   requestBadges: {
     flexDirection: 'row',

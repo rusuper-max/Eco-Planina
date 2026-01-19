@@ -159,11 +159,6 @@ export const ClientRequestsView = ({ requests, wasteTypes, onDeleteRequest, onCo
                                                     </span>
                                                 )}
                                                 <h4 className="font-semibold text-slate-800 text-lg">{r.waste_label}</h4>
-                                                {r.region_id && (
-                                                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-600 text-xs font-mono rounded">
-                                                        R: {r.region_id.slice(0, 8)}...
-                                                    </span>
-                                                )}
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                                                 <span className="flex items-center gap-1">
