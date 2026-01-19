@@ -1240,10 +1240,9 @@ export const DataProvider = ({ children }) => {
                 .from('regions')
                 .update({ inventory_id: inventoryId })
                 .eq('id', regionId)
-                .select()
-                .single();
+                .select();
             if (error) throw error;
-            return data;
+            return data?.[0] || null;
         } catch (error) {
             console.error('Error assigning region to inventory:', error);
             throw error;

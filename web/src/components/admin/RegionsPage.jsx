@@ -227,6 +227,7 @@ export const RegionsPage = () => {
                     onDelete={setDeleteConfirm}
                     totalRegions={regions.length}
                     groupedUsers={groupedUsers}
+                    inventories={inventories}
                     onMoveUser={async (userId, targetRegionId) => {
                         await assignUsersToRegion([userId], targetRegionId);
                         toast.success('Korisnik prebačen');
@@ -285,8 +286,15 @@ export const RegionsPage = () => {
 /**
  * Regions List Tab - Grid view of all regions
  */
-const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete, totalRegions, groupedUsers, onMoveUser }) => {
+const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit, onDelete, totalRegions, groupedUsers, onMoveUser, inventories = [] }) => {
     const [expanded, setExpanded] = useState(null);
+
+    // Helper to get inventory name by ID
+    const getInventoryName = (inventoryId) => {
+        if (!inventoryId) return null;
+        const inv = inventories.find(i => i.id === inventoryId);
+        return inv?.name || null;
+    };
 
     if (loading) {
         return (
@@ -335,6 +343,17 @@ const RegionsListTab = ({ regions, loading, searchQuery, onSearchChange, onEdit,
                                             <Users size={14} />
                                             {region.userCount} korisnika
                                         </p>
+                                        {getInventoryName(region.inventory_id) ? (
+                                            <p className="text-xs text-emerald-600 flex items-center gap-1 mt-0.5">
+                                                <Warehouse size={12} />
+                                                {getInventoryName(region.inventory_id)}
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                                                <Warehouse size={12} />
+                                                Bez skladišta
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-1">
