@@ -138,7 +138,7 @@ export default function Dashboard() {
     // Polling fallback - refresh data every 30 seconds to handle tab sleep/missed events
     // Polling fallback - refresh data every 30 seconds to handle tab sleep/missed events
     useEffect(() => {
-        if (!companyCode || (userRole !== 'manager' && userRole !== 'company_admin')) return;
+        if (!companyCode || !['manager', 'supervisor', 'company_admin'].includes(userRole)) return;
 
         const intervalId = setInterval(() => {
             // console.log('DEBUG: Polling refresh...');
@@ -425,7 +425,7 @@ export default function Dashboard() {
                 if (activeTab === 'companies' && companies.length === 0) setCompanies(await fetchAllCompanies());
                 if (activeTab === 'users' && users.length === 0) setUsers(await fetchAllUsers());
                 if (activeTab === 'codes' && masterCodes.length === 0) setMasterCodes(await fetchAllMasterCodes());
-            } else if (userRole === 'manager' || userRole === 'company_admin') {
+            } else if (['manager', 'supervisor', 'company_admin'].includes(userRole)) {
                 if ((activeTab === 'history' || activeTab === 'analytics' || activeTab === 'manager-analytics' || activeTab === 'driver-analytics')) {
                     // Only fetch if history is empty OR explicitly refreshed (handled by page change)
                     // But here we might want to ensure we have data.
@@ -1700,8 +1700,8 @@ export default function Dashboard() {
                                 )}
                             </div>
                         )}
-                        {/* Help Button - samo za manager i company_admin */}
-                        {(userRole === 'manager' || userRole === 'company_admin') && (
+                        {/* Help Button - za manager, supervisor i company_admin */}
+                        {['manager', 'supervisor', 'company_admin'].includes(userRole) && (
                             <HelpButton />
                         )}
                         {/* Notifications */}
@@ -2021,8 +2021,8 @@ export default function Dashboard() {
                     }}
                 />
             )}
-            {/* Help Mode Overlay - samo za manager i company_admin */}
-            {(userRole === 'manager' || userRole === 'company_admin') && (
+            {/* Help Mode Overlay - za manager, supervisor i company_admin */}
+            {['manager', 'supervisor', 'company_admin'].includes(userRole) && (
                 <HelpOverlay />
             )}
 

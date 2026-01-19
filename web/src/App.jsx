@@ -30,6 +30,7 @@ const PublicRoute = ({ children }) => {
   if (user) {
     if (user.role === 'developer' || user.role === 'admin') return <Navigate to="/admin" replace />;
     else if (user.role === 'company_admin') return <Navigate to="/company-admin" replace />;
+    else if (user.role === 'supervisor') return <Navigate to="/supervisor" replace />;
     else if (user.role === 'manager') return <Navigate to="/manager" replace />;
     else if (user.role === 'driver') return <Navigate to="/driver" replace />;
     else return <Navigate to="/client" replace />;
@@ -45,6 +46,7 @@ function AppRoutes() {
       <Route path="/debug" element={<Debug />} />
       <Route path="/admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/company-admin" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/supervisor" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/manager" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/driver" element={<ProtectedRoute><DriverDashboard /></ProtectedRoute>} />
       <Route path="/client" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

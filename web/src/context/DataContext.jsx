@@ -20,6 +20,39 @@ export const DataProvider = ({ children }) => {
     const [driverAssignments, setDriverAssignments] = useState([]); // All active assignments for company
     const [driverLocations, setDriverLocations] = useState([]); // Real-time driver locations
     const [processedNotification, setProcessedNotification] = useState(null);
+    const [supervisorRegionIds, setSupervisorRegionIds] = useState([]); // Region IDs for supervisor role
+
+    // Fetch supervisor's assigned regions
+    const fetchSupervisorRegions = async () => {
+        if (!user || user.role !== 'supervisor') {
+            setSupervisorRegionIds([]);
+            return [];
+        }
+        try {
+            const { data, error } = await supabase
+                .from('supervisor_regions')
+                .select('region_id')
+                .eq('supervisor_id', user.id);
+
+            if (error) throw error;
+            const regionIds = (data || []).map(r => r.region_id);
+            setSupervisorRegionIds(regionIds);
+            return regionIds;
+        } catch (error) {
+            console.error('Error fetching supervisor regions:', error);
+            setSupervisorRegionIds([]);
+            return [];
+        }
+    };
+
+    // Load supervisor regions when user changes
+    useEffect(() => {
+        if (user?.role === 'supervisor') {
+            fetchSupervisorRegions();
+        } else {
+            setSupervisorRegionIds([]);
+        }
+    }, [user?.id, user?.role]);
 
     // Real-time subscriptions for pickup requests and driver assignments
     useEffect(() => {
@@ -59,7 +92,7 @@ export const DataProvider = ({ children }) => {
                 // Tab is now visible - refresh data
                 fetchPickupRequests(companyCode);
                 fetchDriverAssignments(companyCode);
-                if (['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
+                if (['manager', 'supervisor', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
                     fetchDriverLocations(companyCode);
                 }
             }
@@ -69,7 +102,7 @@ export const DataProvider = ({ children }) => {
             // Window regained focus - refresh data
             fetchPickupRequests(companyCode);
             fetchDriverAssignments(companyCode);
-            if (['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
+            if (['manager', 'supervisor', 'company_admin', 'admin', 'developer'].includes(user?.role)) {
                 fetchDriverLocations(companyCode);
             }
         };
@@ -85,7 +118,7 @@ export const DataProvider = ({ children }) => {
 
     // Real-time subscriptions for driver locations
     useEffect(() => {
-        if (!companyCode || !['manager', 'company_admin', 'admin', 'developer'].includes(user?.role)) return;
+        if (!companyCode || !['manager', 'supervisor', 'company_admin', 'admin', 'developer'].includes(user?.role)) return;
         fetchDriverLocations(companyCode);
 
         const channelLocations = supabase
@@ -268,9 +301,12 @@ export const DataProvider = ({ children }) => {
                 .order('created_at', { ascending: false });
 
             // Menadžeri vide samo zahteve iz svoje filijale
+            // Supervizori vide zahteve iz svih svojih dodeljenih filijala
             // Company admin, admin i developer vide sve zahteve
             if (user?.role === 'manager' && user?.region_id) {
                 query = query.eq('region_id', user.region_id);
+            } else if (user?.role === 'supervisor' && supervisorRegionIds.length > 0) {
+                query = query.in('region_id', supervisorRegionIds);
             }
 
             const { data, error } = await query;
@@ -397,9 +433,12 @@ export const DataProvider = ({ children }) => {
                 .order('name');
 
             // Menadžeri vide samo klijente iz svoje filijale
+            // Supervizori vide klijente iz svih svojih dodeljenih filijala
             // Company admin, admin i developer vide sve klijente
             if (user?.role === 'manager' && user?.region_id) {
                 query = query.eq('region_id', user.region_id);
+            } else if (user?.role === 'supervisor' && supervisorRegionIds.length > 0) {
+                query = query.in('region_id', supervisorRegionIds);
             }
 
             const { data, error } = await query;
@@ -414,12 +453,20 @@ export const DataProvider = ({ children }) => {
     const fetchCompanyMembers = async () => {
         if (!companyCode) return [];
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from('users')
                 .select('*, region:regions(id, name)')
                 .eq('company_code', companyCode)
                 .is('deleted_at', null)
                 .order('role', { ascending: false });
+
+            // Supervizori vide samo osoblje iz svojih dodeljenih filijala
+            // Company admin, admin i developer vide sve
+            if (user?.role === 'supervisor' && supervisorRegionIds.length > 0) {
+                query = query.in('region_id', supervisorRegionIds);
+            }
+
+            const { data, error } = await query;
             if (error) throw error;
             return data || [];
         } catch (error) {
@@ -439,8 +486,11 @@ export const DataProvider = ({ children }) => {
                 .order('processed_at', { ascending: false });
 
             // RLS filter is strict, but manual filtering doesn't hurt
+            // Supervizori vide obrađene zahteve iz svih svojih dodeljenih filijala
             if (user?.role === 'manager' && user?.region_id) {
                 query = query.eq('region_id', user.region_id);
+            } else if (user?.role === 'supervisor' && supervisorRegionIds.length > 0) {
+                query = query.in('region_id', supervisorRegionIds);
             }
 
             // Apply filters
@@ -529,10 +579,10 @@ export const DataProvider = ({ children }) => {
         }
     };
 
-    // Manager creates request on behalf of a client (phone call scenario)
+    // Manager/Supervisor creates request on behalf of a client (phone call scenario)
     const createRequestForClient = async (requestData) => {
         if (!user || !companyCode) throw new Error('Niste prijavljeni ili nemate firmu');
-        if (user.role !== 'manager' && user.role !== 'company_admin') {
+        if (!['manager', 'supervisor', 'company_admin'].includes(user.role)) {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
         try {
@@ -714,7 +764,7 @@ export const DataProvider = ({ children }) => {
     // Uses RPC function that updates both users and pickup_requests in one atomic operation
     const setClientLocationWithRequests = async (clientId, latitude, longitude) => {
         if (!user) throw new Error('Niste prijavljeni');
-        if (!['manager', 'company_admin', 'admin', 'developer'].includes(user.role)) {
+        if (!['manager', 'supervisor', 'company_admin', 'admin', 'developer'].includes(user.role)) {
             throw new Error('Nemate dozvolu za ovu akciju');
         }
         const latNum = typeof latitude === 'string' ? parseFloat(latitude) : latitude;
