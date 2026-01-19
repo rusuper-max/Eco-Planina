@@ -29,7 +29,6 @@ const StatsCards = ({ stats }) => {
     {
       label: 'Obrađeno danas',
       value: processedToday,
-      value: processedToday,
       trend: trend, // Now expects a number
       trendLabel: trend !== null ? `${Math.abs(trend)}%` : null,
       trendColor: trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-red-600' : 'text-slate-400',
