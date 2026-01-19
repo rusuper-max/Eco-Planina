@@ -611,6 +611,7 @@ export const DataProvider = ({ children }) => {
                 .select(`
                     id,
                     name,
+                    inventory_id,
                     created_at,
                     users:users(count)
                 `)
@@ -1143,7 +1144,7 @@ export const DataProvider = ({ children }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, label, icon)
+                    waste_type:waste_type_id(id, name, icon)
                 `);
 
             if (inventoryId) {
@@ -1172,7 +1173,7 @@ export const DataProvider = ({ children }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, label, icon),
+                    waste_type:waste_type_id(id, name, icon),
                     region:region_id(id, name)
                 `)
                 .order('created_at', { ascending: false });
@@ -1235,14 +1236,15 @@ export const DataProvider = ({ children }) => {
 
     // Assign a region to an inventory
     const assignRegionToInventory = async (regionId, inventoryId) => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
         try {
-            const { data, error } = await supabase
-                .from('regions')
-                .update({ inventory_id: inventoryId })
-                .eq('id', regionId)
-                .select();
+            const { data, error } = await supabase.rpc('assign_region_inventory', {
+                p_region_id: regionId,
+                p_inventory_id: inventoryId ?? null
+            });
             if (error) throw error;
-            return data?.[0] || null;
+            if (!data) throw new Error('Dodela nije sačuvana');
+            return data; // Returns updated region
         } catch (error) {
             console.error('Error assigning region to inventory:', error);
             throw error;

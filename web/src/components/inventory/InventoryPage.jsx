@@ -17,7 +17,7 @@ import * as XLSX from 'xlsx';
  * For company_admin: full CRUD on warehouses + view all
  * For manager: view only (warehouse they belong to)
  */
-export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
+export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) => {
     const { user } = useAuth();
     const {
         fetchInventories,
@@ -27,13 +27,15 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
         fetchInventoryItems,
         fetchInventoryTransactions,
         getInventoryStatsByRegion,
-        assignRegionToInventory
+        assignRegionToInventory,
+        fetchCompanyRegions
     } = useData();
 
     const [activeTab, setActiveTab] = useState('warehouses'); // warehouses, stock, transactions
     const [inventories, setInventories] = useState([]);
     const [inventoryItems, setInventoryItems] = useState([]);
     const [transactions, setTransactions] = useState([]);
+    const [regions, setRegions] = useState(propRegions);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -62,14 +64,16 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [invData, itemsData, txData] = await Promise.all([
+            const [invData, itemsData, txData, regionsData] = await Promise.all([
                 fetchInventories(),
                 fetchInventoryItems(),
-                fetchInventoryTransactions({ limit: 100 })
+                fetchInventoryTransactions({ limit: 100 }),
+                fetchCompanyRegions()
             ]);
             setInventories(invData);
             setInventoryItems(itemsData);
             setTransactions(txData);
+            setRegions(regionsData || []);
         } catch (err) {
             console.error('Error loading inventory data:', err);
             toast.error('Greška pri učitavanju podataka');
@@ -154,12 +158,18 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     // Handle create inventory
     const handleCreate = async ({ data, selectedRegionIds }) => {
         try {
+            console.log('Creating inventory with data:', data);
+            console.log('Selected region IDs:', selectedRegionIds);
+
             const newInventory = await createInventory(data);
+            console.log('Created inventory:', newInventory);
 
             // Assign selected regions to this inventory
             if (selectedRegionIds && selectedRegionIds.length > 0 && newInventory?.id) {
                 for (const regionId of selectedRegionIds) {
-                    await assignRegionToInventory(regionId, newInventory.id);
+                    console.log(`Assigning region ${regionId} to inventory ${newInventory.id}`);
+                    const result = await assignRegionToInventory(regionId, newInventory.id);
+                    console.log('Assignment result:', result);
                 }
             }
 
@@ -167,6 +177,7 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
             setShowAddModal(false);
             loadData();
         } catch (err) {
+            console.error('Error in handleCreate:', err);
             toast.error('Greška: ' + err.message);
         }
     };
@@ -174,14 +185,21 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
     // Handle update inventory
     const handleUpdate = async ({ data, selectedRegionIds }) => {
         try {
+            console.log('Updating inventory with data:', data);
+            console.log('Selected region IDs:', selectedRegionIds);
+
             await updateInventory(editingInventory.id, data);
 
             // Update region assignments
             // First, unassign all regions currently assigned to this inventory
             const currentlyAssigned = regions.filter(r => r.inventory_id === editingInventory.id);
+            console.log('Currently assigned regions:', currentlyAssigned.map(r => r.id));
+
             for (const region of currentlyAssigned) {
                 if (!selectedRegionIds.includes(region.id)) {
-                    await assignRegionToInventory(region.id, null);
+                    console.log(`Unassigning region ${region.id}`);
+                    const result = await assignRegionToInventory(region.id, null);
+                    console.log('Unassign result:', result);
                 }
             }
 
@@ -189,7 +207,9 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
             for (const regionId of selectedRegionIds) {
                 const region = regions.find(r => r.id === regionId);
                 if (region?.inventory_id !== editingInventory.id) {
-                    await assignRegionToInventory(regionId, editingInventory.id);
+                    console.log(`Assigning region ${regionId} to inventory ${editingInventory.id}`);
+                    const result = await assignRegionToInventory(regionId, editingInventory.id);
+                    console.log('Assignment result:', result);
                 }
             }
 
@@ -197,6 +217,7 @@ export const InventoryPage = ({ wasteTypes = [], regions = [] }) => {
             setEditingInventory(null);
             loadData();
         } catch (err) {
+            console.error('Error in handleUpdate:', err);
             toast.error('Greška: ' + err.message);
         }
     };
