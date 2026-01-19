@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Warehouse, Package, Plus, ArrowDownToLine, ArrowUpFromLine,
     TrendingUp, Scale, MapPin, Calendar, ChevronDown, ChevronUp,
-    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw
+    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
 import { Modal, EmptyState, RecycleLoader } from '../common';
 import { InventoryModal } from './InventoryModal';
 import { InventoryTransactions } from './InventoryTransactions';
+import { OutboundTab } from './OutboundTab';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -28,13 +29,20 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         fetchInventoryTransactions,
         getInventoryStatsByRegion,
         assignRegionToInventory,
-        fetchCompanyRegions
+        fetchCompanyRegions,
+        // Outbound
+        fetchOutbounds,
+        createOutbound,
+        sendOutbound,
+        confirmOutbound,
+        cancelOutbound
     } = useData();
 
-    const [activeTab, setActiveTab] = useState('warehouses'); // warehouses, stock, transactions
+    const [activeTab, setActiveTab] = useState('warehouses'); // warehouses, stock, transactions, outbound
     const [inventories, setInventories] = useState([]);
     const [inventoryItems, setInventoryItems] = useState([]);
     const [transactions, setTransactions] = useState([]);
+    const [outbounds, setOutbounds] = useState([]);
     const [regions, setRegions] = useState(propRegions);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -64,16 +72,18 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     const loadData = async () => {
         setLoading(true);
         try {
-            const [invData, itemsData, txData, regionsData] = await Promise.all([
+            const [invData, itemsData, txData, regionsData, outboundsData] = await Promise.all([
                 fetchInventories(),
                 fetchInventoryItems(),
                 fetchInventoryTransactions({ limit: 100 }),
-                fetchCompanyRegions()
+                fetchCompanyRegions(),
+                fetchOutbounds({ limit: 100 })
             ]);
             setInventories(invData);
             setInventoryItems(itemsData);
             setTransactions(txData);
             setRegions(regionsData || []);
+            setOutbounds(outboundsData || []);
         } catch (err) {
             console.error('Error loading inventory data:', err);
             toast.error('Greška pri učitavanju podataka');
@@ -129,11 +139,15 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         return inventoryItems.filter(item => item.inventory_id === selectedWarehouse);
     }, [inventoryItems, selectedWarehouse]);
 
-    // Aggregate stock by waste type
+    // Aggregate stock by waste type (filter out zero quantities)
     const stockByWasteType = useMemo(() => {
         const result = {};
         filteredStock.forEach(item => {
             const wtId = item.waste_type_id;
+            const qty = parseFloat(item.quantity_kg) || 0;
+            // Skip items with zero or negative quantity
+            if (qty <= 0) return;
+
             if (!result[wtId]) {
                 result[wtId] = {
                     waste_type: item.waste_type,
@@ -141,13 +155,16 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     warehouses: []
                 };
             }
-            result[wtId].total_kg += parseFloat(item.quantity_kg) || 0;
+            result[wtId].total_kg += qty;
             result[wtId].warehouses.push({
                 inventory: item.inventory,
                 quantity_kg: item.quantity_kg
             });
         });
-        return Object.values(result).sort((a, b) => b.total_kg - a.total_kg);
+        // Filter out any that ended up with zero total
+        return Object.values(result)
+            .filter(item => item.total_kg > 0)
+            .sort((a, b) => b.total_kg - a.total_kg);
     }, [filteredStock]);
 
     // Total stock
@@ -395,10 +412,11 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-slate-200 pb-2">
+            <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
                 {[
                     { id: 'warehouses', label: 'Skladišta', icon: Warehouse },
                     { id: 'stock', label: 'Stanje', icon: Package },
+                    { id: 'outbound', label: 'Izlazi', icon: ArrowUpFromLine },
                     { id: 'transactions', label: 'Transakcije', icon: TrendingUp }
                 ].map(tab => (
                     <button
@@ -618,6 +636,21 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         </div>
                     )}
                 </div>
+            )}
+
+            {activeTab === 'outbound' && (
+                <OutboundTab
+                    outbounds={outbounds}
+                    inventories={inventories}
+                    wasteTypes={wasteTypes}
+                    inventoryItems={inventoryItems}
+                    canManage={canManage || isSupervisor || isManager}
+                    onCreateOutbound={createOutbound}
+                    onSendOutbound={sendOutbound}
+                    onConfirmOutbound={confirmOutbound}
+                    onCancelOutbound={cancelOutbound}
+                    onRefresh={loadData}
+                />
             )}
 
             {activeTab === 'transactions' && (

@@ -21,7 +21,8 @@ export {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Bell, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network, UserCheck, ClipboardList, Warehouse
+    Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network, UserCheck, ClipboardList, Warehouse,
+    ArrowUpFromLine, TrendingUp
 } from 'lucide-react';
 
 // Re-export utilities
@@ -87,7 +88,7 @@ export {
 export { AnalyticsPage, ManagerAnalyticsPage, DriverAnalyticsPage } from '../components/analytics';
 
 // Re-export inventory components
-export { InventoryPage } from '../components/inventory';
+export { InventoryPage, OutboundPage, TransactionsPage } from '../components/inventory';
 
 // Re-export vehicles components
 export { VehiclesPage } from '../components/vehicles';

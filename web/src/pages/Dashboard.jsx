@@ -13,7 +13,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList, RecycleLoader, Warehouse,
+    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList, RecycleLoader, Warehouse, ArrowUpFromLine, TrendingUp,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -33,7 +33,9 @@ import {
     CompanySettingsPage,
     ActivityLogPage,
     InventoryPage,
-    VehiclesPage
+    VehiclesPage,
+    OutboundPage,
+    TransactionsPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 import DriverDashboard from './DriverDashboard';
@@ -825,7 +827,9 @@ export default function Dashboard() {
                 icon: Warehouse,
                 helpKey: 'sidebar-group-inventory',
                 children: [
-                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' },
+                    { id: 'inventory', icon: Package, label: 'Stanje', helpKey: 'sidebar-inventory' },
+                    { id: 'outbound', icon: ArrowUpFromLine, label: 'Izlazi', helpKey: 'sidebar-outbound' },
+                    { id: 'transactions', icon: TrendingUp, label: 'Transakcije', helpKey: 'sidebar-transactions' },
                     { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' }
                 ]
             },
@@ -871,7 +875,9 @@ export default function Dashboard() {
                 icon: Warehouse,
                 helpKey: 'sidebar-group-inventory',
                 children: [
-                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' },
+                    { id: 'inventory', icon: Package, label: 'Stanje', helpKey: 'sidebar-inventory' },
+                    { id: 'outbound', icon: ArrowUpFromLine, label: 'Izlazi', helpKey: 'sidebar-outbound' },
+                    { id: 'transactions', icon: TrendingUp, label: 'Transakcije', helpKey: 'sidebar-transactions' },
                     { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' }
                 ]
             },
@@ -917,11 +923,21 @@ export default function Dashboard() {
                 ]
             },
             {
+                label: 'Skladište',
+                icon: Warehouse,
+                helpKey: 'sidebar-group-inventory',
+                children: [
+                    { id: 'inventory', icon: Package, label: 'Stanje', helpKey: 'sidebar-inventory' },
+                    { id: 'outbound', icon: ArrowUpFromLine, label: 'Izlazi', helpKey: 'sidebar-outbound' },
+                    { id: 'transactions', icon: TrendingUp, label: 'Transakcije', helpKey: 'sidebar-transactions' },
+                    { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' }
+                ]
+            },
+            {
                 label: 'Podešavanja',
                 icon: Settings,
                 helpKey: 'sidebar-group-settings',
                 children: [
-                    { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' },
                     { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
                     { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' }
                 ]
@@ -1244,6 +1260,10 @@ export default function Dashboard() {
                 </div>
             );
 
+            if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'outbound') return <OutboundPage wasteTypes={wasteTypes} />;
+            if (activeTab === 'transactions') return <TransactionsPage wasteTypes={wasteTypes} />;
+
             // New Overview Page for manager dashboard
             return (
                 <OverviewPage
@@ -1330,6 +1350,8 @@ export default function Dashboard() {
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={true} />;
             if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'outbound') return <OutboundPage wasteTypes={wasteTypes} />;
+            if (activeTab === 'transactions') return <TransactionsPage wasteTypes={wasteTypes} />;
             if (activeTab === 'vehicles') return <VehiclesPage userRole={userRole} />;
             if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
             if (activeTab === 'manager-analytics') return (
@@ -1492,6 +1514,8 @@ export default function Dashboard() {
             );
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'outbound') return <OutboundPage wasteTypes={wasteTypes} />;
+            if (activeTab === 'transactions') return <TransactionsPage wasteTypes={wasteTypes} />;
             if (activeTab === 'vehicles') return <VehiclesPage userRole={userRole} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">

@@ -130,12 +130,17 @@ export const InventoryTransactions = ({
         });
     };
 
-    // Source type label
+    // Source type label (srpski)
     const getSourceLabel = (sourceType) => {
         const labels = {
             'processed_request': 'Obrađen zahtev',
+            'izlaz': 'Izlaz',
+            'kalo': 'Kalo',
+            'korekcija': 'Korekcija',
+            // Legacy (stare vrednosti)
             'shipment': 'Isporuka',
-            'adjustment': 'Korekcija'
+            'adjustment': 'Korekcija',
+            'outbound': 'Izlaz'
         };
         return labels[sourceType] || sourceType;
     };
@@ -401,9 +406,13 @@ export const InventoryTransactions = ({
                                                 <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
                                                     t.source_type === 'processed_request'
                                                         ? 'bg-blue-100 text-blue-700'
-                                                        : t.source_type === 'adjustment'
+                                                        : t.source_type === 'izlaz' || t.source_type === 'outbound'
+                                                        ? 'bg-purple-100 text-purple-700'
+                                                        : t.source_type === 'kalo'
+                                                        ? 'bg-orange-100 text-orange-700'
+                                                        : t.source_type === 'korekcija' || t.source_type === 'adjustment'
                                                         ? 'bg-amber-100 text-amber-700'
-                                                        : 'bg-purple-100 text-purple-700'
+                                                        : 'bg-slate-100 text-slate-700'
                                                 }`}>
                                                     {getSourceLabel(t.source_type)}
                                                 </span>
