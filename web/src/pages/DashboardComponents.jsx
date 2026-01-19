@@ -89,6 +89,9 @@ export { AnalyticsPage, ManagerAnalyticsPage, DriverAnalyticsPage } from '../com
 // Re-export inventory components
 export { InventoryPage } from '../components/inventory';
 
+// Re-export vehicles components
+export { VehiclesPage } from '../components/vehicles';
+
 // Default waste types constant (kept for backward compatibility)
 export const WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },

@@ -32,7 +32,8 @@ import {
     RegionNodeEditor,
     CompanySettingsPage,
     ActivityLogPage,
-    InventoryPage
+    InventoryPage,
+    VehiclesPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 import DriverDashboard from './DriverDashboard';
@@ -824,7 +825,8 @@ export default function Dashboard() {
                 icon: Warehouse,
                 helpKey: 'sidebar-group-inventory',
                 children: [
-                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' }
+                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' },
+                    { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' }
                 ]
             },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
@@ -843,13 +845,25 @@ export default function Dashboard() {
                 ]
             },
             {
+                label: 'Analitika',
+                icon: BarChart3,
+                helpKey: 'sidebar-group-analytics',
+                children: [
+                    { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
+                    { id: 'manager-analytics', icon: UserCheck, label: 'Učinak menadžera', helpKey: 'sidebar-manager-analytics' },
+                    { id: 'driver-analytics', icon: Truck, label: 'Učinak vozača', helpKey: 'sidebar-driver-analytics' },
+                    { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
+                ]
+            },
+            {
                 label: 'Ljudstvo',
                 icon: Users,
                 helpKey: 'sidebar-group-people',
                 children: [
                     { id: 'staff', icon: Users, label: 'Osoblje', helpKey: 'sidebar-staff' },
                     { id: 'clients', icon: Building2, label: 'Klijenti', helpKey: 'sidebar-clients' },
-                    { id: 'drivers', icon: Truck, label: 'Vozači', helpKey: 'sidebar-drivers' }
+                    { id: 'drivers', icon: Truck, label: 'Vozači', helpKey: 'sidebar-drivers' },
+                    { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' }
                 ]
             },
             {
@@ -857,16 +871,8 @@ export default function Dashboard() {
                 icon: Warehouse,
                 helpKey: 'sidebar-group-inventory',
                 children: [
-                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' }
-                ]
-            },
-            {
-                label: 'Analitika',
-                icon: BarChart3,
-                helpKey: 'sidebar-group-analytics',
-                children: [
-                    { id: 'analytics', icon: BarChart3, label: 'Pregled', helpKey: 'sidebar-analytics' },
-                    { id: 'print', icon: Printer, label: 'Štampaj/Export', helpKey: 'sidebar-print' }
+                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' },
+                    { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' }
                 ]
             },
             {
@@ -915,6 +921,7 @@ export default function Dashboard() {
                 icon: Settings,
                 helpKey: 'sidebar-group-settings',
                 children: [
+                    { id: 'vehicles', icon: Truck, label: 'Kamioni', helpKey: 'sidebar-vehicles' },
                     { id: 'equipment', icon: Box, label: 'Oprema', helpKey: 'sidebar-equipment' },
                     { id: 'wastetypes', icon: Recycle, label: 'Vrste robe', helpKey: 'sidebar-wastetypes' }
                 ]
@@ -1213,6 +1220,7 @@ export default function Dashboard() {
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
             if (activeTab === 'wastetypes') return <WasteTypesManagement wasteTypes={wasteTypes} onAdd={handleAddWasteType} onDelete={handleDeleteWasteType} onEdit={handleEditWasteType} clients={clients} onUpdateClientWasteTypes={handleUpdateClientWasteTypes} onBulkUpdate={handleBulkWasteTypeUpdate} />;
+            if (activeTab === 'vehicles') return <VehiclesPage userRole={userRole} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">
                     <div className="flex gap-2 p-3 bg-white border-b shrink-0">
@@ -1288,20 +1296,70 @@ export default function Dashboard() {
             if (activeTab === 'history') return (
                 <div className="space-y-4">
                     <h1 className="text-2xl font-bold">Istorija zahteva</h1>
+                    <p className="text-slate-500">Kliknite na strelicu za prikaz timeline-a akcija za svaki zahtev</p>
                     <HistoryTable
                         requests={processedRequests}
                         wasteTypes={wasteTypes}
                         onView={setSelectedRequest}
                         showDetailedView={true}
                         drivers={companyDrivers}
-                        onUpdateWeight={handleUpdateProcessedWeight}
-                        onRetroAssignDriver={handleRetroAssignDriver}
+                        onAssignDriverToProcessed={handleAssignDriverToProcessed}
+                        onEdit={async (id, updates) => {
+                            try {
+                                await updateProcessedRequest(id, updates);
+                                const result = await fetchProcessedRequests({ page: historyPage });
+                                setProcessedRequests(result.data || []);
+                            } catch (err) {
+                                toast.error('Greška pri ažuriranju: ' + err.message);
+                            }
+                        }}
+                        onDelete={async (id) => {
+                            const previous = processedRequests;
+                            setProcessedRequests(prev => prev.filter(r => r.id !== id));
+                            try {
+                                await deleteProcessedRequest(id);
+                                toast.success('Zahtev je obrisan iz istorije');
+                            } catch (err) {
+                                setProcessedRequests(previous);
+                                toast.error('Greška pri brisanju: ' + (err.message || 'Nepoznata greška'));
+                            }
+                        }}
                     />
                 </div>
             );
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'clients') return <ClientsTable clients={clients} onView={setSelectedClient} onDelete={handleDeleteClient} onEditLocation={setEditingClientLocation} onEditEquipment={setEditingClientEquipment} equipment={equipment} wasteTypes={wasteTypes} regions={regions} showRegionColumn={true} />;
             if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'vehicles') return <VehiclesPage userRole={userRole} />;
+            if (activeTab === 'visual') return <RegionNodeEditor fullscreen={false} />;
+            if (activeTab === 'manager-analytics') return (
+                <ManagerAnalyticsPage
+                    processedRequests={processedRequests}
+                    members={companyMembers}
+                    wasteTypes={wasteTypes}
+                    driverAssignments={driverAssignments}
+                    onResetStats={async () => {
+                        await resetManagerAnalytics();
+                        const fresh = await fetchProcessedRequests();
+                        setProcessedRequests(fresh);
+                        toast.success('Statistika je uspešno resetovana');
+                    }}
+                />
+            );
+            if (activeTab === 'driver-analytics') return (
+                <DriverAnalyticsPage
+                    driverAssignments={driverAssignments}
+                    drivers={companyDrivers}
+                    wasteTypes={wasteTypes}
+                    processedRequests={processedRequests}
+                    onResetStats={async () => {
+                        await resetManagerAnalytics();
+                        const fresh = await fetchProcessedRequests();
+                        setProcessedRequests(fresh);
+                        toast.success('Statistika je resetovana');
+                    }}
+                />
+            );
             if (activeTab === 'analytics') return <AnalyticsPage processedRequests={processedRequests} wasteTypes={wasteTypes} clients={clients} drivers={companyDrivers} pickupRequests={pending} regions={regions} />;
             if (activeTab === 'print') return <PrintExport clients={clients} requests={pending} processedRequests={processedRequests} wasteTypes={wasteTypes} onClientClick={handleClientClick} />;
             if (activeTab === 'equipment') return <EquipmentManagement equipment={equipment} onAdd={handleAddEquipment} onAssign={handleAssignEquipment} onDelete={handleDeleteEquipment} onEdit={handleEditEquipment} clients={clients} />;
@@ -1434,6 +1492,7 @@ export default function Dashboard() {
             );
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
             if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+            if (activeTab === 'vehicles') return <VehiclesPage userRole={userRole} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">
                     <MapView

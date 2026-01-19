@@ -152,13 +152,18 @@ export const ClientRequestsView = ({ requests, wasteTypes, onDeleteRequest, onCo
                                             {wasteTypes.find(w => w.id === r.waste_type)?.icon || '📦'}
                                         </div>
                                         <div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 {r.request_code && (
                                                     <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 text-xs font-mono rounded font-medium">
                                                         {r.request_code}
                                                     </span>
                                                 )}
                                                 <h4 className="font-semibold text-slate-800 text-lg">{r.waste_label}</h4>
+                                                {r.region_id && (
+                                                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-600 text-xs font-mono rounded">
+                                                        R: {r.region_id.slice(0, 8)}...
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                                                 <span className="flex items-center gap-1">
