@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../context';
 import { useData } from '../../context/DataContext';
-import { MapPin, Plus, Edit3, Trash2, Users, Search, X, AlertTriangle, User, Truck, Check, Building2, LayoutGrid, UserPlus, Network } from 'lucide-react';
+import { MapPin, Plus, Edit3, Trash2, Users, Search, X, AlertTriangle, User, Truck, Check, Building2, LayoutGrid, UserPlus, Network, Warehouse } from 'lucide-react';
 import { EmptyState, RecycleLoader } from '../common';
 import { RegionNodeEditor } from './RegionNodeEditor';
 import toast from 'react-hot-toast';
@@ -40,10 +40,11 @@ const ROLE_LABELS = {
  */
 export const RegionsPage = () => {
     const { companyCode, isCompanyAdmin, isAdmin } = useAuth();
-    const { fetchCompanyRegions, createRegion, updateRegion, deleteRegion, assignUsersToRegion, fetchUsersByAddressPattern, fetchUsersGroupedByRegion } = useData();
+    const { fetchCompanyRegions, createRegion, updateRegion, deleteRegion, assignUsersToRegion, fetchUsersByAddressPattern, fetchUsersGroupedByRegion, fetchInventories, assignRegionToInventory } = useData();
 
     const [activeTab, setActiveTab] = useState('regions'); // 'regions' | 'assign' | 'visual'
     const [regions, setRegions] = useState([]);
+    const [inventories, setInventories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
@@ -74,10 +75,20 @@ export const RegionsPage = () => {
         }
     };
 
+    const loadInventories = async () => {
+        try {
+            const data = await fetchInventories();
+            setInventories(data || []);
+        } catch (error) {
+            console.error('Error fetching inventories:', error);
+        }
+    };
+
     useEffect(() => {
         if (companyCode) {
             fetchRegions();
             refreshGroupedUsers();
+            loadInventories();
         }
     }, [companyCode]);
 
@@ -87,9 +98,17 @@ export const RegionsPage = () => {
     );
 
     // Add region
-    const handleAddRegion = async (name) => {
+    const handleAddRegion = async (name, inventoryId) => {
         try {
             await createRegion(name);
+            // If inventory selected, assign it
+            if (inventoryId) {
+                const newRegions = await fetchCompanyRegions();
+                const newRegion = newRegions.find(r => r.name === name);
+                if (newRegion) {
+                    await assignRegionToInventory(newRegion.id, inventoryId);
+                }
+            }
             toast.success('Filijala kreirana');
             setShowAddModal(false);
             fetchRegions();
@@ -103,9 +122,11 @@ export const RegionsPage = () => {
     };
 
     // Update region
-    const handleUpdateRegion = async (id, name) => {
+    const handleUpdateRegion = async (id, name, inventoryId) => {
         try {
             await updateRegion(id, name);
+            // Update inventory assignment
+            await assignRegionToInventory(id, inventoryId);
             toast.success('Filijala ažurirana');
             setEditingRegion(null);
             fetchRegions();
@@ -231,6 +252,7 @@ export const RegionsPage = () => {
             {showAddModal && (
                 <RegionModal
                     title="Nova filijala"
+                    inventories={inventories}
                     onClose={() => setShowAddModal(false)}
                     onSubmit={handleAddRegion}
                 />
@@ -241,8 +263,10 @@ export const RegionsPage = () => {
                 <RegionModal
                     title="Izmeni filijalu"
                     initialName={editingRegion.name}
+                    initialInventoryId={editingRegion.inventory_id}
+                    inventories={inventories}
                     onClose={() => setEditingRegion(null)}
-                    onSubmit={(name) => handleUpdateRegion(editingRegion.id, name)}
+                    onSubmit={(name, inventoryId) => handleUpdateRegion(editingRegion.id, name, inventoryId)}
                 />
             )}
 
@@ -828,8 +852,9 @@ const AssignUsersTab = ({ regions, onRefresh }) => {
 /**
  * Region Modal - Add/Edit region
  */
-const RegionModal = ({ title, initialName = '', onClose, onSubmit }) => {
+const RegionModal = ({ title, initialName = '', initialInventoryId = '', inventories = [], onClose, onSubmit }) => {
     const [name, setName] = useState(initialName);
+    const [inventoryId, setInventoryId] = useState(initialInventoryId || '');
     const [saving, setSaving] = useState(false);
 
     const handleSubmit = async (e) => {
@@ -838,7 +863,7 @@ const RegionModal = ({ title, initialName = '', onClose, onSubmit }) => {
 
         setSaving(true);
         try {
-            await onSubmit(name);
+            await onSubmit(name, inventoryId || null);
         } finally {
             setSaving(false);
         }
@@ -853,8 +878,8 @@ const RegionModal = ({ title, initialName = '', onClose, onSubmit }) => {
                         <X size={20} />
                     </button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6">
-                    <div className="mb-6">
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                             Naziv filijale
                         </label>
@@ -868,7 +893,33 @@ const RegionModal = ({ title, initialName = '', onClose, onSubmit }) => {
                             autoFocus
                         />
                     </div>
-                    <div className="flex justify-end gap-3">
+
+                    {/* Inventory Selection */}
+                    {inventories.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                <span className="flex items-center gap-2">
+                                    <Warehouse size={16} className="text-purple-600" />
+                                    Skladište (opciono)
+                                </span>
+                            </label>
+                            <select
+                                value={inventoryId}
+                                onChange={(e) => setInventoryId(e.target.value)}
+                                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                            >
+                                <option value="">-- Bez skladišta --</option>
+                                {inventories.map(inv => (
+                                    <option key={inv.id} value={inv.id}>{inv.name}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Obrađeni zahtevi iz ove filijale će se računati u izabrano skladište
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-2">
                         <button
                             type="button"
                             onClick={onClose}

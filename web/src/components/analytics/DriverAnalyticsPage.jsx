@@ -3,6 +3,23 @@ import { Truck, Package, Scale, Calendar, ChevronDown, ChevronUp, Users, RotateC
 import { EmptyState, Modal } from '../common';
 import * as XLSX from 'xlsx';
 
+// Helper: get available months from processed requests
+const getAvailableMonths = (requests) => {
+    if (!requests || requests.length === 0) return [];
+    const months = new Set();
+    requests.forEach(r => {
+        const dateField = r.processed_at || r.completed_at;
+        if (dateField) {
+            const d = new Date(dateField);
+            months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        }
+    });
+    return Array.from(months).sort().reverse(); // Most recent first
+};
+
+// Month names in Serbian
+const MONTH_NAMES = ['Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'];
+
 /**
  * Driver Analytics Page - Shows performance metrics for each driver
  * Used by Company Admin to track which drivers completed the most deliveries
@@ -11,10 +28,14 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
     const [expandedDriver, setExpandedDriver] = useState(null);
     const [sortBy, setSortBy] = useState('count'); // count, weight, recent
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
+    const [selectedMonth, setSelectedMonth] = useState(''); // Format: "2026-01" for specific month
     const [showResetModal, setShowResetModal] = useState(false);
     const [resetting, setResetting] = useState(false);
 
-    // Filter by period - use processed_requests as primary source with driver_assignment data
+    // Available months for dropdown
+    const availableMonths = useMemo(() => getAvailableMonths(processedRequests), [processedRequests]);
+
+    // Filter by period or specific month - use processed_requests as primary source with driver_assignment data
     // After migration 025: driver_assignments.request_id becomes NULL after processing
     // So we use processed_requests.driver_assignment_id to link them
     const filteredAssignments = useMemo(() => {
@@ -54,6 +75,18 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                 };
             });
 
+        // If specific month is selected, filter by that
+        if (selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            return processedWithDriver.filter(a => {
+                const dateField = a.completed_at || a.assigned_at;
+                if (!dateField) return false;
+                const d = new Date(dateField);
+                return d.getFullYear() === year && d.getMonth() + 1 === month;
+            });
+        }
+
+        // Otherwise use relative period
         if (periodFilter === 'all') return processedWithDriver;
 
         const now = new Date();
@@ -62,7 +95,7 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
         if (periodFilter === 'week') cutoff.setDate(now.getDate() - 7);
 
         return processedWithDriver.filter(a => new Date(a.completed_at || a.assigned_at) >= cutoff);
-    }, [driverAssignments, processedRequests, periodFilter]);
+    }, [driverAssignments, processedRequests, periodFilter, selectedMonth]);
 
     // Calculate stats per driver
     const driverStats = useMemo(() => {
@@ -228,16 +261,37 @@ export const DriverAnalyticsPage = ({ driverAssignments = [], drivers = [], wast
                     <h1 className="text-2xl font-bold text-slate-800">Učinak vozača</h1>
                     <p className="text-slate-500 mt-1">Pregledajte koliko je svaki vozač obavio dostava</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    {/* Period dropdown */}
                     <select
-                        value={periodFilter}
-                        onChange={(e) => setPeriodFilter(e.target.value)}
-                        className="px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white"
+                        value={selectedMonth ? '' : periodFilter}
+                        onChange={(e) => {
+                            setPeriodFilter(e.target.value);
+                            setSelectedMonth(''); // Clear month when period is selected
+                        }}
+                        className={`px-3 py-2 border rounded-xl text-sm bg-white ${selectedMonth ? 'border-slate-200 text-slate-400' : 'border-slate-200'}`}
                     >
                         <option value="all">Svi periodi</option>
-                        <option value="month">Poslednjih mesec dana</option>
+                        <option value="month">Poslednjih 30 dana</option>
                         <option value="week">Poslednjih 7 dana</option>
                     </select>
+                    {/* Month selector */}
+                    {availableMonths.length > 0 && (
+                        <select
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className={`px-3 py-2 border rounded-xl text-sm bg-white ${selectedMonth ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}
+                        >
+                            <option value="">-- Mesec --</option>
+                            {availableMonths.map(m => {
+                                const [year, month] = m.split('-');
+                                const monthName = MONTH_NAMES[parseInt(month) - 1];
+                                return (
+                                    <option key={m} value={m}>{monthName} {year}</option>
+                                );
+                            })}
+                        </select>
+                    )}
                     <select
                         value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}

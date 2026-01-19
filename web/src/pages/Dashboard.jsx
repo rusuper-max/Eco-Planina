@@ -13,7 +13,7 @@ import {
     LayoutDashboard, Truck, Users, Settings, LogOut, Mountain, MapPin, Search, Menu, X, Plus, Recycle, BarChart3,
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
-    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList, RecycleLoader,
+    Lock, Unlock, AlertTriangle, LogIn, Network, UserCheck, ClipboardList, RecycleLoader, Warehouse,
     // Components
     createIcon, urgencyIcons, URGENCY_COLORS, WASTE_ICONS_MAP, createCustomIcon,
     markerStyles, getRemainingTime, getCurrentUrgency, WASTE_TYPES, uploadImage,
@@ -31,7 +31,8 @@ import {
     CompanyStaffPage,
     RegionNodeEditor,
     CompanySettingsPage,
-    ActivityLogPage
+    ActivityLogPage,
+    InventoryPage
 } from './DashboardComponents';
 import DriverManagement from './DriverManagement';
 import DriverDashboard from './DriverDashboard';
@@ -806,6 +807,14 @@ export default function Dashboard() {
                     { id: 'visual', icon: Network, label: 'Vizuelni Editor', helpKey: 'sidebar-visual-editor' }
                 ]
             },
+            {
+                label: 'Skladište',
+                icon: Warehouse,
+                helpKey: 'sidebar-group-inventory',
+                children: [
+                    { id: 'inventory', icon: Package, label: 'Inventar', helpKey: 'sidebar-inventory' }
+                ]
+            },
             { id: 'settings', icon: Settings, label: 'Podešavanja', helpKey: 'sidebar-settings' }
         ];
         if (userRole === 'manager') return [
@@ -1262,6 +1271,7 @@ export default function Dashboard() {
                 </div>
             );
             if (activeTab === 'activity-log') return <ActivityLogPage companyCode={companyCode} userRole={userRole} />;
+            if (activeTab === 'inventory') return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
             if (activeTab === 'map') return (
                 <div className="flex flex-col h-full">
                     <MapView

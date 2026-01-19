@@ -12,6 +12,22 @@ const DEFAULT_WASTE_TYPES = [
     { id: 'glass', label: 'Staklo', icon: '🍾' },
 ];
 
+// Helper: get available months from processed requests
+const getAvailableMonths = (requests) => {
+    if (!requests || requests.length === 0) return [];
+    const months = new Set();
+    requests.forEach(r => {
+        if (r.processed_at) {
+            const d = new Date(r.processed_at);
+            months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        }
+    });
+    return Array.from(months).sort().reverse(); // Most recent first
+};
+
+// Month names in Serbian
+const MONTH_NAMES = ['Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'];
+
 /**
  * History Table (Processed/Rejected Requests)
  * Enhanced version for company_admin with driver/manager info and timeline
@@ -20,6 +36,7 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
     const [periodFilter, setPeriodFilter] = useState('all'); // all, month, week
+    const [selectedMonth, setSelectedMonth] = useState(''); // Format: "2026-01" for specific month
     const [statusFilter, setStatusFilter] = useState('all'); // all, completed, rejected
     const [sortBy, setSortBy] = useState('processed_at');
     const [sortDir, setSortDir] = useState('desc');
@@ -389,10 +406,22 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
         );
     };
 
+    // Available months for dropdown
+    const availableMonths = useMemo(() => getAvailableMonths(requests), [requests]);
+
     if (!requests?.length) return <EmptyState icon={History} title="Nema istorije" desc="Obrađeni zahtevi će se prikazati ovde" />;
 
-    // Filter by period helper
+    // Filter by period or specific month helper
     const filterByPeriod = (req) => {
+        // If specific month is selected, filter by that
+        if (selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            if (!req.processed_at) return false;
+            const d = new Date(req.processed_at);
+            return d.getFullYear() === year && d.getMonth() + 1 === month;
+        }
+
+        // Otherwise use relative period
         if (periodFilter === 'all') return true;
         const now = new Date();
         const cutoff = new Date();
@@ -475,15 +504,36 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                         className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 outline-none text-sm placeholder:text-slate-400"
                     />
                 </div>
+                {/* Period dropdown */}
                 <select
-                    value={periodFilter}
-                    onChange={(e) => setPeriodFilter(e.target.value)}
-                    className="px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white"
+                    value={selectedMonth ? '' : periodFilter}
+                    onChange={(e) => {
+                        setPeriodFilter(e.target.value);
+                        setSelectedMonth(''); // Clear month when period is selected
+                    }}
+                    className={`px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white ${selectedMonth ? 'border-slate-200 text-slate-400' : 'border-slate-200'}`}
                 >
                     <option value="all">Svi periodi</option>
-                    <option value="month">Poslednjih mesec dana</option>
+                    <option value="month">Poslednjih 30 dana</option>
                     <option value="week">Poslednjih 7 dana</option>
                 </select>
+                {/* Month selector */}
+                {availableMonths.length > 0 && (
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className={`px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm bg-white ${selectedMonth ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}
+                    >
+                        <option value="">-- Mesec --</option>
+                        {availableMonths.map(m => {
+                            const [year, month] = m.split('-');
+                            const monthName = MONTH_NAMES[parseInt(month) - 1];
+                            return (
+                                <option key={m} value={m}>{monthName} {year}</option>
+                            );
+                        })}
+                    </select>
+                )}
                 <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
@@ -506,8 +556,8 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
             {/* Results count */}
             <div className="text-sm text-slate-500">
                 Prikazano {filtered.length} od {requests.length} zahteva
-                {(searchQuery || filterType !== 'all' || periodFilter !== 'all' || statusFilter !== 'all') && (
-                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); setPeriodFilter('all'); setStatusFilter('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
+                {(searchQuery || filterType !== 'all' || periodFilter !== 'all' || statusFilter !== 'all' || selectedMonth) && (
+                    <button onClick={() => { setSearchQuery(''); setFilterType('all'); setPeriodFilter('all'); setSelectedMonth(''); setStatusFilter('all'); }} className="ml-2 text-emerald-600 hover:text-emerald-700">
                         Obriši filtere
                     </button>
                 )}

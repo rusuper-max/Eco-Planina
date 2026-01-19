@@ -1054,6 +1054,248 @@ export const DataProvider = ({ children }) => {
         }
     };
 
+    // =============================================================================
+    // INVENTORY FUNCTIONS
+    // =============================================================================
+
+    // Fetch all inventories for the company
+    const fetchInventories = async () => {
+        if (!companyCode) return [];
+        try {
+            const { data, error } = await supabase
+                .from('inventories')
+                .select('*')
+                .eq('company_code', companyCode)
+                .is('deleted_at', null)
+                .order('name');
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching inventories:', error);
+            return [];
+        }
+    };
+
+    // Create a new inventory (warehouse)
+    const createInventory = async (inventoryData) => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
+        try {
+            const { data, error } = await supabase
+                .from('inventories')
+                .insert({
+                    company_code: companyCode,
+                    name: inventoryData.name?.trim(),
+                    description: inventoryData.description?.trim() || null,
+                    manager_visibility: inventoryData.manager_visibility || 'full'
+                })
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error creating inventory:', error);
+            throw error;
+        }
+    };
+
+    // Update an inventory
+    const updateInventory = async (inventoryId, updates) => {
+        try {
+            const { data, error } = await supabase
+                .from('inventories')
+                .update({
+                    name: updates.name?.trim(),
+                    description: updates.description?.trim() || null,
+                    manager_visibility: updates.manager_visibility
+                })
+                .eq('id', inventoryId)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error updating inventory:', error);
+            throw error;
+        }
+    };
+
+    // Delete an inventory (soft delete)
+    const deleteInventory = async (inventoryId) => {
+        try {
+            const { error } = await supabase
+                .from('inventories')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', inventoryId);
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting inventory:', error);
+            throw error;
+        }
+    };
+
+    // Fetch inventory items (stock levels) for an inventory or all
+    const fetchInventoryItems = async (inventoryId = null) => {
+        if (!companyCode) return [];
+        try {
+            let query = supabase
+                .from('inventory_items')
+                .select(`
+                    *,
+                    inventory:inventory_id(id, name, company_code),
+                    waste_type:waste_type_id(id, name, label, icon)
+                `);
+
+            if (inventoryId) {
+                query = query.eq('inventory_id', inventoryId);
+            }
+
+            const { data, error } = await query.order('quantity_kg', { ascending: false });
+            if (error) throw error;
+
+            // Filter by company_code (RLS should handle this, but double check)
+            return (data || []).filter(item =>
+                item.inventory?.company_code === companyCode
+            );
+        } catch (error) {
+            console.error('Error fetching inventory items:', error);
+            return [];
+        }
+    };
+
+    // Fetch inventory transactions (history)
+    const fetchInventoryTransactions = async (filters = {}) => {
+        if (!companyCode) return [];
+        try {
+            let query = supabase
+                .from('inventory_transactions')
+                .select(`
+                    *,
+                    inventory:inventory_id(id, name, company_code),
+                    waste_type:waste_type_id(id, name, label, icon),
+                    region:region_id(id, name)
+                `)
+                .order('created_at', { ascending: false });
+
+            if (filters.inventoryId) {
+                query = query.eq('inventory_id', filters.inventoryId);
+            }
+            if (filters.regionId) {
+                query = query.eq('region_id', filters.regionId);
+            }
+            if (filters.wasteTypeId) {
+                query = query.eq('waste_type_id', filters.wasteTypeId);
+            }
+            if (filters.transactionType) {
+                query = query.eq('transaction_type', filters.transactionType);
+            }
+            if (filters.startDate) {
+                query = query.gte('created_at', filters.startDate);
+            }
+            if (filters.endDate) {
+                query = query.lte('created_at', filters.endDate);
+            }
+            if (filters.limit) {
+                query = query.limit(filters.limit);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            // Filter by company_code
+            return (data || []).filter(t =>
+                t.inventory?.company_code === companyCode
+            );
+        } catch (error) {
+            console.error('Error fetching inventory transactions:', error);
+            return [];
+        }
+    };
+
+    // Create manual inventory adjustment
+    const createInventoryAdjustment = async (inventoryId, wasteTypeId, quantity, transactionType, notes) => {
+        if (!companyCode) throw new Error('Niste prijavljeni');
+        try {
+            const { data, error } = await supabase.rpc('create_inventory_adjustment', {
+                p_inventory_id: inventoryId,
+                p_waste_type_id: wasteTypeId,
+                p_quantity_kg: quantity,
+                p_transaction_type: transactionType,
+                p_notes: notes,
+                p_created_by: user?.id,
+                p_created_by_name: user?.name
+            });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error creating adjustment:', error);
+            throw error;
+        }
+    };
+
+    // Assign a region to an inventory
+    const assignRegionToInventory = async (regionId, inventoryId) => {
+        try {
+            const { data, error } = await supabase
+                .from('regions')
+                .update({ inventory_id: inventoryId })
+                .eq('id', regionId)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error assigning region to inventory:', error);
+            throw error;
+        }
+    };
+
+    // Get aggregated inventory stats by region (for manager view)
+    const getInventoryStatsByRegion = async (inventoryId) => {
+        if (!companyCode) return [];
+        try {
+            const { data, error } = await supabase
+                .from('inventory_transactions')
+                .select(`
+                    region_id,
+                    region_name,
+                    waste_type_id,
+                    transaction_type,
+                    quantity_kg
+                `)
+                .eq('inventory_id', inventoryId)
+                .eq('transaction_type', 'in');
+
+            if (error) throw error;
+
+            // Aggregate by region
+            const stats = {};
+            (data || []).forEach(t => {
+                const key = t.region_id || 'unknown';
+                if (!stats[key]) {
+                    stats[key] = {
+                        region_id: t.region_id,
+                        region_name: t.region_name || 'Nepoznato',
+                        total_kg: 0,
+                        by_waste_type: {}
+                    };
+                }
+                stats[key].total_kg += parseFloat(t.quantity_kg) || 0;
+                const wtKey = t.waste_type_id;
+                stats[key].by_waste_type[wtKey] = (stats[key].by_waste_type[wtKey] || 0) + (parseFloat(t.quantity_kg) || 0);
+            });
+
+            return Object.values(stats).sort((a, b) => b.total_kg - a.total_kg);
+        } catch (error) {
+            console.error('Error getting inventory stats by region:', error);
+            return [];
+        }
+    };
+
+    // =============================================================================
+    // ANALYTICS FUNCTIONS
+    // =============================================================================
+
     // Reset all manager analytics (delete all processed_requests for company)
     // This is a company_admin only function
     const resetManagerAnalytics = async () => {
@@ -1128,6 +1370,16 @@ export const DataProvider = ({ children }) => {
         migrateEquipmentFromLocalStorage,
         // Analytics functions
         resetManagerAnalytics,
+        // Inventory functions
+        fetchInventories,
+        createInventory,
+        updateInventory,
+        deleteInventory,
+        fetchInventoryItems,
+        fetchInventoryTransactions,
+        createInventoryAdjustment,
+        assignRegionToInventory,
+        getInventoryStatsByRegion,
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

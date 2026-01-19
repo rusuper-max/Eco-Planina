@@ -21,10 +21,30 @@ const WASTE_TYPE_COLORS = [
 /**
  * Analytics Page with Charts - Displays waste collection statistics
  */
+// Helper: get available months from processed requests
+const getAvailableMonths = (requests) => {
+    if (!requests || requests.length === 0) return [];
+    const months = new Set();
+    requests.forEach(r => {
+        if (r.processed_at) {
+            const d = new Date(r.processed_at);
+            months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        }
+    });
+    return Array.from(months).sort().reverse(); // Most recent first
+};
+
+// Month names in Serbian
+const MONTH_NAMES = ['Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'];
+
 export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [] }) => {
     const [dateRange, setDateRange] = useState('month');
+    const [selectedMonth, setSelectedMonth] = useState(''); // Format: "2026-01" for specific month
     const [selectedWasteType, setSelectedWasteType] = useState('all');
     const [selectedClient, setSelectedClient] = useState('all');
+
+    // Available months for dropdown
+    const availableMonths = useMemo(() => getAvailableMonths(processedRequests), [processedRequests]);
     const [showClientBreakdown, setShowClientBreakdown] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportMode, setReportMode] = useState('print'); // 'print' or 'excel'
@@ -65,27 +85,40 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
 
     const getFilteredRequests = () => {
         if (!processedRequests) return [];
-        const now = new Date();
-        let startDate = null;
-
-        switch (dateRange) {
-            case 'week':
-                startDate = new Date(now.setDate(now.getDate() - 7));
-                break;
-            case 'month':
-                startDate = new Date(now.setMonth(now.getMonth() - 1));
-                break;
-            case 'year':
-                startDate = new Date(now.setFullYear(now.getFullYear() - 1));
-                break;
-            default:
-                startDate = null;
-        }
-
         let filtered = processedRequests;
-        if (startDate) {
-            filtered = filtered.filter(r => new Date(r.processed_at) >= startDate);
+
+        // Ako je odabran specifičan mesec, filtriraj po njemu
+        if (selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            filtered = filtered.filter(r => {
+                if (!r.processed_at) return false;
+                const d = new Date(r.processed_at);
+                return d.getFullYear() === year && d.getMonth() + 1 === month;
+            });
+        } else {
+            // Inače koristi relativni period (week/month/year/all)
+            const now = new Date();
+            let startDate = null;
+
+            switch (dateRange) {
+                case 'week':
+                    startDate = new Date(new Date().setDate(now.getDate() - 7));
+                    break;
+                case 'month':
+                    startDate = new Date(new Date().setMonth(now.getMonth() - 1));
+                    break;
+                case 'year':
+                    startDate = new Date(new Date().setFullYear(now.getFullYear() - 1));
+                    break;
+                default:
+                    startDate = null;
+            }
+
+            if (startDate) {
+                filtered = filtered.filter(r => new Date(r.processed_at) >= startDate);
+            }
         }
+
         if (selectedWasteType !== 'all') {
             filtered = filtered.filter(r => r.waste_type === selectedWasteType);
         }
@@ -562,16 +595,40 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                         <p className="text-sm text-slate-500 mt-1">Pregled statistika po težini otpada</p>
                     </div>
                     <div className="flex flex-wrap gap-3 items-center">
+                        {/* Period dropdown */}
                         <select
-                            value={dateRange}
-                            onChange={(e) => setDateRange(e.target.value)}
-                            className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 outline-none bg-white"
+                            value={selectedMonth ? '' : dateRange}
+                            onChange={(e) => {
+                                setDateRange(e.target.value);
+                                setSelectedMonth(''); // Očisti mesec kada se bira period
+                            }}
+                            className={`px-4 py-2 border rounded-xl text-sm focus:border-emerald-500 outline-none bg-white ${selectedMonth ? 'border-slate-200 text-slate-400' : 'border-slate-200'}`}
                         >
                             <option value="week">Poslednjih 7 dana</option>
-                            <option value="month">Poslednji mesec</option>
+                            <option value="month">Poslednjih 30 dana</option>
                             <option value="year">Poslednja godina</option>
                             <option value="all">Sve vreme</option>
                         </select>
+                        {/* Month selector dropdown */}
+                        {availableMonths.length > 0 && (
+                            <select
+                                value={selectedMonth}
+                                onChange={(e) => {
+                                    setSelectedMonth(e.target.value);
+                                    // dateRange ostaje ali se ne primenjuje dok je selectedMonth aktivan
+                                }}
+                                className={`px-4 py-2 border rounded-xl text-sm focus:border-emerald-500 outline-none bg-white ${selectedMonth ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200'}`}
+                            >
+                                <option value="">-- Izaberi mesec --</option>
+                                {availableMonths.map(m => {
+                                    const [year, month] = m.split('-');
+                                    const monthName = MONTH_NAMES[parseInt(month) - 1];
+                                    return (
+                                        <option key={m} value={m}>{monthName} {year}</option>
+                                    );
+                                })}
+                            </select>
+                        )}
                         <select
                             value={selectedWasteType}
                             onChange={(e) => setSelectedWasteType(e.target.value)}
@@ -611,9 +668,18 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                     </div>
                 </div>
                 {/* Active filters display */}
-                {(selectedWasteType !== 'all' || selectedClient !== 'all') && (
+                {(selectedWasteType !== 'all' || selectedClient !== 'all' || selectedMonth) && (
                     <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                         <span className="text-sm text-slate-500">Aktivni filteri:</span>
+                        {selectedMonth && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm">
+                                <Calendar size={14} />
+                                {MONTH_NAMES[parseInt(selectedMonth.split('-')[1]) - 1]} {selectedMonth.split('-')[0]}
+                                <button onClick={() => setSelectedMonth('')} className="hover:text-purple-900">
+                                    <X size={14} />
+                                </button>
+                            </span>
+                        )}
                         {selectedWasteType !== 'all' && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm">
                                 {wasteTypes?.find(w => w.id === selectedWasteType)?.name || selectedWasteType}
