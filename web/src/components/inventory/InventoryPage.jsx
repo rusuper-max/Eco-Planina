@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Warehouse, Package, Plus, ArrowDownToLine, ArrowUpFromLine,
     TrendingUp, Scale, MapPin, Calendar, ChevronDown, ChevronUp,
-    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send
+    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send, Sliders
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -10,6 +10,9 @@ import { Modal, EmptyState, RecycleLoader } from '../common';
 import { InventoryModal } from './InventoryModal';
 import { InventoryTransactions } from './InventoryTransactions';
 import { OutboundTab } from './OutboundTab';
+import { AdjustmentModal } from './AdjustmentModal';
+import { LowStockAlert } from './LowStockAlert';
+import { InventoryChart } from './InventoryChart';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -49,6 +52,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
 
     // Modal states
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
     const [editingInventory, setEditingInventory] = useState(null);
     const [deletingInventory, setDeletingInventory] = useState(null);
     const [selectedInventory, setSelectedInventory] = useState(null); // For detailed view
@@ -340,6 +344,16 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         <Download size={16} />
                         <span className="hidden sm:inline">Excel</span>
                     </button>
+                    {canManage && (
+                        <button
+                            onClick={() => setShowAdjustmentModal(true)}
+                            className="px-3 py-2 border border-amber-200 text-amber-600 rounded-xl text-sm bg-white hover:bg-amber-50 flex items-center gap-1.5"
+                            title="Ručna korekcija stanja"
+                        >
+                            <Sliders size={16} />
+                            <span className="hidden sm:inline">Korekcija</span>
+                        </button>
+                    )}
                     {canManage ? (
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -360,6 +374,13 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     ) : null}
                 </div>
             </div>
+
+            {/* Low Stock Alert */}
+            <LowStockAlert
+                inventoryItems={inventoryItems}
+                wasteTypes={wasteTypes}
+                defaultThreshold={100}
+            />
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -410,6 +431,11 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     </div>
                 </div>
             </div>
+
+            {/* Chart - only show when we have transactions */}
+            {transactions.length > 0 && (
+                <InventoryChart transactions={transactions} days={14} />
+            )}
 
             {/* Tabs */}
             <div className="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
@@ -773,6 +799,17 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         </button>
                     </div>
                 </Modal>
+            )}
+
+            {/* Adjustment Modal */}
+            {showAdjustmentModal && (
+                <AdjustmentModal
+                    inventories={inventories}
+                    wasteTypes={wasteTypes}
+                    inventoryItems={inventoryItems}
+                    onClose={() => setShowAdjustmentModal(false)}
+                    onSave={loadData}
+                />
             )}
         </div>
     );

@@ -39,11 +39,24 @@ export const CompanyStaffPage = () => {
     const [resetPasswordModal, setResetPasswordModal] = useState(null);
     const [promotingToSupervisor, setPromotingToSupervisor] = useState(null); // For supervisor promotion modal
     const [supervisorRegions, setSupervisorRegions] = useState({}); // {userId: [regionId, ...]} - cached supervisor regions
+    const [mySupervisorRegionIds, setMySupervisorRegionIds] = useState([]); // Current user's supervisor regions (if supervisor)
 
     // Fetch staff and regions
     const fetchData = async () => {
         try {
             setLoading(true);
+
+            // If current user is supervisor, first fetch their assigned regions
+            let myRegionIds = [];
+            if (user?.role === 'supervisor') {
+                const { data: myRegions } = await supabase
+                    .from('supervisor_regions')
+                    .select('region_id')
+                    .eq('supervisor_id', user.id);
+                myRegionIds = (myRegions || []).map(r => r.region_id);
+                setMySupervisorRegionIds(myRegionIds);
+            }
+
             const [staffRes, regionsRes] = await Promise.all([
                 supabase
                     .from('users')
@@ -64,11 +77,23 @@ export const CompanyStaffPage = () => {
             if (staffRes.error) throw staffRes.error;
             if (regionsRes.error) throw regionsRes.error;
 
-            setStaff(staffRes.data || []);
+            let staffData = staffRes.data || [];
+
+            // If current user is supervisor, filter staff to only show users from their regions
+            if (user?.role === 'supervisor' && myRegionIds.length > 0) {
+                staffData = staffData.filter(s =>
+                    // Show users in supervisor's regions
+                    myRegionIds.includes(s.region_id) ||
+                    // Also show the supervisor themselves
+                    s.id === user.id
+                );
+            }
+
+            setStaff(staffData);
             setRegions(regionsRes.data || []);
 
-            // Fetch supervisor regions for all supervisors
-            const supervisors = (staffRes.data || []).filter(s => s.role === 'supervisor');
+            // Fetch supervisor regions for all supervisors in the filtered list
+            const supervisors = staffData.filter(s => s.role === 'supervisor');
             if (supervisors.length > 0) {
                 const { data: supRegions } = await supabase
                     .from('supervisor_regions')
@@ -356,7 +381,7 @@ export const CompanyStaffPage = () => {
         unassigned: staff.filter(s => !s.region_id && s.role !== 'supervisor').length // Supervisors have many regions, not one
     }), [staff]);
 
-    if (!isCompanyAdmin() && !isAdmin() && user?.role !== 'manager') {
+    if (!isCompanyAdmin() && !isAdmin() && !['manager', 'supervisor'].includes(user?.role)) {
         return (
             <div className="p-8 text-center text-slate-500">
                 Nemate pristup ovoj stranici.

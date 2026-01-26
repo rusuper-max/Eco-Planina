@@ -22,7 +22,7 @@ export {
     FileText, Building2, AlertCircle, CheckCircle2, Clock, Package, Send, Trash2, Eye, Copy, ChevronRight, Phone,
     RefreshCw, Info, Box, ArrowUpDown, ArrowUp, ArrowDown, Filter, Upload, Image, Globe, ChevronDown, MessageCircle, Edit3, ArrowLeft, History, Calendar, XCircle, Printer, Download, FileSpreadsheet,
     Lock, Unlock, AlertTriangle, LogIn, Scale, EyeOff, Network, UserCheck, ClipboardList, Warehouse,
-    ArrowUpFromLine, TrendingUp
+    ArrowUpFromLine, TrendingUp, Fuel
 } from 'lucide-react';
 
 // Re-export utilities
@@ -92,6 +92,9 @@ export { InventoryPage, OutboundPage, TransactionsPage } from '../components/inv
 
 // Re-export vehicles components
 export { VehiclesPage } from '../components/vehicles';
+
+// Re-export fuel components
+export { FuelLogsPage } from '../components/fuel';
 
 // Default waste types constant (kept for backward compatibility)
 export const WASTE_TYPES = [

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck } from 'lucide-react';
+import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck, FileDown } from 'lucide-react';
 import { Modal, EmptyState, RecycleLoader } from '../common';
 import ProofsModal from '../common/ProofsModal';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
+import { ReceiptPDF, PDFDownloadButton } from '../pdf';
 import { supabase } from '../../config/supabase';
 
 const DEFAULT_WASTE_TYPES = [
@@ -696,6 +697,22 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                                         >
                                                             {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                                         </button>
+                                                    )}
+                                                    {/* PDF Download button for completed requests */}
+                                                    {req.status !== 'rejected' && (
+                                                        <PDFDownloadButton
+                                                            document={
+                                                                <ReceiptPDF
+                                                                    request={req}
+                                                                    wasteType={wasteTypes.find(w => w.id === req.waste_type)}
+                                                                    driverAssignment={assignment}
+                                                                />
+                                                            }
+                                                            fileName={`prijemnica-${req.request_code || req.id?.slice(0, 8)}.pdf`}
+                                                            iconOnly
+                                                            size="sm"
+                                                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                        />
                                                     )}
                                                     {/* On very small screens, show proof button in actions if dokaz column is hidden */}
                                                     <button

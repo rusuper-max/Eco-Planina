@@ -3,7 +3,7 @@ import {
     Building2, Users, Truck, User, ZoomIn, ZoomOut, Maximize2, Minimize2,
     RefreshCw, Save, Network, Phone, Mail, X, Edit3, Shield, Briefcase,
     Package, FileText, ChevronDown, ChevronUp, Hash, MapPin, Recycle,
-    LogIn, Calendar, TrendingUp
+    LogIn, Calendar, TrendingUp, Warehouse, Car, AlertCircle
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context';
@@ -65,16 +65,45 @@ const ROLES = {
 const BRANCH_COLORS = {
     default: { bg: 'bg-slate-800/60', border: 'border-rose-600/50', label: 'bg-rose-600' },
     unassigned: { bg: 'bg-slate-800/40', border: 'border-slate-600/50', label: 'bg-slate-600' },
-    centrala: { bg: 'bg-purple-900/30', border: 'border-purple-500/50', label: 'bg-purple-600' }
+    centrala: { bg: 'bg-purple-900/30', border: 'border-purple-500/50', label: 'bg-purple-600' },
+    warehouse: { bg: 'bg-cyan-900/30', border: 'border-cyan-500/50', label: 'bg-cyan-600' }
+};
+
+// ============================================================================
+// VEHICLE BADGE COMPONENT - Shows assigned vehicles next to drivers
+// ============================================================================
+
+const VehicleBadge = ({ vehicles = [] }) => {
+    if (!vehicles || vehicles.length === 0) return null;
+
+    const primaryVehicle = vehicles.find(v => v.is_primary) || vehicles[0];
+    const hasMultiple = vehicles.length > 1;
+
+    return (
+        <div className="absolute -right-2 -bottom-2 flex items-center gap-0.5" title={vehicles.map(v => v.registration).join(', ')}>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-600 rounded text-[9px] text-white font-bold shadow-lg border border-cyan-500">
+                <Car size={10} />
+                <span>{primaryVehicle.registration}</span>
+                {hasMultiple && (
+                    <span className="bg-cyan-500 rounded-full px-1 text-[8px]">+{vehicles.length - 1}</span>
+                )}
+            </div>
+        </div>
+    );
 };
 
 // ============================================================================
 // NODE CARD COMPONENT
 // ============================================================================
 
-const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick, canDrag }) => {
+const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick, canDrag, vehicles = [] }) => {
     const RoleConfig = ROLES[node.role] || ROLES.client;
     const Icon = RoleConfig.icon;
+
+    // Filter vehicles for this driver
+    const driverVehicles = node.role === 'driver'
+        ? vehicles.filter(v => v.vehicle_drivers?.some(vd => vd.driver_id === node.userId))
+        : [];
 
     return (
         <div
@@ -123,6 +152,14 @@ const NodeCard = ({ node, isSelected, isDragging, onMouseDown, onClick, canDrag 
                     <Shield size={8} className="text-purple-400" />
                 </div>
             )}
+
+            {/* Vehicle badge for drivers */}
+            {node.role === 'driver' && driverVehicles.length > 0 && (
+                <VehicleBadge vehicles={driverVehicles.map(v => ({
+                    ...v,
+                    is_primary: v.vehicle_drivers?.find(vd => vd.driver_id === node.userId)?.is_primary
+                }))} />
+            )}
         </div>
     );
 };
@@ -156,6 +193,152 @@ const CompanyNode = ({ companyName, position, isSelected, onClick }) => (
         <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-purple-500 rounded-full border-2 border-slate-900" />
     </div>
 );
+
+// ============================================================================
+// WAREHOUSE CONTAINER COMPONENT
+// ============================================================================
+
+const WarehouseContainer = ({ warehouse, position, inventoryItems = [], wasteTypes = [] }) => {
+    // Group items by waste type
+    const stockByType = useMemo(() => {
+        const grouped = {};
+        inventoryItems
+            .filter(item => item.inventory_id === warehouse.id)
+            .forEach(item => {
+                const wtId = item.waste_type_id;
+                if (!grouped[wtId]) {
+                    const wt = wasteTypes.find(w => w.id === wtId);
+                    grouped[wtId] = {
+                        label: wt?.label || wt?.name || 'Nepoznato',
+                        icon: wt?.icon || '📦',
+                        quantity: 0
+                    };
+                }
+                grouped[wtId].quantity += parseFloat(item.quantity_kg) || 0;
+            });
+        return Object.values(grouped).sort((a, b) => b.quantity - a.quantity).slice(0, 3);
+    }, [warehouse.id, inventoryItems, wasteTypes]);
+
+    const totalKg = stockByType.reduce((sum, s) => sum + s.quantity, 0);
+
+    return (
+        <div
+            className="absolute rounded-xl border-2 backdrop-blur-sm bg-cyan-900/30 border-cyan-500/50"
+            style={{
+                left: position.x,
+                top: position.y,
+                width: 180,
+                minHeight: 100
+            }}
+        >
+            {/* Title pill */}
+            <div className="absolute -top-3.5 left-4 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide uppercase text-white border border-slate-600/50 flex items-center gap-2 bg-cyan-600">
+                <Warehouse size={12} />
+                {warehouse.name}
+            </div>
+
+            {/* Content */}
+            <div className="pt-6 pb-3 px-3">
+                {stockByType.length > 0 ? (
+                    <div className="space-y-1.5">
+                        {stockByType.map((stock, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className="flex items-center gap-1.5 text-slate-300">
+                                    <span>{stock.icon}</span>
+                                    <span className="truncate max-w-[80px]">{stock.label}</span>
+                                </span>
+                                <span className="text-cyan-400 font-medium">
+                                    {stock.quantity >= 1000 ? `${(stock.quantity / 1000).toFixed(1)}t` : `${stock.quantity.toFixed(0)}kg`}
+                                </span>
+                            </div>
+                        ))}
+                        {totalKg > 0 && (
+                            <div className="border-t border-cyan-700/50 pt-1.5 mt-1.5 flex justify-between text-xs">
+                                <span className="text-slate-400">Ukupno</span>
+                                <span className="text-cyan-300 font-bold">
+                                    {totalKg >= 1000 ? `${(totalKg / 1000).toFixed(1)}t` : `${totalKg.toFixed(0)}kg`}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="text-xs text-slate-500 text-center py-2">Prazno skladište</div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// ============================================================================
+// UNCONNECTED ENTITIES PANEL
+// ============================================================================
+
+const UnconnectedPanel = ({ vehicles = [], inventories = [], regions = [] }) => {
+    // Vehicles without any driver assigned
+    const unassignedVehicles = vehicles.filter(v => !v.vehicle_drivers || v.vehicle_drivers.length === 0);
+
+    // Inventories without a region (checking if regions have inventory_id)
+    const unassignedInventories = inventories.filter(inv => {
+        const hasRegion = regions.some(r => r.inventory_id === inv.id);
+        return !hasRegion;
+    });
+
+    if (unassignedVehicles.length === 0 && unassignedInventories.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="absolute bottom-4 right-4 z-20 bg-slate-800/95 border border-amber-600/50 rounded-xl shadow-xl max-w-xs overflow-hidden">
+            <div className="px-4 py-2.5 bg-amber-600/20 border-b border-amber-600/30 flex items-center gap-2">
+                <AlertCircle size={16} className="text-amber-500" />
+                <span className="text-sm font-bold text-amber-400">Nepovezani entiteti</span>
+            </div>
+
+            <div className="p-3 space-y-3 max-h-60 overflow-y-auto">
+                {unassignedVehicles.length > 0 && (
+                    <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold mb-1.5 flex items-center gap-1">
+                            <Car size={10} />
+                            Vozila bez vozača ({unassignedVehicles.length})
+                        </div>
+                        <div className="space-y-1">
+                            {unassignedVehicles.slice(0, 5).map(v => (
+                                <div key={v.id} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-700/50 px-2 py-1 rounded">
+                                    <Car size={12} className="text-cyan-400" />
+                                    <span className="font-mono">{v.registration}</span>
+                                    {v.brand && <span className="text-slate-500">• {v.brand}</span>}
+                                </div>
+                            ))}
+                            {unassignedVehicles.length > 5 && (
+                                <div className="text-xs text-slate-500 pl-2">+ još {unassignedVehicles.length - 5}</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {unassignedInventories.length > 0 && (
+                    <div>
+                        <div className="text-[10px] text-slate-400 uppercase font-bold mb-1.5 flex items-center gap-1">
+                            <Warehouse size={10} />
+                            Skladišta bez regiona ({unassignedInventories.length})
+                        </div>
+                        <div className="space-y-1">
+                            {unassignedInventories.slice(0, 5).map(inv => (
+                                <div key={inv.id} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-700/50 px-2 py-1 rounded">
+                                    <Warehouse size={12} className="text-cyan-400" />
+                                    <span>{inv.name}</span>
+                                </div>
+                            ))}
+                            {unassignedInventories.length > 5 && (
+                                <div className="text-xs text-slate-500 pl-2">+ još {unassignedInventories.length - 5}</div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 // ============================================================================
 // BRANCH CONTAINER COMPONENT
@@ -500,7 +683,7 @@ const DetailSidebar = ({ node, onClose, wasteTypes = [], onLoginAs, processedReq
 
 export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const { companyName, loginAsUser } = useAuth();
-    const { assignUsersToRegion, fetchUsersGroupedByRegion, fetchCompanyRegions, fetchProcessedRequests } = useData();
+    const { assignUsersToRegion, fetchUsersGroupedByRegion, fetchCompanyRegions, fetchProcessedRequests, fetchVehicles, fetchInventories, fetchInventoryItems } = useData();
     const { fetchCompanyWasteTypes } = useCompany();
     const containerRef = useRef(null);
 
@@ -516,6 +699,9 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const [saving, setSaving] = useState(false);
     const [wasteTypes, setWasteTypes] = useState([]);
     const [processedRequests, setProcessedRequests] = useState([]);
+    const [vehicles, setVehicles] = useState([]);
+    const [inventories, setInventories] = useState([]);
+    const [inventoryItems, setInventoryItems] = useState([]);
 
     // View state
     const [scale, setScale] = useState(0.85);
@@ -567,16 +753,22 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [groupedData, regions, historyResult] = await Promise.all([
+            const [groupedData, regions, historyResult, vehiclesData, inventoriesData, inventoryItemsData] = await Promise.all([
                 fetchUsersGroupedByRegion(),
                 fetchCompanyRegions(),
-                fetchProcessedRequests({ pageSize: 1000 }) // Fetch all history for client counts
+                fetchProcessedRequests({ pageSize: 1000 }), // Fetch all history for client counts
+                fetchVehicles?.() || Promise.resolve([]),
+                fetchInventories?.() || Promise.resolve([]),
+                fetchInventoryItems?.() || Promise.resolve([])
             ]);
             setData(groupedData);
             setAllRegions(regions || []);
             setProcessedRequests(historyResult?.data || []);
+            setVehicles(vehiclesData || []);
+            setInventories(inventoriesData || []);
+            setInventoryItems(inventoryItemsData || []);
             setPendingChanges([]);
-            initializeLayout(groupedData, regions);
+            initializeLayout(groupedData, regions, inventoriesData || []);
         } catch (err) {
             console.error('Error loading data:', err);
             toast.error('Greška pri učitavanju podataka');
@@ -588,7 +780,7 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
     // LAYOUT INITIALIZATION
     // ========================================================================
 
-    const initializeLayout = useCallback((groupedData, regions) => {
+    const initializeLayout = useCallback((groupedData, regions, inventoriesData = []) => {
         const positions = {};
         const branches = [];
 
@@ -599,6 +791,8 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         const NODE_WIDTH = 176;
         const NODE_HEIGHT = 60;
         const NODE_GAP = 16;
+        const WAREHOUSE_WIDTH = 180;
+        const WAREHOUSE_HEIGHT = 120;
 
         // Company position
         const companyX = 500;
@@ -733,7 +927,22 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
         // Nodes are always positioned relative to their branch position
         // This ensures consistency and prevents nodes from appearing outside their branch
 
-        setNodePositions(positions);
+        // Position warehouses (inventories) - place them to the right of branches
+        const warehousePositions = {};
+        if (inventoriesData && inventoriesData.length > 0) {
+            const warehouseStartX = startX + (totalBranches + 1) * (BRANCH_WIDTH + BRANCH_GAP);
+            const warehouseStartY = BRANCH_START_Y;
+
+            inventoriesData.forEach((inv, idx) => {
+                const savedPos = savedBranchPos[`warehouse-${inv.id}`];
+                warehousePositions[`warehouse-${inv.id}`] = {
+                    x: savedPos?.x ?? warehouseStartX,
+                    y: savedPos?.y ?? (warehouseStartY + idx * (WAREHOUSE_HEIGHT + 20))
+                };
+            });
+        }
+
+        setNodePositions({ ...positions, ...warehousePositions });
         setBranchLayout(branches);
     }, []);
 
@@ -1263,8 +1472,23 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                                 isSelected={selectedNode?.id === node.id}
                                 isDragging={draggingNodeId === node.id}
                                 canDrag={canDrag}
+                                vehicles={vehicles}
                                 onMouseDown={(e) => handleNodeMouseDown(e, node)}
                                 onClick={(e) => handleNodeClick(e, node)}
+                            />
+                        );
+                    })}
+
+                    {/* Warehouse containers */}
+                    {inventories.map(warehouse => {
+                        const pos = nodePositions[`warehouse-${warehouse.id}`] || { x: 0, y: 0 };
+                        return (
+                            <WarehouseContainer
+                                key={`warehouse-${warehouse.id}`}
+                                warehouse={warehouse}
+                                position={pos}
+                                inventoryItems={inventoryItems}
+                                wasteTypes={wasteTypes}
                             />
                         );
                     })}
@@ -1288,6 +1512,13 @@ export const RegionNodeEditor = ({ fullscreen: initialFullscreen = false }) => {
                     />
                 )}
             </div>
+
+            {/* Unconnected entities panel */}
+            <UnconnectedPanel
+                vehicles={vehicles}
+                inventories={inventories}
+                regions={allRegions}
+            />
 
             {/* Instructions - Hide permanently when collapsed */}
             {showHelp && (

@@ -2,10 +2,11 @@ import { useState, useMemo } from 'react';
 import {
     ArrowUpFromLine, Plus, Send, CheckCircle, XCircle, Clock,
     Package, Building2, Phone, MapPin, Scale, Banknote,
-    ChevronDown, ChevronUp, AlertTriangle, Filter
+    ChevronDown, ChevronUp, AlertTriangle, Filter, FileDown
 } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
 import { CreateOutboundModal } from './CreateOutboundModal';
+import { DeliveryNotePDF, PDFDownloadButton } from '../pdf';
 import toast from 'react-hot-toast';
 
 /**
@@ -427,6 +428,22 @@ export const OutboundTab = ({
                                                         )}
                                                     </div>
                                                 </div>
+
+                                                {/* PDF Download for confirmed outbounds */}
+                                                {outbound.status === 'confirmed' && (
+                                                    <PDFDownloadButton
+                                                        document={
+                                                            <DeliveryNotePDF
+                                                                outbound={outbound}
+                                                                wasteType={wasteType}
+                                                                inventory={inventory}
+                                                            />
+                                                        }
+                                                        fileName={`otpremnica-${outbound.id.slice(0, 8)}.pdf`}
+                                                        label="Preuzmi otpremnicu"
+                                                        size="md"
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>
