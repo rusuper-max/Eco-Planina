@@ -231,6 +231,8 @@ export const SupervisorDashboard = ({
                 drivers={companyDrivers}
                 pickupRequests={pending}
                 regions={regions}
+                userRole={userRole}
+                supervisorRegionIds={user?.supervisor_region_ids || []}
             />
         );
     }

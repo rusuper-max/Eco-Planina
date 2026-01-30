@@ -96,6 +96,7 @@ export const CompanyAdminDashboard = ({
                 equipment={equipment}
                 pickupRequests={pending}
                 regions={regions}
+                userRole={userRole}
             />
         );
     }

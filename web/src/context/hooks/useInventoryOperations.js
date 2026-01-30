@@ -90,7 +90,7 @@ export const useInventoryOperations = ({ user, companyCode }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, icon)
+                    waste_type:waste_type_id(id, name, label, icon)
                 `);
 
             if (inventoryId) {
@@ -118,7 +118,7 @@ export const useInventoryOperations = ({ user, companyCode }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, icon),
+                    waste_type:waste_type_id(id, name, label, icon),
                     region:region_id(id, name)
                 `)
                 .order('created_at', { ascending: false });
@@ -173,19 +173,25 @@ export const useInventoryOperations = ({ user, companyCode }) => {
             };
 
         // Determine transaction type based on adjustment_type
-        let transactionType = data.transaction_type || 'adjustment';
-        if (data.adjustment_type === 'add') transactionType = 'adjustment_in';
-        if (data.adjustment_type === 'remove') transactionType = 'adjustment_out';
-        if (data.adjustment_type === 'set') transactionType = 'adjustment_set';
+        // NOTE: Database constraint only allows 'in' and 'out' transaction types
+        let transactionType = data.transaction_type || 'in';
+        if (data.adjustment_type === 'add') transactionType = 'in';
+        if (data.adjustment_type === 'remove') transactionType = 'out';
+        if (data.adjustment_type === 'set') transactionType = 'in'; // 'set' uses 'in' with calculated delta
 
         try {
-            // First, get current quantity
-            const { data: currentItem } = await supabase
+            // First, get current quantity (use maybeSingle to handle case when item doesn't exist yet)
+            const { data: currentItem, error: fetchError } = await supabase
                 .from('inventory_items')
                 .select('quantity_kg')
                 .eq('inventory_id', data.inventory_id)
                 .eq('waste_type_id', data.waste_type_id)
-                .single();
+                .maybeSingle();
+
+            // Ignore PGRST116 error (no rows) - it's expected for new items
+            if (fetchError && fetchError.code !== 'PGRST116') {
+                console.warn('Error fetching current item:', fetchError);
+            }
 
             const currentQty = parseFloat(currentItem?.quantity_kg) || 0;
 
@@ -217,7 +223,17 @@ export const useInventoryOperations = ({ user, companyCode }) => {
 
             if (upsertError) throw upsertError;
 
-            // Record transaction
+            // Record transaction with adjustment type info in notes
+            const adjustmentLabel = {
+                'add': 'Korekcija (+)',
+                'remove': 'Korekcija (-)',
+                'set': 'Postavljeno na'
+            }[data.adjustment_type] || 'Korekcija';
+
+            const notesText = data.reason || data.notes
+                ? `${adjustmentLabel}: ${data.reason || data.notes}`
+                : `${adjustmentLabel}`;
+
             const { error: txError } = await supabase
                 .from('inventory_transactions')
                 .insert({
@@ -225,9 +241,11 @@ export const useInventoryOperations = ({ user, companyCode }) => {
                     waste_type_id: data.waste_type_id,
                     transaction_type: transactionType,
                     quantity_kg: Math.abs(delta),
-                    notes: data.reason || data.notes || 'Ručna korekcija',
+                    source_type: 'korekcija', // Required field - manual adjustment
+                    region_id: data.region_id || user?.region_id || null, // Track adjustment region
+                    notes: notesText,
                     created_by: data.created_by || user?.id,
-                    created_by_name: user?.name
+                    created_by_name: user?.name || user?.email || 'Sistem'
                 });
 
             if (txError) throw txError;

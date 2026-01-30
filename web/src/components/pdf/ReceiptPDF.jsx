@@ -97,10 +97,24 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     wasteType: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: 'bold',
         color: '#065f46',
-        marginBottom: 8,
+        marginBottom: 10,
+    },
+    wasteTypeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    wasteIcon: {
+        fontSize: 18,
+        marginRight: 8,
+    },
+    wasteLabel: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#065f46',
     },
     wasteDetails: {
         flexDirection: 'row',
@@ -296,9 +310,10 @@ export const ReceiptPDF = ({ request, companyName = 'EcoLogistics', wasteTypes =
 
                 {/* Waste Info */}
                 <View style={styles.wasteInfo}>
-                    <Text style={styles.wasteType}>
-                        {getWasteIcon(request.waste_type)} {request.waste_label || 'Nepoznata vrsta'}
-                    </Text>
+                    <View style={styles.wasteTypeRow}>
+                        <Text style={styles.wasteIcon}>{getWasteIcon(request.waste_type)}</Text>
+                        <Text style={styles.wasteLabel}>{request.waste_label || 'Nepoznata vrsta'}</Text>
+                    </View>
                     <View style={styles.wasteDetails}>
                         <View style={styles.wasteDetailItem}>
                             <Text style={styles.wasteDetailLabel}>Popunjenost</Text>

@@ -154,6 +154,7 @@ export const ManagerDashboard = ({
                 drivers={companyDrivers}
                 pickupRequests={pending}
                 regions={regions}
+                userRole={userRole}
             />
         );
     }

@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { captureError } from '../../config/sentry';
 
 /**
  * Error Boundary Component
@@ -30,10 +31,11 @@ class ErrorBoundary extends Component {
             errorInfo: errorInfo
         });
 
-        // Optional: Send to error reporting service (Sentry, LogRocket, etc.)
-        // if (window.Sentry) {
-        //   window.Sentry.captureException(error, { extra: errorInfo });
-        // }
+        // Send to Sentry error tracking
+        captureError(error, {
+            componentStack: errorInfo?.componentStack,
+            boundaryName: this.props.title || 'DefaultErrorBoundary'
+        });
     }
 
     handleReset = () => {

@@ -37,15 +37,46 @@ const getAvailableMonths = (requests) => {
 // Month names in Serbian
 const MONTH_NAMES = ['Januar', 'Februar', 'Mart', 'April', 'Maj', 'Jun', 'Jul', 'Avgust', 'Septembar', 'Oktobar', 'Novembar', 'Decembar'];
 
-export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [], regions = [] }) => {
+export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers = [], pickupRequests = [], regions = [], userRole = null, supervisorRegionIds = [] }) => {
     const [dateRange, setDateRange] = useState('month');
     const [selectedMonth, setSelectedMonth] = useState(''); // Format: "2026-01" for specific month
     const [selectedWasteType, setSelectedWasteType] = useState('all');
     const [selectedClient, setSelectedClient] = useState('all');
     const [selectedRegion, setSelectedRegion] = useState('all');
 
-    // Available months for dropdown
-    const availableMonths = useMemo(() => getAvailableMonths(processedRequests), [processedRequests]);
+    // Check if user is supervisor
+    const isSupervisor = userRole === 'supervisor';
+
+    // For supervisor: filter regions to only show their assigned regions
+    const visibleRegions = useMemo(() => {
+        if (!isSupervisor || !supervisorRegionIds.length) {
+            return regions;
+        }
+        return regions.filter(r => supervisorRegionIds.includes(r.id));
+    }, [regions, isSupervisor, supervisorRegionIds]);
+
+    // For supervisor: filter processed requests to only their regions
+    const visibleProcessedRequests = useMemo(() => {
+        if (!isSupervisor || !supervisorRegionIds.length) {
+            return processedRequests;
+        }
+        return (processedRequests || []).filter(r =>
+            r.region_id && supervisorRegionIds.includes(r.region_id)
+        );
+    }, [processedRequests, isSupervisor, supervisorRegionIds]);
+
+    // For supervisor: filter pickup requests to only their regions
+    const visiblePickupRequests = useMemo(() => {
+        if (!isSupervisor || !supervisorRegionIds.length) {
+            return pickupRequests;
+        }
+        return (pickupRequests || []).filter(r =>
+            r.region_id && supervisorRegionIds.includes(r.region_id)
+        );
+    }, [pickupRequests, isSupervisor, supervisorRegionIds]);
+
+    // Available months for dropdown (use filtered requests for supervisor)
+    const availableMonths = useMemo(() => getAvailableMonths(visibleProcessedRequests), [visibleProcessedRequests]);
     const [showClientBreakdown, setShowClientBreakdown] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
     const [reportMode, setReportMode] = useState('print'); // 'print' or 'excel'
@@ -85,8 +116,8 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
     ];
 
     const getFilteredRequests = () => {
-        if (!processedRequests) return [];
-        let filtered = processedRequests;
+        if (!visibleProcessedRequests) return [];
+        let filtered = visibleProcessedRequests;
 
         // Ako je odabran specifičan mesec, filtriraj po njemu
         if (selectedMonth) {
@@ -132,17 +163,17 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
         return filtered;
     };
 
-    // Get unique clients from processed requests
+    // Get unique clients from processed requests (filtered for supervisor)
     const uniqueClients = useMemo(() => {
-        if (!processedRequests) return [];
+        if (!visibleProcessedRequests) return [];
         const clientMap = new Map();
-        processedRequests.forEach(r => {
+        visibleProcessedRequests.forEach(r => {
             if (r.client_id && r.client_name) {
                 clientMap.set(r.client_id, r.client_name);
             }
         });
         return Array.from(clientMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'sr'));
-    }, [processedRequests]);
+    }, [visibleProcessedRequests]);
 
     // Detailed breakdown: waste type per client
     const getWasteByClientBreakdown = () => {
@@ -261,8 +292,8 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
         const byDate = {};
         const countedRequestIds = new Set();
 
-        // Kreirani zahtevi iz aktivnih pickup_requests
-        pickupRequests.forEach(r => {
+        // Kreirani zahtevi iz aktivnih pickup_requests (filtered for supervisor)
+        visiblePickupRequests.forEach(r => {
             if (!r.created_at) return;
             const dateObj = new Date(r.created_at);
             if (startDate && dateObj < startDate) return;
@@ -273,8 +304,8 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
             if (r.id) countedRequestIds.add(r.id);
         });
 
-        // Kreirani zahtevi iz processed_requests (koji su već obrađeni)
-        (processedRequests || []).forEach(r => {
+        // Kreirani zahtevi iz processed_requests (koji su već obrađeni) - filtered for supervisor
+        (visibleProcessedRequests || []).forEach(r => {
             if (!r.created_at) return;
             // Izbegni duplikate ako imamo original_request_id
             if (r.original_request_id && countedRequestIds.has(r.original_request_id)) return;
@@ -286,8 +317,8 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
             byDate[dateKey].created++;
         });
 
-        // Obrađeni zahtevi (processed_requests)
-        (processedRequests || []).forEach(r => {
+        // Obrađeni zahtevi (processed_requests) - filtered for supervisor
+        (visibleProcessedRequests || []).forEach(r => {
             if (!r.processed_at) return;
             const dateObj = new Date(r.processed_at);
             if (startDate && dateObj < startDate) return;
@@ -359,11 +390,11 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
     const maxRequestsByDate = Math.max(...requestsByDate.map(r => r.count), 1);
     const maxWeightByDate = Math.max(...weightByDate.map(w => w.weight), 1);
 
-    // Mapa za konzistentne boje po vrsti otpada
+    // Mapa za konzistentne boje po vrsti otpada (filtered for supervisor)
     const wasteTypeColorMap = useMemo(() => {
         const map = {};
         const allTypes = new Set();
-        processedRequests?.forEach(r => {
+        visibleProcessedRequests?.forEach(r => {
             const label = r.waste_label || r.waste_type;
             if (label) allTypes.add(label);
         });
@@ -371,13 +402,13 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
             map[type] = WASTE_TYPE_COLORS[idx % WASTE_TYPE_COLORS.length];
         });
         return map;
-    }, [processedRequests]);
+    }, [visibleProcessedRequests]);
 
     const getColorForType = (type) => wasteTypeColorMap[type] || WASTE_TYPE_COLORS[0];
 
-    // Funkcija za filtriranje podataka za izveštaj
+    // Funkcija za filtriranje podataka za izveštaj (uses filtered data for supervisor)
     const getReportData = () => {
-        let data = processedRequests || [];
+        let data = visibleProcessedRequests || [];
 
         if (reportDateFrom) {
             const from = new Date(reportDateFrom);
@@ -653,14 +684,14 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                                 <option key={c.id} value={c.id}>{c.name}</option>
                             ))}
                         </select>
-                        {regions.length > 0 && (
+                        {visibleRegions.length > 0 && (
                             <select
                                 value={selectedRegion}
                                 onChange={(e) => setSelectedRegion(e.target.value)}
                                 className="px-4 py-2 border border-slate-200 rounded-xl text-sm focus:border-emerald-500 outline-none bg-white"
                             >
-                                <option value="all">Sve filijale</option>
-                                {regions.map(r => (
+                                <option value="all">{isSupervisor ? 'Moje filijale' : 'Sve filijale'}</option>
+                                {visibleRegions.map(r => (
                                     <option key={r.id} value={r.id}>{r.name}</option>
                                 ))}
                             </select>
@@ -714,7 +745,7 @@ export const AnalyticsPage = ({ processedRequests, clients, wasteTypes, drivers 
                         )}
                         {selectedRegion !== 'all' && (
                             <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">
-                                {regions.find(r => r.id === selectedRegion)?.name || selectedRegion}
+                                {visibleRegions.find(r => r.id === selectedRegion)?.name || selectedRegion}
                                 <button onClick={() => setSelectedRegion('all')} className="hover:text-orange-900">
                                     <X size={14} />
                                 </button>

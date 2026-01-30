@@ -88,7 +88,8 @@ export const AdjustmentModal = ({
                 quantity_kg: parseFloat(formData.quantity_kg),
                 new_quantity_kg: newQty,
                 reason: formData.reason,
-                created_by: user?.id
+                created_by: user?.id,
+                region_id: user?.region_id // Track which region made the adjustment
             });
 
             toast.success('Korekcija uspešno izvršena');

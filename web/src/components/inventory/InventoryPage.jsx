@@ -61,12 +61,16 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     // Filters
     const [selectedWarehouse, setSelectedWarehouse] = useState('all');
 
+    const isDriver = user?.role === 'driver';
     const isSupervisor = user?.role === 'supervisor';
     const isManager = user?.role === 'manager';
     const isCompanyAdmin = user?.role === 'company_admin' || user?.is_owner;
     const isAdmin = ['admin', 'developer'].includes(user?.role);
     const canManage = isCompanyAdmin || isAdmin; // Only company_admin/admin can CREATE/EDIT/DELETE
     const showDisabledButton = isSupervisor || isManager; // These roles see disabled button
+
+    // Supervisor region IDs for filtering
+    const supervisorRegionIds = user?.supervisor_region_ids || [];
 
     // Load data
     useEffect(() => {
@@ -76,18 +80,29 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     const loadData = async () => {
         setLoading(true);
         try {
-            const [invData, itemsData, txData, regionsData, outboundsData] = await Promise.all([
+            // Use Promise.allSettled to handle partial failures gracefully
+            const results = await Promise.allSettled([
                 fetchInventories(),
                 fetchInventoryItems(),
                 fetchInventoryTransactions({ limit: 100 }),
                 fetchCompanyRegions(),
                 fetchOutbounds({ limit: 100 })
             ]);
-            setInventories(invData);
-            setInventoryItems(itemsData);
-            setTransactions(txData);
-            setRegions(regionsData || []);
-            setOutbounds(outboundsData || []);
+
+            // Extract values, using empty arrays for failed requests
+            const [invResult, itemsResult, txResult, regionsResult, outboundsResult] = results;
+
+            setInventories(invResult.status === 'fulfilled' ? invResult.value : []);
+            setInventoryItems(itemsResult.status === 'fulfilled' ? itemsResult.value : []);
+            setTransactions(txResult.status === 'fulfilled' ? txResult.value : []);
+            setRegions(regionsResult.status === 'fulfilled' ? (regionsResult.value || []) : []);
+            setOutbounds(outboundsResult.status === 'fulfilled' ? (outboundsResult.value || []) : []);
+
+            // Log any errors but don't block UI
+            const errors = results.filter(r => r.status === 'rejected');
+            if (errors.length > 0) {
+                console.warn('Some inventory data failed to load:', errors.map(e => e.reason));
+            }
         } catch (err) {
             console.error('Error loading inventory data:', err);
             toast.error('Greška pri učitavanju podataka');
@@ -103,10 +118,10 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         toast.success('Podaci osveženi');
     };
 
-    // Calculate aggregated stock by warehouse
+    // Calculate aggregated stock by warehouse (uses filtered items for supervisor)
     const stockByWarehouse = useMemo(() => {
         const result = {};
-        inventoryItems.forEach(item => {
+        visibleInventoryItems.forEach(item => {
             const invId = item.inventory_id;
             if (!result[invId]) {
                 result[invId] = {
@@ -119,7 +134,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
             result[invId].items.push(item);
         });
         return result;
-    }, [inventoryItems]);
+    }, [visibleInventoryItems]);
 
     // Get regions for each inventory
     const regionsByInventory = useMemo(() => {
@@ -135,13 +150,13 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         return result;
     }, [regions]);
 
-    // Filtered stock based on selected warehouse
+    // Filtered stock based on selected warehouse (uses filtered items for supervisor)
     const filteredStock = useMemo(() => {
         if (selectedWarehouse === 'all') {
-            return inventoryItems;
+            return visibleInventoryItems;
         }
-        return inventoryItems.filter(item => item.inventory_id === selectedWarehouse);
-    }, [inventoryItems, selectedWarehouse]);
+        return visibleInventoryItems.filter(item => item.inventory_id === selectedWarehouse);
+    }, [visibleInventoryItems, selectedWarehouse]);
 
     // Aggregate stock by waste type (filter out zero quantities)
     const stockByWasteType = useMemo(() => {
@@ -175,6 +190,24 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     const totalStock = useMemo(() => {
         return filteredStock.reduce((sum, item) => sum + (parseFloat(item.quantity_kg) || 0), 0);
     }, [filteredStock]);
+
+    // Filter transactions for supervisor (only from visible inventories)
+    const visibleTransactions = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return transactions;
+        }
+        const visibleIds = new Set(visibleInventories.map(inv => inv.id));
+        return transactions.filter(tx => visibleIds.has(tx.inventory_id));
+    }, [transactions, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
+
+    // Filter outbounds for supervisor
+    const visibleOutbounds = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return outbounds;
+        }
+        const visibleIds = new Set(visibleInventories.map(inv => inv.id));
+        return outbounds.filter(ob => visibleIds.has(ob.inventory_id));
+    }, [outbounds, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
 
     // Handle create inventory
     const handleCreate = async ({ data, selectedRegionIds }) => {
@@ -309,6 +342,43 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         XLSX.writeFile(wb, `Inventar_${dateStr}.xlsx`);
     };
 
+    // Filter inventories for supervisor - only show warehouses linked to their regions
+    const visibleInventories = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return inventories;
+        }
+        if (isSupervisor && supervisorRegionIds.length > 0) {
+            // Get inventory IDs that have regions assigned to this supervisor
+            const supervisorInventoryIds = new Set(
+                regions
+                    .filter(r => supervisorRegionIds.includes(r.id) && r.inventory_id)
+                    .map(r => r.inventory_id)
+            );
+            return inventories.filter(inv => supervisorInventoryIds.has(inv.id));
+        }
+        return inventories;
+    }, [inventories, regions, isSupervisor, isAdmin, isCompanyAdmin, isManager, supervisorRegionIds]);
+
+    // Filter inventory items based on visible inventories
+    const visibleInventoryItems = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return inventoryItems;
+        }
+        const visibleIds = new Set(visibleInventories.map(inv => inv.id));
+        return inventoryItems.filter(item => visibleIds.has(item.inventory_id));
+    }, [inventoryItems, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
+
+    // Driver should not access inventory page
+    if (isDriver) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+                <Warehouse size={48} className="text-slate-300 mb-4" />
+                <h2 className="text-xl font-semibold text-slate-600">Nemate pristup ovoj stranici</h2>
+                <p className="text-slate-400 mt-2">Skladište je dostupno samo za menadžere i administratore.</p>
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -377,7 +447,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
 
             {/* Low Stock Alert */}
             <LowStockAlert
-                inventoryItems={inventoryItems}
+                inventoryItems={visibleInventoryItems}
                 wasteTypes={wasteTypes}
                 defaultThreshold={100}
             />
@@ -391,7 +461,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         </div>
                         <div>
                             <p className="text-sm text-slate-500">Skladišta</p>
-                            <p className="text-2xl font-bold text-slate-800">{inventories.length}</p>
+                            <p className="text-2xl font-bold text-slate-800">{visibleInventories.length}</p>
                         </div>
                     </div>
                 </div>
@@ -433,8 +503,8 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
             </div>
 
             {/* Chart - only show when we have transactions */}
-            {transactions.length > 0 && (
-                <InventoryChart transactions={transactions} days={14} />
+            {visibleTransactions.length > 0 && (
+                <InventoryChart transactions={visibleTransactions} days={14} />
             )}
 
             {/* Tabs */}
@@ -463,7 +533,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
             {/* Tab Content */}
             {activeTab === 'warehouses' && (
                 <div className="space-y-4">
-                    {inventories.length === 0 ? (
+                    {visibleInventories.length === 0 ? (
                         <EmptyState
                             icon={Warehouse}
                             title="Nema skladišta"
@@ -471,7 +541,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         />
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {inventories.map(inv => {
+                            {visibleInventories.map(inv => {
                                 const stock = stockByWarehouse[inv.id];
                                 const invRegions = regionsByInventory[inv.id] || [];
 
@@ -589,7 +659,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                             className="px-4 py-2 border border-slate-200 rounded-xl text-sm bg-white"
                         >
                             <option value="all">Sva skladišta</option>
-                            {inventories.map(inv => (
+                            {visibleInventories.map(inv => (
                                 <option key={inv.id} value={inv.id}>{inv.name}</option>
                             ))}
                         </select>
@@ -666,10 +736,10 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
 
             {activeTab === 'outbound' && (
                 <OutboundTab
-                    outbounds={outbounds}
-                    inventories={inventories}
+                    outbounds={visibleOutbounds}
+                    inventories={visibleInventories}
                     wasteTypes={wasteTypes}
-                    inventoryItems={inventoryItems}
+                    inventoryItems={visibleInventoryItems}
                     canManage={canManage || isSupervisor || isManager}
                     onCreateOutbound={createOutbound}
                     onSendOutbound={sendOutbound}
@@ -681,8 +751,8 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
 
             {activeTab === 'transactions' && (
                 <InventoryTransactions
-                    transactions={transactions}
-                    inventories={inventories}
+                    transactions={visibleTransactions}
+                    inventories={visibleInventories}
                     regions={regions}
                     wasteTypes={wasteTypes}
                     onRefresh={loadData}
@@ -804,9 +874,9 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
             {/* Adjustment Modal */}
             {showAdjustmentModal && (
                 <AdjustmentModal
-                    inventories={inventories}
+                    inventories={visibleInventories}
                     wasteTypes={wasteTypes}
-                    inventoryItems={inventoryItems}
+                    inventoryItems={visibleInventoryItems}
                     onClose={() => setShowAdjustmentModal(false)}
                     onSave={loadData}
                 />

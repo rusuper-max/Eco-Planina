@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
+import { setSentryUser, clearSentryUser } from '../config/sentry';
 
 const AuthContext = createContext(null);
 
@@ -291,6 +292,16 @@ export const AuthProvider = ({ children }) => {
             // Load user profile and get the role immediately
             const userProfile = await loadUserProfile(data.user);
 
+            // Set Sentry user context for error tracking
+            if (userProfile) {
+                setSentryUser({
+                    id: userProfile.id,
+                    name: userProfile.name,
+                    role: userProfile.role,
+                    company_code: userProfile.company_code
+                });
+            }
+
             return { success: true, role: userProfile?.role };
         } catch (error) {
             throw error;
@@ -300,6 +311,9 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
+        // Clear Sentry user context
+        clearSentryUser();
+
         // Clear local state immediately for instant UI feedback
         clearSession();
         setIsLoading(false);
