@@ -34,7 +34,7 @@ import { ClientDashboard, AdminDashboard, ManagerDashboard, SupervisorDashboard,
 
 export default function Dashboard() {
     const navigate = useNavigate();
-    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, rejectPickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients } = useAuth();
+    const { user, logout, companyCode, companyName, regionName, pickupRequests, clientRequests, processedNotification, clearProcessedNotification, addPickupRequest, markRequestAsProcessed, removePickupRequest, rejectPickupRequest, fetchProcessedRequests, fetchClientHistory, getAdminStats, fetchAllCompanies, fetchAllUsers, fetchAllMasterCodes, generateMasterCode, deleteMasterCode, deleteUser, isDeveloper, deleteClient, unreadCount, fetchMessages, sendMessage, markMessagesAsRead, getConversations, updateClientDetails, sendMessageToAdmins, fetchCompanyAdmin, sendMessageToCompanyAdmin, updateProfile, updateCompanyName, updateLocation, originalUser, impersonateUser, exitImpersonation, changeUserRole, resetUserPassword, deleteConversation, updateUser, updateCompany, deleteCompany, subscribeToMessages, deleteProcessedRequest, updateProcessedRequest, fetchCompanyWasteTypes, updateCompanyWasteTypes, updateMasterCodePrice, fetchCompanyRegions, createWasteType, updateWasteType, deleteWasteType, createShadowClients, updateUserSettings } = useAuth();
     const { fetchCompanyEquipment, createEquipment, updateEquipment, deleteEquipment, migrateEquipmentFromLocalStorage, fetchCompanyMembers, fetchCompanyClients, createRequestForClient, resetManagerAnalytics, updateOwnRegion, setClientLocationWithRequests, fetchPickupRequests, driverAssignments, fetchDriverAssignments, hideClientHistoryItem } = useData();
 
     // State declarations
@@ -88,6 +88,9 @@ export default function Dashboard() {
     const [historyTotalPages, setHistoryTotalPages] = useState(1);
     const [historyCount, setHistoryCount] = useState(0);
     const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+
+    // User settings
+    const allowBulkMapAssignment = user?.settings?.allow_bulk_map_assignment ?? true;
 
     const userRole = ['developer', 'admin'].includes(user?.role) ? 'admin' : user?.role === 'company_admin' ? 'company_admin' : user?.role || 'client';
 
@@ -833,6 +836,7 @@ export default function Dashboard() {
                     setClientLocationWithRequests={setClientLocationWithRequests}
                     fetchCompanyClients={fetchCompanyClients}
                     toast={toast}
+                    allowBulkMapAssignment={allowBulkMapAssignment}
                 />
             );
         }
@@ -886,6 +890,7 @@ export default function Dashboard() {
                     setClientLocationWithRequests={setClientLocationWithRequests}
                     fetchCompanyClients={fetchCompanyClients}
                     toast={toast}
+                    allowBulkMapAssignment={allowBulkMapAssignment}
                 />
             );
         }
@@ -1311,6 +1316,43 @@ export default function Dashboard() {
                                         <Copy size={20} />
                                     </button>
                                 </div>
+                            </div>
+                        )}
+                        {/* Map settings - only for manager/supervisor/company_admin */}
+                        {['manager', 'supervisor', 'company_admin'].includes(userRole) && (
+                            <div className="pt-4 border-t border-slate-100">
+                                <label className="block text-sm font-medium text-slate-700 mb-3">
+                                    {language === 'sr' ? 'Podešavanja mape' : 'Map Settings'}
+                                </label>
+                                <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={user?.settings?.allow_bulk_map_assignment ?? true}
+                                        onChange={async (e) => {
+                                            try {
+                                                await updateUserSettings({ allow_bulk_map_assignment: e.target.checked });
+                                                toast.success(e.target.checked
+                                                    ? (language === 'sr' ? 'Grupna dodela omogućena' : 'Bulk assignment enabled')
+                                                    : (language === 'sr' ? 'Grupna dodela onemogućena' : 'Bulk assignment disabled')
+                                                );
+                                            } catch (err) {
+                                                toast.error(language === 'sr' ? 'Greška pri čuvanju' : 'Error saving');
+                                            }
+                                        }}
+                                        className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-700">
+                                            {language === 'sr' ? 'Dozvoli grupnu dodelu iz mape' : 'Allow bulk assignment from map'}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            {language === 'sr'
+                                                ? 'Kada kliknete na cluster na mapi, ponudiće vam opciju da dodelite sve zahteve jednom vozaču'
+                                                : 'When you click a cluster on the map, it will offer to assign all requests to one driver'
+                                            }
+                                        </p>
+                                    </div>
+                                </label>
                             </div>
                         )}
                     </div>

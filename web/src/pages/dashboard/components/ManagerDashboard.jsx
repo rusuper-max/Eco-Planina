@@ -68,7 +68,9 @@ export const ManagerDashboard = ({
     handleAssignDriverFromMap,
     setClientLocationWithRequests,
     fetchCompanyClients,
-    toast
+    toast,
+    // User settings
+    allowBulkMapAssignment = true
 }) => {
     if (activeTab === 'requests') {
         return (
@@ -253,6 +255,7 @@ export const ManagerDashboard = ({
                     drivers={companyDrivers}
                     onAssignDriver={handleAssignDriverFromMap}
                     driverAssignments={driverAssignments}
+                    allowBulkAssignment={allowBulkMapAssignment}
                     onSetClientLocation={async (clientId, lat, lng) => {
                         await setClientLocationWithRequests(clientId, lat, lng);
                         await fetchCompanyClients();

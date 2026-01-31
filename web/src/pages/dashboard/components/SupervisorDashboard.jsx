@@ -66,7 +66,9 @@ export const SupervisorDashboard = ({
     handleAssignDriverFromMap,
     setClientLocationWithRequests,
     fetchCompanyClients,
-    toast
+    toast,
+    // User settings
+    allowBulkMapAssignment = true
 }) => {
     if (activeTab === 'requests') {
         return (
@@ -302,6 +304,7 @@ export const SupervisorDashboard = ({
                     drivers={companyDrivers}
                     onAssignDriver={handleAssignDriverFromMap}
                     driverAssignments={driverAssignments}
+                    allowBulkAssignment={allowBulkMapAssignment}
                     onSetClientLocation={async (clientId, lat, lng) => {
                         await setClientLocationWithRequests(clientId, lat, lng);
                         await fetchCompanyClients();

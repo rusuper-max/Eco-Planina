@@ -269,6 +269,35 @@ export const CompanyProvider = ({ children }) => {
         }
     };
 
+    // Update user settings (stored in users.settings JSONB column)
+    const updateUserSettings = async (newSettings) => {
+        if (!user) throw new Error('Niste prijavljeni');
+        try {
+            // Merge with existing settings
+            const currentSettings = user.settings || {};
+            const mergedSettings = { ...currentSettings, ...newSettings };
+
+            const { error } = await supabase
+                .from('users')
+                .update({ settings: mergedSettings })
+                .eq('id', user.id);
+
+            if (error) throw error;
+
+            // Update local state
+            setUser({ ...user, settings: mergedSettings });
+            return { success: true, settings: mergedSettings };
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    // Get specific user setting with default value
+    const getUserSetting = (key, defaultValue = null) => {
+        if (!user?.settings) return defaultValue;
+        return user.settings[key] ?? defaultValue;
+    };
+
     const value = {
         fetchCompanyEquipmentTypes,
         updateCompanyEquipmentTypes,
@@ -286,6 +315,9 @@ export const CompanyProvider = ({ children }) => {
         // Pickup settings
         fetchMaxPickupHours,
         updateMaxPickupHours,
+        // User settings
+        updateUserSettings,
+        getUserSetting,
     };
 
     return <CompanyContext.Provider value={value}>{children}</CompanyContext.Provider>;

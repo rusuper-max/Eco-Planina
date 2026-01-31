@@ -1,9 +1,9 @@
-import { useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import toast from 'react-hot-toast';
-import { Truck, X, RefreshCw, MapPin, ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react';
+import { Truck, X, RefreshCw, MapPin, ChevronRight, ChevronLeft, AlertTriangle, Users, ZoomIn } from 'lucide-react';
 import { createCustomIcon } from '../../utils/mapUtils';
 import { getCurrentUrgency } from '../../utils/timeUtils';
 import { FitBounds } from './FitBounds';
@@ -17,6 +17,57 @@ const DEFAULT_WASTE_TYPES = [
 ];
 
 /**
+ * Cluster Action Modal - shows when clicking a cluster
+ */
+const ClusterActionModal = ({ cluster, onBulkAssign, onZoom, onClose }) => {
+    if (!cluster) return null;
+
+    const count = cluster.markers?.length || 0;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
+                    <div>
+                        <h3 className="font-bold text-slate-800">Cluster sa {count} zahteva</h3>
+                        <p className="text-xs text-slate-500">Izaberite akciju</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="p-4 space-y-3">
+                    <button
+                        onClick={onBulkAssign}
+                        className="w-full flex items-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
+                    >
+                        <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center">
+                            <Users size={24} className="text-white" />
+                        </div>
+                        <div className="text-left">
+                            <p className="font-semibold text-emerald-800">Dodeli grupno vozaču</p>
+                            <p className="text-xs text-emerald-600">Dodeli svih {count} zahteva jednom vozaču</p>
+                        </div>
+                    </button>
+                    <button
+                        onClick={onZoom}
+                        className="w-full flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors"
+                    >
+                        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                            <ZoomIn size={24} className="text-white" />
+                        </div>
+                        <div className="text-left">
+                            <p className="font-semibold text-blue-800">Zumiraj cluster</p>
+                            <p className="text-xs text-blue-600">Prikaži pojedinačne zahteve na mapi</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+/**
  * Main map view component with clustering, filtering, and driver assignment
  */
 export const MapView = ({
@@ -24,11 +75,12 @@ export const MapView = ({
     clients,
     type,
     onClientLocationEdit,
-    onSetClientLocation,  // New: callback za podešavanje lokacije klijenta (ažurira klijenta i sve njegove zahteve)
+    onSetClientLocation,
     wasteTypes = DEFAULT_WASTE_TYPES,
     drivers = [],
     onAssignDriver,
-    driverAssignments = []
+    driverAssignments = [],
+    allowBulkAssignment = true  // New prop - can be controlled via manager settings
 }) => {
     const [urgencyFilter, setUrgencyFilter] = useState('all');
     const [wasteFilter, setWasteFilter] = useState('all');
@@ -39,6 +91,8 @@ export const MapView = ({
     const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [selectedClientForLocation, setSelectedClientForLocation] = useState(null);
     const [savingLocation, setSavingLocation] = useState(false);
+    const [clusterActionModal, setClusterActionModal] = useState(null); // { cluster, markers, map }
+    const mapRef = useRef(null);
     const items = type === 'requests' ? requests : clients;
 
     // Custom cluster icon with smooth styling and count
@@ -384,6 +438,32 @@ export const MapView = ({
                     spiderfyOnEveryZoom={false}
                     spiderfyDistanceMultiplier={1.2}
                     iconCreateFunction={createClusterIcon}
+                    zoomToBoundsOnClick={!allowBulkAssignment}
+                    onClusterClick={(cluster) => {
+                        if (!allowBulkAssignment || type !== 'requests' || !onAssignDriver || drivers.length === 0) {
+                            // Default behavior - zoom
+                            cluster.layer.zoomToBounds({ padding: [20, 20] });
+                            return;
+                        }
+                        // Get all markers/requests in this cluster
+                        const clusterMarkers = cluster.layer.getAllChildMarkers();
+                        const clusterRequests = clusterMarkers
+                            .map(marker => {
+                                const latLng = marker.getLatLng();
+                                return markers.find(m =>
+                                    Math.abs(m.position[0] - latLng.lat) < 0.0001 &&
+                                    Math.abs(m.position[1] - latLng.lng) < 0.0001
+                                )?.item;
+                            })
+                            .filter(Boolean);
+
+                        if (clusterRequests.length > 0) {
+                            setClusterActionModal({
+                                cluster: cluster.layer,
+                                markers: clusterRequests
+                            });
+                        }
+                    }}
                 >
                     {markers.map(({ item, position, index }) => (
                         <Marker
@@ -493,6 +573,24 @@ export const MapView = ({
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Cluster Action Modal */}
+            {clusterActionModal && (
+                <ClusterActionModal
+                    cluster={clusterActionModal}
+                    onBulkAssign={() => {
+                        // Open driver modal with all requests from cluster
+                        openDriverModal(clusterActionModal.markers);
+                        setClusterActionModal(null);
+                    }}
+                    onZoom={() => {
+                        // Zoom to cluster bounds
+                        clusterActionModal.cluster?.zoomToBounds({ padding: [20, 20] });
+                        setClusterActionModal(null);
+                    }}
+                    onClose={() => setClusterActionModal(null)}
+                />
             )}
 
             {/* Driver Assignment Modal */}
