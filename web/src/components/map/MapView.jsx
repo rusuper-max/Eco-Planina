@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -18,37 +18,59 @@ const DEFAULT_WASTE_TYPES = [
 
 /**
  * Cluster Action Modal - shows when clicking a cluster
+ * Only shows unassigned requests for bulk assignment
  */
 const ClusterActionModal = ({ cluster, onBulkAssign, onZoom, onClose }) => {
     if (!cluster) return null;
 
-    const count = cluster.markers?.length || 0;
+    const totalCount = cluster.totalCount || 0;
+    const unassignedCount = cluster.unassignedMarkers?.length || 0;
+    const assignedCount = totalCount - unassignedCount;
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
             <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
                     <div>
-                        <h3 className="font-bold text-slate-800">Cluster sa {count} zahteva</h3>
-                        <p className="text-xs text-slate-500">Izaberite akciju</p>
+                        <h3 className="font-bold text-slate-800">Cluster sa {totalCount} zahteva</h3>
+                        <p className="text-xs text-slate-500">
+                            {assignedCount > 0
+                                ? `${unassignedCount} nedodeljeno, ${assignedCount} već dodeljeno`
+                                : 'Svi zahtevi su nedodeljeni'
+                            }
+                        </p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg">
                         <X size={20} />
                     </button>
                 </div>
                 <div className="p-4 space-y-3">
-                    <button
-                        onClick={onBulkAssign}
-                        className="w-full flex items-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
-                    >
-                        <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center">
-                            <Users size={24} className="text-white" />
+                    {unassignedCount > 0 ? (
+                        <button
+                            onClick={onBulkAssign}
+                            className="w-full flex items-center gap-3 p-4 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
+                        >
+                            <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center">
+                                <Users size={24} className="text-white" />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-semibold text-emerald-800">Dodeli grupno vozaču</p>
+                                <p className="text-xs text-emerald-600">
+                                    Dodeli {unassignedCount} {unassignedCount === 1 ? 'nedodeljen zahtev' : 'nedodeljenih zahteva'} jednom vozaču
+                                </p>
+                            </div>
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                            <div className="w-12 h-12 bg-slate-400 rounded-xl flex items-center justify-center">
+                                <Users size={24} className="text-white" />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-semibold text-slate-500">Svi zahtevi su dodeljeni</p>
+                                <p className="text-xs text-slate-400">Nema nedodeljenih zahteva u ovom clusteru</p>
+                            </div>
                         </div>
-                        <div className="text-left">
-                            <p className="font-semibold text-emerald-800">Dodeli grupno vozaču</p>
-                            <p className="text-xs text-emerald-600">Dodeli svih {count} zahteva jednom vozaču</p>
-                        </div>
-                    </button>
+                    )}
                     <button
                         onClick={onZoom}
                         className="w-full flex items-center gap-3 p-4 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors"
@@ -93,7 +115,11 @@ export const MapView = ({
     const [savingLocation, setSavingLocation] = useState(false);
     const [clusterActionModal, setClusterActionModal] = useState(null); // { cluster, markers, map }
     const mapRef = useRef(null);
+    const clusterRef = useRef(null);
     const items = type === 'requests' ? requests : clients;
+
+    // Store markers in ref for cluster click handler
+    const markersRef = useRef([]);
 
     // Custom cluster icon with smooth styling and count
     const createClusterIcon = (cluster) => {
@@ -209,6 +235,39 @@ export const MapView = ({
 
         return withCoords;
     }, [filteredItems]);
+
+    // Keep markers in ref for cluster click handler
+    useEffect(() => {
+        markersRef.current = markers;
+    }, [markers]);
+
+    // Handle cluster click via ref callback
+    const handleClusterClick = useCallback((cluster) => {
+        if (!allowBulkAssignment || type !== 'requests' || !onAssignDriver || drivers.length === 0) {
+            // Default behavior - zoom
+            cluster.zoomToBounds({ padding: [20, 20] });
+            return;
+        }
+        // Get all markers/requests in this cluster
+        const clusterMarkers = cluster.getAllChildMarkers();
+        const currentMarkers = markersRef.current;
+        const clusterRequests = clusterMarkers
+            .map(marker => {
+                const latLng = marker.getLatLng();
+                return currentMarkers.find(m =>
+                    Math.abs(m.position[0] - latLng.lat) < 0.0001 &&
+                    Math.abs(m.position[1] - latLng.lng) < 0.0001
+                )?.item;
+            })
+            .filter(Boolean);
+
+        if (clusterRequests.length > 0) {
+            setClusterActionModal({
+                cluster: cluster,
+                markers: clusterRequests
+            });
+        }
+    }, [allowBulkAssignment, type, onAssignDriver, drivers.length]);
 
     // Extract all positions for bounds fitting
     const allPositions = useMemo(() => markers.map(m => m.position), [markers]);
@@ -439,29 +498,42 @@ export const MapView = ({
                     spiderfyDistanceMultiplier={1.2}
                     iconCreateFunction={createClusterIcon}
                     zoomToBoundsOnClick={!allowBulkAssignment}
-                    onClusterClick={(cluster) => {
-                        if (!allowBulkAssignment || type !== 'requests' || !onAssignDriver || drivers.length === 0) {
-                            // Default behavior - zoom
-                            cluster.layer.zoomToBounds({ padding: [20, 20] });
-                            return;
-                        }
-                        // Get all markers/requests in this cluster
-                        const clusterMarkers = cluster.layer.getAllChildMarkers();
-                        const clusterRequests = clusterMarkers
-                            .map(marker => {
-                                const latLng = marker.getLatLng();
-                                return markers.find(m =>
-                                    Math.abs(m.position[0] - latLng.lat) < 0.0001 &&
-                                    Math.abs(m.position[1] - latLng.lng) < 0.0001
-                                )?.item;
-                            })
-                            .filter(Boolean);
+                    eventHandlers={{
+                        clusterclick: (e) => {
+                            // Get the cluster from the event
+                            const cluster = e.layer;
+                            if (!cluster || !cluster.getAllChildMarkers) return;
 
-                        if (clusterRequests.length > 0) {
-                            setClusterActionModal({
-                                cluster: cluster.layer,
-                                markers: clusterRequests
-                            });
+                            if (!allowBulkAssignment || type !== 'requests' || !onAssignDriver || drivers.length === 0) {
+                                // Default behavior - zoom
+                                cluster.zoomToBounds({ padding: [20, 20] });
+                                return;
+                            }
+                            // Get all markers/requests in this cluster
+                            const clusterMarkers = cluster.getAllChildMarkers();
+                            const currentMarkers = markersRef.current;
+                            const clusterRequests = clusterMarkers
+                                .map(marker => {
+                                    const latLng = marker.getLatLng();
+                                    return currentMarkers.find(m =>
+                                        Math.abs(m.position[0] - latLng.lat) < 0.0001 &&
+                                        Math.abs(m.position[1] - latLng.lng) < 0.0001
+                                    )?.item;
+                                })
+                                .filter(Boolean);
+
+                            if (clusterRequests.length > 0) {
+                                // Filter out already assigned requests
+                                const unassignedRequests = clusterRequests.filter(req =>
+                                    !driverAssignments.some(a => a.request_id === req.id)
+                                );
+
+                                setClusterActionModal({
+                                    cluster: cluster,
+                                    totalCount: clusterRequests.length,
+                                    unassignedMarkers: unassignedRequests
+                                });
+                            }
                         }
                     }}
                 >
@@ -580,8 +652,10 @@ export const MapView = ({
                 <ClusterActionModal
                     cluster={clusterActionModal}
                     onBulkAssign={() => {
-                        // Open driver modal with all requests from cluster
-                        openDriverModal(clusterActionModal.markers);
+                        // Open driver modal with only UNASSIGNED requests from cluster
+                        if (clusterActionModal.unassignedMarkers?.length > 0) {
+                            openDriverModal(clusterActionModal.unassignedMarkers);
+                        }
                         setClusterActionModal(null);
                     }}
                     onZoom={() => {

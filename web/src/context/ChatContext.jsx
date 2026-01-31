@@ -17,8 +17,38 @@ export const ChatProvider = ({ children }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const messagesSubscriptionRef = useRef(null);
 
+    // Fetch unread count and setup global realtime subscription
     useEffect(() => {
-        if (user) fetchUnreadCount();
+        if (!user) return;
+
+        fetchUnreadCount();
+
+        // Global subscription for new messages - updates unread count in real-time
+        const channelName = `global_messages_${user.id}`;
+        const globalSubscription = supabase.channel(channelName)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `receiver_id=eq.${user.id}`
+            }, () => {
+                // New message received - update unread count
+                fetchUnreadCount();
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'messages',
+                filter: `receiver_id=eq.${user.id}`
+            }, () => {
+                // Message marked as read - update unread count
+                fetchUnreadCount();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(globalSubscription);
+        };
     }, [user]);
 
     const fetchMessages = async (partnerId) => {
@@ -126,11 +156,30 @@ export const ChatProvider = ({ children }) => {
         if (!user) return;
         try {
             // Soft delete all messages with this partner
-            await supabase.from('messages')
-                .update({ deleted_at: new Date().toISOString() })
-                .or(`and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`);
+            // Split into two separate updates to avoid complex OR filter issues
+            const timestamp = new Date().toISOString();
+
+            // Delete messages sent by me to partner
+            const { error: error1 } = await supabase.from('messages')
+                .update({ deleted_at: timestamp })
+                .eq('sender_id', user.id)
+                .eq('receiver_id', partnerId)
+                .is('deleted_at', null);
+
+            if (error1) throw error1;
+
+            // Delete messages received from partner
+            const { error: error2 } = await supabase.from('messages')
+                .update({ deleted_at: timestamp })
+                .eq('sender_id', partnerId)
+                .eq('receiver_id', user.id)
+                .is('deleted_at', null);
+
+            if (error2) throw error2;
+
             return { success: true };
         } catch (error) {
+            console.error('Error deleting conversation:', error);
             throw error;
         }
     };

@@ -121,10 +121,9 @@ export const ChatInterface = ({
         setSending(true);
         setNewMessage('');
         try {
-            const sentMsg = await sendMessage(selectedChat.partnerId, messageContent);
-            if (sentMsg) {
-                setChatMessages(prev => [...prev, sentMsg]);
-            }
+            // Don't add message locally - let realtime subscription handle it
+            // This prevents duplicate messages
+            await sendMessage(selectedChat.partnerId, messageContent);
             await loadConversations();
         } catch (error) {
             console.error('Error sending message:', error);
