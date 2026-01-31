@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import toast from 'react-hot-toast';
 import { History, Search, ArrowUpDown, ArrowUp, ArrowDown, Calendar, CheckCircle2, XCircle, Image, Edit3, Trash2, AlertTriangle, Download, User, Truck, Clock, ChevronDown, ChevronUp, PlayCircle, Package, MapPin, UserCheck, FileDown } from 'lucide-react';
 import { Modal, EmptyState, RecycleLoader } from '../common';
 import ProofsModal from '../common/ProofsModal';
 import { EditProcessedRequestModal } from './EditProcessedRequestModal';
-import { ReceiptPDF, PDFDownloadButton } from '../pdf';
 import { supabase } from '../../config/supabase';
+
+// Lazy load PDF components - only loaded when user clicks download
+const PDFDownloadButton = lazy(() => import('../pdf/PDFDownloadButton').then(m => ({ default: m.PDFDownloadButton })));
+const ReceiptPDF = lazy(() => import('../pdf/ReceiptPDF').then(m => ({ default: m.ReceiptPDF })));
 
 const DEFAULT_WASTE_TYPES = [
     { id: 'cardboard', label: 'Karton', icon: '📦' },
@@ -700,19 +703,21 @@ export const HistoryTable = ({ requests, wasteTypes = DEFAULT_WASTE_TYPES, onEdi
                                                     )}
                                                     {/* PDF Download button for completed requests */}
                                                     {req.status !== 'rejected' && (
-                                                        <PDFDownloadButton
-                                                            document={
-                                                                <ReceiptPDF
-                                                                    request={req}
-                                                                    wasteType={wasteTypes.find(w => w.id === req.waste_type)}
-                                                                    driverAssignment={assignment}
-                                                                />
-                                                            }
-                                                            fileName={`prijemnica-${req.request_code || req.id?.slice(0, 8)}.pdf`}
-                                                            iconOnly
-                                                            size="sm"
-                                                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                                                        />
+                                                        <Suspense fallback={<div className="w-8 h-8 flex items-center justify-center"><RecycleLoader size={14} className="animate-spin text-purple-400" /></div>}>
+                                                            <PDFDownloadButton
+                                                                document={
+                                                                    <ReceiptPDF
+                                                                        request={req}
+                                                                        wasteType={wasteTypes.find(w => w.id === req.waste_type)}
+                                                                        driverAssignment={assignment}
+                                                                    />
+                                                                }
+                                                                fileName={`prijemnica-${req.request_code || req.id?.slice(0, 8)}.pdf`}
+                                                                iconOnly
+                                                                size="sm"
+                                                                className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                                            />
+                                                        </Suspense>
                                                     )}
                                                     {/* On very small screens, show proof button in actions if dokaz column is hidden */}
                                                     <button

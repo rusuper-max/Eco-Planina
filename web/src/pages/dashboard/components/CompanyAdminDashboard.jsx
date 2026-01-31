@@ -2,7 +2,7 @@
  * CompanyAdminDashboard - Sadržaj za company_admin role
  * Ekstraktovano iz Dashboard.jsx
  */
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     ManagerRequestsTable, HistoryTable, AnalyticsPage, ManagerAnalyticsPage, DriverAnalyticsPage,
     PrintExport, EquipmentManagement, WasteTypesManagement, MapView,
@@ -10,6 +10,7 @@ import {
     InventoryPage, OutboundPage, TransactionsPage, VehiclesPage, FuelLogsPage
 } from '../../DashboardComponents';
 import { OverviewPage } from '../../../components/overview';
+import { OnboardingWizard } from '../../../components/onboarding';
 
 export const CompanyAdminDashboard = ({
     activeTab,
@@ -258,18 +259,107 @@ export const CompanyAdminDashboard = ({
 
     // Default: Company Admin Dashboard - New Overview Page
     return (
-        <OverviewPage
-            onNavigate={(tab, params) => {
-                setActiveTab(tab);
-                if (params?.selectedId) {
-                    const req = pending.find(r => r.id === params.selectedId);
-                    if (req) setSelectedRequest(req);
-                }
-            }}
+        <CompanyAdminOverview
+            setActiveTab={setActiveTab}
+            setSelectedRequest={setSelectedRequest}
+            pending={pending}
             companyMembers={companyMembers}
             processedRequests={processedRequests}
             companyDrivers={companyDrivers}
+            regions={regions}
+            wasteTypes={wasteTypes}
+            user={user}
         />
+    );
+};
+
+/**
+ * CompanyAdminOverview - Wrapper that includes onboarding wizard
+ */
+const CompanyAdminOverview = ({
+    setActiveTab,
+    setSelectedRequest,
+    pending,
+    companyMembers,
+    processedRequests,
+    companyDrivers,
+    regions,
+    wasteTypes,
+    user,
+}) => {
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
+    // Check if onboarding should be shown
+    useEffect(() => {
+        const onboardingKey = `onboarding-${user?.company_code}`;
+        const hasSeenOnboarding = localStorage.getItem(onboardingKey);
+
+        // Show onboarding if:
+        // 1. User hasn't seen it yet
+        // 2. Setup is not complete
+        const hasRegions = regions?.length > 0;
+        const hasWasteTypes = wasteTypes?.length > 0;
+        const hasStaff = companyMembers?.filter(m =>
+            m.role === 'manager' || m.role === 'driver'
+        ).length > 0;
+
+        const isSetupComplete = hasRegions && hasWasteTypes && hasStaff;
+
+        if (!hasSeenOnboarding && !isSetupComplete) {
+            // Delay showing wizard a bit for better UX
+            const timer = setTimeout(() => setShowOnboarding(true), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [user?.company_code, regions?.length, wasteTypes?.length, companyMembers]);
+
+    const handleOnboardingClose = () => {
+        setShowOnboarding(false);
+    };
+
+    const handleOnboardingComplete = ({ skipped }) => {
+        const onboardingKey = `onboarding-${user?.company_code}`;
+        if (!skipped) {
+            localStorage.setItem(onboardingKey, 'completed');
+        } else {
+            // If skipped, mark with timestamp so we can show again later
+            localStorage.setItem(onboardingKey, `skipped-${Date.now()}`);
+        }
+    };
+
+    // Filter staff for onboarding
+    const staff = useMemo(() =>
+        companyMembers?.filter(m =>
+            m.role === 'manager' || m.role === 'driver' || m.role === 'supervisor'
+        ) || [],
+        [companyMembers]
+    );
+
+    return (
+        <>
+            <OverviewPage
+                onNavigate={(tab, params) => {
+                    setActiveTab(tab);
+                    if (params?.selectedId) {
+                        const req = pending.find(r => r.id === params.selectedId);
+                        if (req) setSelectedRequest(req);
+                    }
+                }}
+                companyMembers={companyMembers}
+                processedRequests={processedRequests}
+                companyDrivers={companyDrivers}
+            />
+
+            {/* Onboarding Wizard Modal */}
+            <OnboardingWizard
+                open={showOnboarding}
+                onClose={handleOnboardingClose}
+                onComplete={handleOnboardingComplete}
+                companyName={user?.company_name || 'Vaša firma'}
+                existingRegions={regions || []}
+                existingWasteTypes={wasteTypes || []}
+                existingStaff={staff}
+            />
+        </>
     );
 };
 

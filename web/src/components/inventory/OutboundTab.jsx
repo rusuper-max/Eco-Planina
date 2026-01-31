@@ -1,13 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import {
     ArrowUpFromLine, Plus, Send, CheckCircle, XCircle, Clock,
     Package, Building2, Phone, MapPin, Scale, Banknote,
-    ChevronDown, ChevronUp, AlertTriangle, Filter, FileDown
+    ChevronDown, ChevronUp, AlertTriangle, Filter, FileDown, Loader2
 } from 'lucide-react';
 import { Modal, EmptyState } from '../common';
 import { CreateOutboundModal } from './CreateOutboundModal';
-import { DeliveryNotePDF, PDFDownloadButton } from '../pdf';
 import toast from 'react-hot-toast';
+
+// Lazy load PDF components - only loaded when user clicks download
+const PDFDownloadButton = lazy(() => import('../pdf/PDFDownloadButton').then(m => ({ default: m.PDFDownloadButton })));
+const DeliveryNotePDF = lazy(() => import('../pdf/DeliveryNotePDF').then(m => ({ default: m.DeliveryNotePDF })));
 
 /**
  * OutboundTab - Lista izlaza iz skladišta
@@ -431,18 +434,20 @@ export const OutboundTab = ({
 
                                                 {/* PDF Download for confirmed outbounds */}
                                                 {outbound.status === 'confirmed' && (
-                                                    <PDFDownloadButton
-                                                        document={
-                                                            <DeliveryNotePDF
-                                                                outbound={outbound}
-                                                                wasteType={wasteType}
-                                                                inventory={inventory}
-                                                            />
-                                                        }
-                                                        fileName={`otpremnica-${outbound.id.slice(0, 8)}.pdf`}
-                                                        label="Preuzmi otpremnicu"
-                                                        size="md"
-                                                    />
+                                                    <Suspense fallback={<div className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400"><Loader2 size={14} className="animate-spin" />Učitavanje...</div>}>
+                                                        <PDFDownloadButton
+                                                            document={
+                                                                <DeliveryNotePDF
+                                                                    outbound={outbound}
+                                                                    wasteType={wasteType}
+                                                                    inventory={inventory}
+                                                                />
+                                                            }
+                                                            fileName={`otpremnica-${outbound.id.slice(0, 8)}.pdf`}
+                                                            label="Preuzmi otpremnicu"
+                                                            size="md"
+                                                        />
+                                                    </Suspense>
                                                 )}
                                             </div>
                                         </div>

@@ -118,6 +118,34 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         toast.success('Podaci osveženi');
     };
 
+    // Filter inventories for supervisor - only show warehouses linked to their regions
+    // IMPORTANT: This must be defined BEFORE stockByWarehouse and filteredStock
+    const visibleInventories = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return inventories;
+        }
+        if (isSupervisor && supervisorRegionIds.length > 0) {
+            // Get inventory IDs that have regions assigned to this supervisor
+            const supervisorInventoryIds = new Set(
+                regions
+                    .filter(r => supervisorRegionIds.includes(r.id) && r.inventory_id)
+                    .map(r => r.inventory_id)
+            );
+            return inventories.filter(inv => supervisorInventoryIds.has(inv.id));
+        }
+        return inventories;
+    }, [inventories, regions, isSupervisor, isAdmin, isCompanyAdmin, isManager, supervisorRegionIds]);
+
+    // Filter inventory items based on visible inventories
+    // IMPORTANT: This must be defined BEFORE stockByWarehouse and filteredStock
+    const visibleInventoryItems = useMemo(() => {
+        if (isAdmin || isCompanyAdmin || isManager) {
+            return inventoryItems;
+        }
+        const visibleIds = new Set(visibleInventories.map(inv => inv.id));
+        return inventoryItems.filter(item => visibleIds.has(item.inventory_id));
+    }, [inventoryItems, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
+
     // Calculate aggregated stock by warehouse (uses filtered items for supervisor)
     const stockByWarehouse = useMemo(() => {
         const result = {};
@@ -341,32 +369,6 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         const dateStr = new Date().toISOString().split('T')[0];
         XLSX.writeFile(wb, `Inventar_${dateStr}.xlsx`);
     };
-
-    // Filter inventories for supervisor - only show warehouses linked to their regions
-    const visibleInventories = useMemo(() => {
-        if (isAdmin || isCompanyAdmin || isManager) {
-            return inventories;
-        }
-        if (isSupervisor && supervisorRegionIds.length > 0) {
-            // Get inventory IDs that have regions assigned to this supervisor
-            const supervisorInventoryIds = new Set(
-                regions
-                    .filter(r => supervisorRegionIds.includes(r.id) && r.inventory_id)
-                    .map(r => r.inventory_id)
-            );
-            return inventories.filter(inv => supervisorInventoryIds.has(inv.id));
-        }
-        return inventories;
-    }, [inventories, regions, isSupervisor, isAdmin, isCompanyAdmin, isManager, supervisorRegionIds]);
-
-    // Filter inventory items based on visible inventories
-    const visibleInventoryItems = useMemo(() => {
-        if (isAdmin || isCompanyAdmin || isManager) {
-            return inventoryItems;
-        }
-        const visibleIds = new Set(visibleInventories.map(inv => inv.id));
-        return inventoryItems.filter(item => visibleIds.has(item.inventory_id));
-    }, [inventoryItems, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
 
     // Driver should not access inventory page
     if (isDriver) {
