@@ -19,26 +19,45 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
 
     // Generate Excel template for download
     const handleDownloadTemplate = () => {
-        const templateData = [
-            {
-                'Ime i Prezime': 'Primer: Petar Petrović',
-                'Telefon': '0641234567',
-                'Pozivni Broj': '+381',
-                'Adresa': 'Knez Mihailova 5, Beograd',
-                'Napomena': 'VIP klijent'
-            }
-        ];
+        // Create worksheet with headers first
+        const headers = ['Ime i Prezime', 'Telefon', 'Pozivni Broj', 'Adresa', 'Napomena'];
+        const exampleRow = ['Primer: Petar Petrović', '0641234567', '+381', 'Knez Mihailova 5, Beograd', 'VIP klijent'];
 
-        const ws = XLSX.utils.json_to_sheet(templateData);
+        // Create worksheet from array of arrays (gives more control over formatting)
+        const ws = XLSX.utils.aoa_to_sheet([headers, exampleRow]);
 
         // Set column widths
         ws['!cols'] = [
             { wch: 25 }, // Ime
-            { wch: 15 }, // Telefon
-            { wch: 12 }, // Pozivni
+            { wch: 18 }, // Telefon
+            { wch: 14 }, // Pozivni
             { wch: 35 }, // Adresa
             { wch: 20 }  // Napomena
         ];
+
+        // Format phone and country code columns as TEXT to preserve leading zeros and + sign
+        // Column B (Telefon) - cells B1, B2, B3, etc.
+        // Column C (Pozivni Broj) - cells C1, C2, C3, etc.
+
+        // Set format for example row and add some empty rows with text format
+        const textFormat = { t: 's' }; // 's' = string/text type
+
+        // Format the example row cells as text
+        if (ws['B2']) ws['B2'] = { v: '0641234567', t: 's' };
+        if (ws['C2']) ws['C2'] = { v: '+381', t: 's' };
+
+        // Add 10 empty rows with proper text formatting for user to fill in
+        for (let row = 3; row <= 12; row++) {
+            // Set all cells in the row, with B and C explicitly as text
+            ws[`A${row}`] = { v: '', t: 's' };
+            ws[`B${row}`] = { v: '', t: 's' }; // Telefon - TEXT
+            ws[`C${row}`] = { v: '', t: 's' }; // Pozivni - TEXT
+            ws[`D${row}`] = { v: '', t: 's' };
+            ws[`E${row}`] = { v: '', t: 's' };
+        }
+
+        // Update the range to include all rows
+        ws['!ref'] = 'A1:E12';
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Klijenti');
