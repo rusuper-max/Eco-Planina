@@ -226,14 +226,36 @@ const formatQuantity = (quantity, unit) => {
     return `${parseFloat(quantity).toLocaleString('sr-RS')} ${unit || 'kg'}`;
 };
 
-export const DeliveryNotePDF = ({ outbound, companyName = 'EcoLogistics', wasteTypes = [] }) => {
-    const items = outbound.items || [];
+export const DeliveryNotePDF = ({ outbound, companyName = 'EcoLogistics', wasteTypes = [], wasteType, inventory }) => {
+    // Support both multi-item format (items array) and single-item format (quantity_planned_kg)
+    const hasItemsArray = Array.isArray(outbound.items) && outbound.items.length > 0;
+
+    // Build items array from single outbound if no items array exists
+    const items = hasItemsArray
+        ? outbound.items
+        : outbound.quantity_planned_kg
+            ? [{
+                waste_type: outbound.waste_type_id,
+                quantity: outbound.quantity_received_kg ?? outbound.quantity_planned_kg,
+                unit: 'kg'
+            }]
+            : [];
+
     const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
 
     const getWasteLabel = (wasteTypeId) => {
+        // First check if wasteType prop was passed directly
+        if (wasteType && (wasteType.id === wasteTypeId || !wasteTypeId)) {
+            return wasteType.label || wasteType.name || 'Nepoznato';
+        }
         const wt = wasteTypes.find(w => w.id === wasteTypeId);
-        return wt?.label || wasteTypeId || 'Nepoznato';
+        return wt?.label || wt?.name || wasteTypeId || 'Nepoznato';
     };
+
+    // Get source/destination names with fallbacks
+    const sourceName = outbound.source_inventory_name || inventory?.name || '-';
+    const destinationName = outbound.destination_name || outbound.recipient_name || '-';
+    const receiverName = outbound.confirmed_by_name || outbound.recipient_name || '_________________';
 
     return (
         <Document>
@@ -256,11 +278,11 @@ export const DeliveryNotePDF = ({ outbound, companyName = 'EcoLogistics', wasteT
                     <Text style={styles.sectionTitle}>Podaci o transportu</Text>
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Izlazno skladište:</Text>
-                        <Text style={styles.infoValue}>{outbound.source_inventory_name || '-'}</Text>
+                        <Text style={styles.infoValue}>{sourceName}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Odredište:</Text>
-                        <Text style={styles.infoValue}>{outbound.destination_name || '-'}</Text>
+                        <Text style={styles.infoValue}>{destinationName}</Text>
                     </View>
                     <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Status:</Text>
@@ -330,13 +352,13 @@ export const DeliveryNotePDF = ({ outbound, companyName = 'EcoLogistics', wasteT
                     <View style={styles.signatureBox}>
                         <Text style={styles.signatureLabel}>Predao:</Text>
                         <View style={styles.signatureLine}>
-                            <Text style={styles.signatureText}>{outbound.created_by_name || 'N/A'}</Text>
+                            <Text style={styles.signatureText}>{outbound.created_by_name || inventory?.name || 'N/A'}</Text>
                         </View>
                     </View>
                     <View style={styles.signatureBox}>
                         <Text style={styles.signatureLabel}>Primio:</Text>
                         <View style={styles.signatureLine}>
-                            <Text style={styles.signatureText}>{outbound.confirmed_by_name || '_________________'}</Text>
+                            <Text style={styles.signatureText}>{receiverName}</Text>
                         </View>
                     </View>
                 </View>

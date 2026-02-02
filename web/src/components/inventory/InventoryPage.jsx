@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Warehouse, Package, Plus, ArrowDownToLine, ArrowUpFromLine,
     TrendingUp, Scale, MapPin, Calendar, ChevronDown, ChevronUp,
-    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send, Sliders
+    Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send, Sliders,
+    AlertTriangle
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -236,6 +237,11 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         const visibleIds = new Set(visibleInventories.map(inv => inv.id));
         return outbounds.filter(ob => visibleIds.has(ob.inventory_id));
     }, [outbounds, visibleInventories, isAdmin, isCompanyAdmin, isManager]);
+
+    // Regions without inventory assignment - CRITICAL: these won't track inventory!
+    const regionsWithoutInventory = useMemo(() => {
+        return regions.filter(r => !r.inventory_id && !r.deleted_at);
+    }, [regions]);
 
     // Handle create inventory
     const handleCreate = async ({ data, selectedRegionIds }) => {
@@ -503,6 +509,40 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     </div>
                 </div>
             </div>
+
+            {/* Warning: Regions without inventory - stock won't be tracked! */}
+            {canManage && regionsWithoutInventory.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                    <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <h4 className="font-semibold text-amber-800">
+                            {regionsWithoutInventory.length} {regionsWithoutInventory.length === 1 ? 'region' : 'regiona'} bez dodeljenog skladišta
+                        </h4>
+                        <p className="text-sm text-amber-700 mt-1">
+                            Obrađeni zahtevi iz ovih regiona <strong>neće se evidentirati u skladištu</strong>.
+                            Dodelite skladište svakom regionu da biste pratili zalihe.
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {regionsWithoutInventory.slice(0, 5).map(r => (
+                                <span key={r.id} className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-lg font-medium">
+                                    {r.name}
+                                </span>
+                            ))}
+                            {regionsWithoutInventory.length > 5 && (
+                                <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-lg">
+                                    +{regionsWithoutInventory.length - 5} više
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setActiveTab('warehouses')}
+                            className="mt-3 text-sm font-medium text-amber-700 hover:text-amber-800 underline"
+                        >
+                            Idi na skladišta i dodeli regione →
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Chart - only show when we have transactions */}
             {visibleTransactions.length > 0 && (
