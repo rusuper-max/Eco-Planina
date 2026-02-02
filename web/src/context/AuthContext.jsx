@@ -314,19 +314,20 @@ export const AuthProvider = ({ children }) => {
         // Clear Sentry user context
         clearSentryUser();
 
-        // Clear local state immediately for instant UI feedback
-        clearSession();
-        setIsLoading(false);
+        // CRITICAL: Clear Supabase storage FIRST to prevent session restoration on refresh
+        clearSupabaseStorage();
 
-        // Sign out from Supabase and clear all storage
+        // Sign out from Supabase (this invalidates the session server-side)
         try {
             await supabase.auth.signOut({ scope: 'global' });
         } catch (error) {
             console.error('Logout error:', error);
         }
 
-        // Force clear Supabase storage to prevent session restoration on refresh
-        clearSupabaseStorage();
+        // Clear local state and any remaining storage
+        clearSession();
+        clearSupabaseStorage(); // Double-clear in case signOut restored something
+        setIsLoading(false);
     };
 
     const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role }) => {
