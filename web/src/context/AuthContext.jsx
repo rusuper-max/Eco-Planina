@@ -311,23 +311,33 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = async () => {
+        console.log('[Auth] Logout started');
+
         // Clear Sentry user context
         clearSentryUser();
 
-        // CRITICAL: Clear Supabase storage FIRST to prevent session restoration on refresh
+        // STEP 1: Clear local React state IMMEDIATELY
+        clearSession();
+        setIsLoading(false);
+
+        // STEP 2: Clear ALL Supabase storage (localStorage + IndexedDB)
         clearSupabaseStorage();
 
-        // Sign out from Supabase (this invalidates the session server-side)
+        // STEP 3: Try to sign out from Supabase server (may fail if session already expired - that's OK)
         try {
-            await supabase.auth.signOut({ scope: 'global' });
+            // Use local scope to avoid 403 errors when session is already invalid server-side
+            await supabase.auth.signOut({ scope: 'local' });
         } catch (error) {
-            console.error('Logout error:', error);
+            // Ignore errors - session might already be invalid, that's fine
+            console.log('[Auth] SignOut error (ignored):', error?.message);
         }
 
-        // Clear local state and any remaining storage
-        clearSession();
-        clearSupabaseStorage(); // Double-clear in case signOut restored something
-        setIsLoading(false);
+        // STEP 4: Clear storage AGAIN to ensure nothing was restored by signOut
+        clearSupabaseStorage();
+
+        // STEP 5: Force page reload to completely reset all state
+        // This is the nuclear option but guarantees clean logout
+        window.location.href = '/login';
     };
 
     const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role }) => {
