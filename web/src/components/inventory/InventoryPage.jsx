@@ -3,7 +3,7 @@ import {
     Warehouse, Package, Plus, ArrowDownToLine, ArrowUpFromLine,
     TrendingUp, Scale, MapPin, Calendar, ChevronDown, ChevronUp,
     Edit3, Trash2, Settings, Eye, EyeOff, Download, RefreshCw, Send, Sliders,
-    AlertTriangle
+    AlertTriangle, RotateCcw
 } from 'lucide-react';
 import { useData } from '../../context/DataContext';
 import { useAuth } from '../../context/AuthContext';
@@ -12,7 +12,6 @@ import { InventoryModal } from './InventoryModal';
 import { InventoryTransactions } from './InventoryTransactions';
 import { OutboundTab } from './OutboundTab';
 import { AdjustmentModal } from './AdjustmentModal';
-import { LowStockAlert } from './LowStockAlert';
 import { InventoryChart } from './InventoryChart';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -54,6 +53,9 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     // Modal states
     const [showAddModal, setShowAddModal] = useState(false);
     const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetTarget, setResetTarget] = useState('all'); // 'all' or inventory_id
+    const [resetting, setResetting] = useState(false);
     const [editingInventory, setEditingInventory] = useState(null);
     const [deletingInventory, setDeletingInventory] = useState(null);
     const [selectedInventory, setSelectedInventory] = useState(null); // For detailed view
@@ -333,6 +335,60 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         }
     };
 
+    // Reset inventory - DANGER ZONE
+    const handleResetInventory = async () => {
+        setResetting(true);
+        try {
+            const { supabase } = await import('../../config/supabase');
+
+            if (resetTarget === 'all') {
+                // Get all inventory IDs for this company
+                const inventoryIds = inventories.map(inv => inv.id);
+
+                // Delete all inventory_items for these inventories
+                const { error: itemsError } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .in('inventory_id', inventoryIds);
+                if (itemsError) throw itemsError;
+
+                // Delete all inventory_transactions for these inventories
+                const { error: txError } = await supabase
+                    .from('inventory_transactions')
+                    .delete()
+                    .in('inventory_id', inventoryIds);
+                if (txError) throw txError;
+
+                toast.success('Sva skladišta su resetovana');
+            } else {
+                // Reset specific inventory
+                const { error: itemsError } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .eq('inventory_id', resetTarget);
+                if (itemsError) throw itemsError;
+
+                const { error: txError } = await supabase
+                    .from('inventory_transactions')
+                    .delete()
+                    .eq('inventory_id', resetTarget);
+                if (txError) throw txError;
+
+                const invName = inventories.find(i => i.id === resetTarget)?.name || 'Skladište';
+                toast.success(`${invName} je resetovano`);
+            }
+
+            setShowResetModal(false);
+            setResetTarget('all');
+            loadData();
+        } catch (err) {
+            console.error('Error resetting inventory:', err);
+            toast.error('Greška pri resetovanju: ' + err.message);
+        } finally {
+            setResetting(false);
+        }
+    };
+
     // View inventory details
     const handleViewDetails = (inv) => {
         setSelectedInventory(inv);
@@ -433,6 +489,16 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                             <span className="hidden sm:inline">Korekcija</span>
                         </button>
                     )}
+                    {isCompanyAdmin && (
+                        <button
+                            onClick={() => setShowResetModal(true)}
+                            className="px-3 py-2 border border-red-200 text-red-600 rounded-xl text-sm bg-white hover:bg-red-50 flex items-center gap-1.5"
+                            title="Resetuj skladište - OPREZ!"
+                        >
+                            <RotateCcw size={16} />
+                            <span className="hidden sm:inline">Reset</span>
+                        </button>
+                    )}
                     {canManage ? (
                         <button
                             onClick={() => setShowAddModal(true)}
@@ -453,13 +519,6 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     ) : null}
                 </div>
             </div>
-
-            {/* Low Stock Alert */}
-            <LowStockAlert
-                inventoryItems={visibleInventoryItems}
-                wasteTypes={wasteTypes}
-                defaultThreshold={100}
-            />
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -923,6 +982,85 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                     onClose={() => setShowAdjustmentModal(false)}
                     onSave={loadData}
                 />
+            )}
+
+            {/* Reset Modal - DANGER ZONE */}
+            {showResetModal && (
+                <Modal
+                    open={showResetModal}
+                    onClose={() => { setShowResetModal(false); setResetTarget('all'); }}
+                    title="⚠️ Reset skladišta"
+                >
+                    <div className="space-y-4">
+                        {/* Warning */}
+                        <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <h4 className="font-bold text-red-800">DANGER ZONE</h4>
+                                    <p className="text-sm text-red-700 mt-1">
+                                        Ova akcija će <strong>trajno obrisati</strong> sve podatke o zalihama i transakcijama
+                                        za izabrano skladište. Ova akcija se NE MOŽE poništiti!
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Select target */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                                Šta želite da resetujete?
+                            </label>
+                            <select
+                                value={resetTarget}
+                                onChange={(e) => setResetTarget(e.target.value)}
+                                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500"
+                            >
+                                <option value="all">🔴 Sva skladišta (POTPUNI RESET)</option>
+                                {inventories.map(inv => (
+                                    <option key={inv.id} value={inv.id}>
+                                        {inv.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Confirmation text */}
+                        <div className="p-3 bg-slate-50 rounded-xl text-sm text-slate-600">
+                            {resetTarget === 'all' ? (
+                                <p>
+                                    Brisaće se: <strong>sve zalihe</strong> i <strong>sve transakcije</strong> iz svih {inventories.length} skladišta.
+                                </p>
+                            ) : (
+                                <p>
+                                    Brisaće se: zalihe i transakcije samo iz skladišta <strong>{inventories.find(i => i.id === resetTarget)?.name}</strong>.
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => { setShowResetModal(false); setResetTarget('all'); }}
+                                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-medium"
+                            >
+                                Odustani
+                            </button>
+                            <button
+                                onClick={handleResetInventory}
+                                disabled={resetting}
+                                className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {resetting ? (
+                                    <RecycleLoader size={18} className="animate-spin" />
+                                ) : (
+                                    <RotateCcw size={18} />
+                                )}
+                                {resetting ? 'Resetujem...' : 'Resetuj'}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );
