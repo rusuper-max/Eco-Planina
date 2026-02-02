@@ -3,3 +3,4 @@ export { ClientsTable } from './ClientsTable';
 export { ClientDetailsModal } from './ClientDetailsModal';
 export { ClientEquipmentModal } from './ClientEquipmentModal';
 export { ImportClientsModal } from './ImportClientsModal';
+export { AddClientModal } from './AddClientModal';

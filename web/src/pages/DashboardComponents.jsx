@@ -55,7 +55,8 @@ export {
     ClientsTable,
     ClientDetailsModal,
     ClientEquipmentModal,
-    ImportClientsModal
+    ImportClientsModal,
+    AddClientModal
 } from '../components/clients';
 
 // Re-export equipment components

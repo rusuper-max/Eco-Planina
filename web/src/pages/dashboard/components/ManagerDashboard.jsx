@@ -53,6 +53,7 @@ export const ManagerDashboard = ({
     handleDeleteClient,
     setEditingClientEquipment,
     setShowImportClientsModal,
+    setShowAddClientModal,
     // Equipment handlers
     handleAddEquipment,
     handleAssignEquipment,
@@ -173,6 +174,7 @@ export const ManagerDashboard = ({
                 onDelete={handleDeleteClient}
                 onEditLocation={setEditingClientLocation}
                 onEditEquipment={setEditingClientEquipment}
+                onAddClient={() => setShowAddClientModal(true)}
                 onImport={() => setShowImportClientsModal(true)}
                 equipment={equipment}
                 wasteTypes={wasteTypes}

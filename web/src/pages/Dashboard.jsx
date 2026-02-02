@@ -22,7 +22,7 @@ import {
     SidebarItem, Modal, ModalWithFooter,
     NotificationBell, HelpButton, HelpOverlay,
     getStablePosition, DraggableMarker, LocationPicker,
-    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ImportClientsModal, ProcessRequestModal, CreateRequestModal,
+    RequestDetailsModal, ClientDetailsModal, ClientEquipmentModal, ImportClientsModal, AddClientModal, ProcessRequestModal, CreateRequestModal,
     CompanyEditModal, UserEditModal,
     ChatInterface
 } from './DashboardComponents';
@@ -80,6 +80,7 @@ export default function Dashboard() {
     const [showRegionSelectModal, setShowRegionSelectModal] = useState(false);
     const [selectedRegionId, setSelectedRegionId] = useState('');
     const [showImportClientsModal, setShowImportClientsModal] = useState(false);
+    const [showAddClientModal, setShowAddClientModal] = useState(false);
     const [savingRegion, setSavingRegion] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
 
@@ -823,6 +824,7 @@ export default function Dashboard() {
                     handleDeleteClient={handleDeleteClient}
                     setEditingClientEquipment={setEditingClientEquipment}
                     setShowImportClientsModal={setShowImportClientsModal}
+                    setShowAddClientModal={setShowAddClientModal}
                     handleAddEquipment={handleAddEquipment}
                     handleAssignEquipment={handleAssignEquipment}
                     handleDeleteEquipment={handleDeleteEquipment}
@@ -1224,6 +1226,21 @@ export default function Dashboard() {
                         toast.success(`Uspešno importovano ${result.created} klijent${result.created === 1 ? '' : 'a'}`);
                     }
                     return result;
+                }}
+            />
+            <AddClientModal
+                open={showAddClientModal}
+                onClose={() => setShowAddClientModal(false)}
+                existingPhones={clients.map(c => c.phone)}
+                onAdd={async (clientData) => {
+                    const result = await createShadowClients([clientData]);
+                    if (result.created > 0) {
+                        const refreshed = await fetchCompanyClients(companyCode);
+                        setClients(refreshed || []);
+                        toast.success('Klijent je uspešno dodat');
+                    } else if (result.errors?.length > 0) {
+                        throw new Error(result.errors[0]);
+                    }
                 }}
             />
             {processedNotification && <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 z-50"><CheckCircle2 size={24} /><div><p className="font-semibold">{language === 'sr' ? 'Zahtev obrađen!' : 'Request processed!'}</p><p className="text-sm opacity-90">"{processedNotification.wasteLabel}" {language === 'sr' ? 'preuzet' : 'picked up'}</p></div><button onClick={clearProcessedNotification} className="p-1 hover:bg-white/20 rounded-lg"><X size={20} /></button></div>}

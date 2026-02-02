@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Users, Search, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Box, Eye, Trash2, Building2, Pencil, Package, Upload } from 'lucide-react';
+import { Users, Search, ArrowUpDown, ArrowUp, ArrowDown, MapPin, Box, Eye, Trash2, Building2, Pencil, Package, Upload, UserPlus } from 'lucide-react';
 import { EmptyState } from '../common';
 
 /**
  * Clients Table with sorting and search
  * Refactored: Roba column added, Oprema is display-only, Edit button in Actions
  */
-export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, onImport, equipment = [], wasteTypes = [], regions = [], showRegionColumn = true }) => {
+export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEditEquipment, onImport, onAddClient, equipment = [], wasteTypes = [], regions = [], showRegionColumn = true }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('name'); // name, phone, pib
     const [sortDir, setSortDir] = useState('asc');
@@ -129,15 +129,28 @@ export const ClientsTable = ({ clients, onView, onDelete, onEditLocation, onEdit
                 </div>
             </div>
 
-            {/* Import Button */}
-            {onImport && (
-                <button
-                    onClick={onImport}
-                    className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
-                >
-                    <Upload size={16} />
-                    Importuj
-                </button>
+            {/* Add & Import Buttons */}
+            {(onAddClient || onImport) && (
+                <div className="flex gap-2">
+                    {onAddClient && (
+                        <button
+                            onClick={onAddClient}
+                            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
+                        >
+                            <UserPlus size={16} />
+                            Dodaj klijenta
+                        </button>
+                    )}
+                    {onImport && (
+                        <button
+                            onClick={onImport}
+                            className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors"
+                        >
+                            <Upload size={16} />
+                            Importuj iz Excel-a
+                        </button>
+                    )}
+                </div>
             )}
 
             {/* Results count */}

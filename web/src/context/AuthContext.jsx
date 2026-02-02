@@ -318,10 +318,15 @@ export const AuthProvider = ({ children }) => {
         clearSession();
         setIsLoading(false);
 
-        // Then sign out from Supabase (don't wait for it)
-        supabase.auth.signOut().catch(error => {
+        // Sign out from Supabase and clear all storage
+        try {
+            await supabase.auth.signOut({ scope: 'global' });
+        } catch (error) {
             console.error('Logout error:', error);
-        });
+        }
+
+        // Force clear Supabase storage to prevent session restoration on refresh
+        clearSupabaseStorage();
     };
 
     const register = async ({ name, phone, password, address, latitude, longitude, companyCode: inputCode, role }) => {
