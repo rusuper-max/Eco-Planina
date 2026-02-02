@@ -67,7 +67,8 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
     const isManager = user?.role === 'manager';
     const isCompanyAdmin = user?.role === 'company_admin' || user?.is_owner;
     const isAdmin = ['admin', 'developer'].includes(user?.role);
-    const canManage = isCompanyAdmin || isAdmin; // Only company_admin/admin can CREATE/EDIT/DELETE
+    const canManage = isCompanyAdmin || isAdmin; // Only company_admin/admin can CREATE/EDIT/DELETE warehouses
+    const canAdjust = canManage || isSupervisor; // Supervisors can also adjust inventory
     const showDisabledButton = isSupervisor || isManager; // These roles see disabled button
 
     // Supervisor region IDs for filtering
@@ -422,7 +423,7 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                         <Download size={16} />
                         <span className="hidden sm:inline">Excel</span>
                     </button>
-                    {canManage && (
+                    {canAdjust && (
                         <button
                             onClick={() => setShowAdjustmentModal(true)}
                             className="px-3 py-2 border border-amber-200 text-amber-600 rounded-xl text-sm bg-white hover:bg-amber-50 flex items-center gap-1.5"
