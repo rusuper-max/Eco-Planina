@@ -90,7 +90,7 @@ export const useInventoryOperations = ({ user, companyCode }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, label, icon)
+                    waste_type:waste_type_id(id, name, icon)
                 `);
 
             if (inventoryId) {
@@ -118,7 +118,7 @@ export const useInventoryOperations = ({ user, companyCode }) => {
                 .select(`
                     *,
                     inventory:inventory_id(id, name, company_code),
-                    waste_type:waste_type_id(id, name, label, icon),
+                    waste_type:waste_type_id(id, name, icon),
                     region:region_id(id, name)
                 `)
                 .order('created_at', { ascending: false });
