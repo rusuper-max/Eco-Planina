@@ -310,10 +310,11 @@ export const NotificationProvider = ({ children }) => {
 
     // Re-apply preference filter if preferences change
     useEffect(() => {
-        setNotifications(prev => filterByPreferences(prev));
-        setUnreadCount(prev =>
-            filterByPreferences(prev).filter(n => !n.is_read).length
-        );
+        setNotifications(prev => {
+            const filtered = filterByPreferences(prev);
+            setUnreadCount(filtered.filter(n => !n.is_read).length);
+            return filtered;
+        });
     }, [preferences, filterByPreferences]);
 
     return (
