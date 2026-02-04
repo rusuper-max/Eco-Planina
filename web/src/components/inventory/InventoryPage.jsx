@@ -378,9 +378,12 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
                 toast.success(`${invName} je resetovano`);
             }
 
+            // Clear stale data immediately so UI doesn't show old values
+            setInventoryItems([]);
+            setTransactions([]);
             setShowResetModal(false);
             setResetTarget('all');
-            loadData();
+            await loadData();
         } catch (err) {
             console.error('Error resetting inventory:', err);
             toast.error('Greška pri resetovanju: ' + err.message);
@@ -395,10 +398,11 @@ export const InventoryPage = ({ wasteTypes = [], regions: propRegions = [] }) =>
         loadRegionStats(inv.id);
     };
 
-    // Format weight
+    // Format weight (safe: handles string/null/undefined)
     const formatWeight = (kg) => {
-        if (kg >= 1000) return `${(kg / 1000).toFixed(2)} t`;
-        return `${kg.toFixed(1)} kg`;
+        const num = parseFloat(kg) || 0;
+        if (num >= 1000) return `${(num / 1000).toFixed(2)} t`;
+        return `${num.toFixed(1)} kg`;
     };
 
     // Export to Excel
