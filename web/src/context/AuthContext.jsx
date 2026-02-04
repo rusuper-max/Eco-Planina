@@ -277,8 +277,17 @@ export const AuthProvider = ({ children }) => {
     const login = async (phone, password) => {
         setIsLoading(true);
         try {
+            // Validate inputs
+            if (!phone || phone.trim().length < 6) {
+                throw new Error('Unesite validan broj telefona');
+            }
+            if (!password || password.length < 4) {
+                throw new Error('Unesite lozinku (minimum 4 karaktera)');
+            }
+
             // Convert phone to fake email format
             const fakeEmail = `${phone.replace(/[^0-9]/g, '')}@eco.local`;
+            console.log('[Auth] Attempting login for:', fakeEmail);
 
             const { data, error } = await supabase.auth.signInWithPassword({
                 email: fakeEmail,
@@ -286,24 +295,47 @@ export const AuthProvider = ({ children }) => {
             });
 
             if (error) {
-                throw new Error('Pogrešan broj telefona ili lozinka');
+                console.error('[Auth] Login error:', error.message, error.status);
+
+                // Translate Supabase errors to user-friendly Serbian messages
+                if (error.message?.includes('Invalid login credentials')) {
+                    throw new Error('Pogrešan broj telefona ili lozinka. Proverite unos.');
+                } else if (error.message?.includes('Email not confirmed')) {
+                    throw new Error('Nalog nije aktiviran. Kontaktirajte administratora.');
+                } else if (error.message?.includes('Too many requests')) {
+                    throw new Error('Previše pokušaja. Sačekajte par minuta pa probajte ponovo.');
+                } else if (error.message?.includes('Network')) {
+                    throw new Error('Problem sa internetom. Proverite konekciju.');
+                } else {
+                    throw new Error(`Greška pri prijavi: ${error.message}`);
+                }
             }
+
+            if (!data?.user) {
+                throw new Error('Prijava nije uspela. Pokušajte ponovo.');
+            }
+
+            console.log('[Auth] Login successful, loading profile...');
 
             // Load user profile and get the role immediately
             const userProfile = await loadUserProfile(data.user);
 
-            // Set Sentry user context for error tracking
-            if (userProfile) {
-                setSentryUser({
-                    id: userProfile.id,
-                    name: userProfile.name,
-                    role: userProfile.role,
-                    company_code: userProfile.company_code
-                });
+            if (!userProfile) {
+                throw new Error('Korisnički profil nije pronađen. Kontaktirajte administratora.');
             }
 
+            // Set Sentry user context for error tracking
+            setSentryUser({
+                id: userProfile.id,
+                name: userProfile.name,
+                role: userProfile.role,
+                company_code: userProfile.company_code
+            });
+
+            console.log('[Auth] Login complete, role:', userProfile.role);
             return { success: true, role: userProfile?.role };
         } catch (error) {
+            console.error('[Auth] Login failed:', error.message);
             throw error;
         } finally {
             setIsLoading(false);
@@ -638,6 +670,8 @@ export const AuthProvider = ({ children }) => {
                         name: client.name,
                         phone: client.phone,
                         address: client.address || null,
+                        latitude: client.latitude || null,
+                        longitude: client.longitude || null,
                         manager_note: client.note || null,
                         role: 'client',
                         company_code: companyCode,

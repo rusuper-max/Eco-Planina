@@ -17,6 +17,36 @@ export const NotificationProvider = ({ children }) => {
     const [notifications, setNotifications] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
+    const [preferences, setPreferences] = useState(null);
+
+    // Load notification preferences from users table
+    useEffect(() => {
+        if (!user?.id) {
+            setPreferences(null);
+            return;
+        }
+
+        (async () => {
+            const { data, error } = await supabase
+                .from('users')
+                .select('notification_preferences')
+                .eq('id', user.id)
+                .single();
+
+            if (error) {
+                console.error('[Notifications] Error loading preferences:', error);
+                setPreferences(null);
+                return;
+            }
+            setPreferences(data?.notification_preferences || null);
+        })();
+    }, [user?.id]);
+
+    // Apply preferences (disable types set to false)
+    const filterByPreferences = useCallback((items) => {
+        if (!preferences) return items;
+        return items.filter(n => preferences[n.type] !== false);
+    }, [preferences]);
 
     // Fetch notifications for current user
     const fetchNotifications = useCallback(async () => {
@@ -33,14 +63,15 @@ export const NotificationProvider = ({ children }) => {
 
             if (error) throw error;
 
-            setNotifications(data || []);
-            setUnreadCount((data || []).filter(n => !n.is_read).length);
+            const filtered = filterByPreferences(data || []);
+            setNotifications(filtered);
+            setUnreadCount(filtered.filter(n => !n.is_read).length);
         } catch (error) {
             console.error('[Notifications] Error fetching:', error);
         } finally {
             setIsLoading(false);
         }
-    }, [user?.id]);
+    }, [user?.id, filterByPreferences]);
 
     // Initial fetch and real-time subscription
     useEffect(() => {
@@ -65,8 +96,12 @@ export const NotificationProvider = ({ children }) => {
                     filter: `user_id=eq.${user.id}`
                 },
                 (payload) => {
-                    console.log('[Notifications] New notification:', payload.new);
-                    setNotifications(prev => [payload.new, ...prev]);
+                    const incoming = payload.new;
+                    if (preferences && preferences[incoming.type] === false) {
+                        return;
+                    }
+                    console.log('[Notifications] New notification:', incoming);
+                    setNotifications(prev => [incoming, ...prev]);
                     setUnreadCount(prev => prev + 1);
 
                     // Play sound if enabled (optional)
@@ -82,9 +117,15 @@ export const NotificationProvider = ({ children }) => {
                     filter: `user_id=eq.${user.id}`
                 },
                 (payload) => {
+                    const updatedRow = payload.new;
                     setNotifications(prev => {
-                        const updated = prev.map(n => n.id === payload.new.id ? payload.new : n);
-                        // Recalculate unread count from updated array
+                        // If user disabled this type, drop it from list
+                        if (preferences && preferences[updatedRow.type] === false) {
+                            const filtered = prev.filter(n => n.id !== updatedRow.id);
+                            setUnreadCount(filtered.filter(n => !n.is_read).length);
+                            return filtered;
+                        }
+                        const updated = prev.map(n => n.id === updatedRow.id ? updatedRow : n);
                         setUnreadCount(updated.filter(n => !n.is_read).length);
                         return updated;
                     });
@@ -114,7 +155,7 @@ export const NotificationProvider = ({ children }) => {
             supabase.removeChannel(subscription);
             clearInterval(intervalId);
         };
-    }, [user?.id, fetchNotifications]);
+    }, [user?.id, fetchNotifications, preferences]);
 
     // Mark single notification as read
     const markAsRead = async (notificationId) => {
@@ -219,13 +260,17 @@ export const NotificationProvider = ({ children }) => {
             new_request: '📋',
             urgent_request: '🚨',
             request_processed: '✅',
+            request_expiring: '⌛',
             driver_assigned: '🚚',
             new_assignment: '📦',
+            assignment: '📦',
+            retroactive_assignment: '🕑',
+            unassignment: '↩️',
             assignment_cancelled: '❌',
             new_client: '👤',
             new_message: '💬',
             reminder: '⏰',
-            request_expiring: '⚠️',
+            message: '💬',
         };
         return icons[type] || '🔔';
     };
@@ -262,6 +307,14 @@ export const NotificationProvider = ({ children }) => {
         getNotificationIcon,
         formatTime,
     };
+
+    // Re-apply preference filter if preferences change
+    useEffect(() => {
+        setNotifications(prev => filterByPreferences(prev));
+        setUnreadCount(prev =>
+            filterByPreferences(prev).filter(n => !n.is_read).length
+        );
+    }, [preferences, filterByPreferences]);
 
     return (
         <NotificationContext.Provider value={value}>

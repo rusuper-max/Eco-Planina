@@ -75,7 +75,8 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
             const workbook = XLSX.read(data);
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            // raw: true preserves original values (prevents Excel number conversion)
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
 
             // Parse and validate each row
             const parsed = [];
@@ -86,11 +87,11 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
 
             jsonData.forEach((row, index) => {
                 // Map column names (support both Serbian and English)
-                const name = row['Ime i Prezime'] || row['Ime'] || row['Name'] || '';
-                const phone = row['Telefon'] || row['Phone'] || '';
-                const countryCode = row['Pozivni Broj'] || row['Pozivni'] || row['Country Code'] || defaultCountryCode;
-                const address = row['Adresa'] || row['Address'] || '';
-                const note = row['Napomena'] || row['Note'] || '';
+                const name = String(row['Ime i Prezime'] || row['Ime'] || row['Name'] || '').trim();
+                const phone = String(row['Telefon'] || row['Phone'] || '').trim();
+                const countryCode = String(row['Pozivni Broj'] || row['Pozivni'] || row['Country Code'] || defaultCountryCode).trim();
+                const address = String(row['Adresa'] || row['Address'] || '').trim();
+                const note = String(row['Napomena'] || row['Note'] || '').trim();
 
                 // Skip empty rows or example/template row
                 if (!name || !phone || name.toLowerCase().includes('primer')) {

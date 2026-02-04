@@ -24,10 +24,10 @@ export const COUNTRY_CODES = [
  * @returns {string} Normalized phone in format +XXXXXXXXXXX
  */
 export const normalizePhone = (phone, countryCode = '+381') => {
-    if (!phone) return '';
+    if (!phone && phone !== 0) return '';
 
-    // Remove all non-digit characters except leading +
-    let cleaned = phone.replace(/[^\d+]/g, '');
+    // Ensure string (Excel may pass numbers instead of strings)
+    let cleaned = String(phone).replace(/[^\d+]/g, '');
 
     // If already has +, assume it's international format
     if (cleaned.startsWith('+')) {

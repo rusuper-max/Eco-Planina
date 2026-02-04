@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, Check, CheckCheck, Trash2, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../context/NotificationContext';
 
 const NotificationBell = () => {
@@ -15,6 +16,7 @@ const NotificationBell = () => {
         formatTime,
     } = useNotifications();
 
+    const navigate = useNavigate();
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
@@ -38,8 +40,23 @@ const NotificationBell = () => {
 
         // Navigate based on notification type and data
         if (notification.data?.request_id) {
-            // Could navigate to request details
-            // navigate(`/requests/${notification.data.request_id}`);
+            navigate(`/requests/${notification.data.request_id}`);
+            return;
+        }
+
+        if (notification.type === 'new_client') {
+            navigate('/clients');
+            return;
+        }
+
+        if (notification.type === 'new_message' && notification.data?.conversation_id) {
+            navigate(`/chat/${notification.data.conversation_id}`);
+            return;
+        }
+
+        if (notification.type === 'driver_assigned' && notification.data?.assignment_id) {
+            navigate(`/assignments/${notification.data.assignment_id}`);
+            return;
         }
     };
 
