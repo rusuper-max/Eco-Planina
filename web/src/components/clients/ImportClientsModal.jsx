@@ -72,10 +72,11 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
 
         try {
             const data = await file.arrayBuffer();
-            const workbook = XLSX.read(data);
+            const workbook = XLSX.read(data, { type: 'array' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            // raw: true preserves original values (prevents Excel number conversion)
+            // raw: false preserves original values as strings (prevents Excel number conversion)
+            // cellText: true ensures all cells are treated as text
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: '' });
 
             // Parse and validate each row
@@ -85,56 +86,92 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
             // Create a set of existing phones for quick lookup
             const existingPhonesSet = new Set(existingPhones.map(p => normalizePhone(p)));
 
-            jsonData.forEach((row, index) => {
-                // Map column names (support both Serbian and English)
-                const name = String(row['Ime i Prezime'] || row['Ime'] || row['Name'] || '').trim();
-                const phone = String(row['Telefon'] || row['Phone'] || '').trim();
-                const countryCode = String(row['Pozivni Broj'] || row['Pozivni'] || row['Country Code'] || defaultCountryCode).trim();
-                const address = String(row['Adresa'] || row['Address'] || '').trim();
-                const note = String(row['Napomena'] || row['Note'] || '').trim();
+            // Normalize header keys: trim whitespace, lowercase, remove diacritics
+            const normalizeKey = (key) => key.toLowerCase().trim()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove diacritics
 
-                // Skip empty rows or example/template row
-                if (!name || !phone || name.toLowerCase().includes('primer')) {
-                    return;
-                }
-
-                const normalizedPhone = normalizePhone(phone, countryCode);
-                const validation = validatePhone(phone, countryCode);
-
-                let status = 'ok';
-                let statusMessage = '';
-
-                if (!validation.valid) {
-                    status = 'error';
-                    statusMessage = validation.error;
-                    errs.push(`Red ${index + 2}: ${validation.error}`);
-                } else if (existingPhonesSet.has(normalizedPhone)) {
-                    status = 'duplicate';
-                    statusMessage = 'Već postoji';
-                }
-
-                // Also check for duplicates within this import
-                const alreadyInParsed = parsed.find(p => p.normalizedPhone === normalizedPhone);
-                if (alreadyInParsed) {
-                    status = 'duplicate';
-                    statusMessage = 'Duplikat u fajlu';
-                }
-
-                parsed.push({
-                    id: `import-${index}`,
-                    name: name.trim(),
-                    phone: phone.trim(),
-                    countryCode,
-                    normalizedPhone,
-                    address: address.trim(),
-                    note: note.trim(),
-                    status,
-                    statusMessage,
-                    selected: status === 'ok'
+            // Build header mapping from first row keys
+            const headerMap = {};
+            if (jsonData.length > 0) {
+                Object.keys(jsonData[0]).forEach(key => {
+                    const norm = normalizeKey(key);
+                    if (norm.includes('ime')) headerMap.name = key;
+                    else if (norm.includes('telefon') || norm.includes('phone')) headerMap.phone = key;
+                    else if (norm.includes('pozivni') || norm.includes('country')) headerMap.countryCode = key;
+                    else if (norm.includes('adresa') || norm.includes('address')) headerMap.address = key;
+                    else if (norm.includes('napomena') || norm.includes('note')) headerMap.note = key;
                 });
+            }
 
-                if (status === 'ok') {
-                    existingPhonesSet.add(normalizedPhone);
+            // Fallback: if no headers matched, try positional (A=name, B=phone, C=country, D=address, E=note)
+            if (!headerMap.name && !headerMap.phone && jsonData.length > 0) {
+                const keys = Object.keys(jsonData[0]);
+                if (keys.length >= 2) {
+                    headerMap.name = keys[0];
+                    headerMap.phone = keys[1];
+                    if (keys[2]) headerMap.countryCode = keys[2];
+                    if (keys[3]) headerMap.address = keys[3];
+                    if (keys[4]) headerMap.note = keys[4];
+                }
+            }
+
+            console.log('[Import] Detected headers:', headerMap, 'from keys:', jsonData.length > 0 ? Object.keys(jsonData[0]) : []);
+
+            jsonData.forEach((row, index) => {
+                try {
+                    // Use mapped header keys - safely extract all values as strings
+                    const name = String(headerMap.name != null ? (row[headerMap.name] ?? '') : '').trim();
+                    const phone = String(headerMap.phone != null ? (row[headerMap.phone] ?? '') : '').trim();
+                    const countryCode = String(headerMap.countryCode != null ? (row[headerMap.countryCode] ?? defaultCountryCode) : defaultCountryCode).trim();
+                    const address = String(headerMap.address != null ? (row[headerMap.address] ?? '') : '').trim();
+                    const note = String(headerMap.note != null ? (row[headerMap.note] ?? '') : '').trim();
+
+                    // Skip empty rows or example/template row
+                    if (!name || !phone || name.toLowerCase().includes('primer')) {
+                        return;
+                    }
+
+                    const normalizedPhone = normalizePhone(phone, countryCode);
+                    const validation = validatePhone(phone, countryCode);
+
+                    let status = 'ok';
+                    let statusMessage = '';
+
+                    if (!validation.valid) {
+                        status = 'error';
+                        statusMessage = validation.error;
+                        errs.push(`Red ${index + 2}: ${validation.error}`);
+                    } else if (existingPhonesSet.has(normalizedPhone)) {
+                        status = 'duplicate';
+                        statusMessage = 'Već postoji';
+                    }
+
+                    // Also check for duplicates within this import
+                    const alreadyInParsed = parsed.find(p => p.normalizedPhone === normalizedPhone);
+                    if (alreadyInParsed) {
+                        status = 'duplicate';
+                        statusMessage = 'Duplikat u fajlu';
+                    }
+
+                    parsed.push({
+                        id: `import-${index}`,
+                        name: name.trim(),
+                        phone: phone.trim(),
+                        countryCode,
+                        normalizedPhone,
+                        address: address.trim(),
+                        note: note.trim(),
+                        status,
+                        statusMessage,
+                        selected: status === 'ok'
+                    });
+
+                    if (status === 'ok') {
+                        existingPhonesSet.add(normalizedPhone);
+                    }
+                } catch (rowErr) {
+                    console.error(`[Import] Error parsing row ${index + 2}:`, rowErr, row);
+                    errs.push(`Red ${index + 2}: Greška pri obradi reda`);
                 }
             });
 
@@ -143,7 +180,7 @@ export const ImportClientsModal = ({ open, onClose, onImport, companyCode, exist
             setStep('preview');
         } catch (err) {
             console.error('Error parsing Excel:', err);
-            setErrors(['Greška pri čitanju fajla. Proverite da li je validan Excel fajl.']);
+            setErrors([`Greška pri čitanju fajla: ${err.message || 'Nepoznata greška'}. Proverite da li je validan Excel fajl.`]);
         }
 
         // Reset file input

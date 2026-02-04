@@ -302,7 +302,7 @@ export const OutboundTab = ({
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setConfirmingOutbound(outbound);
-                                                            setReceivedQuantity(outbound.quantity_planned_kg.toString());
+                                                            setReceivedQuantity((outbound.quantity_planned_kg ?? 0).toString());
                                                         }}
                                                         className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1"
                                                     >
@@ -396,7 +396,7 @@ export const OutboundTab = ({
                                                             {outbound.price_per_kg} RSD/kg
                                                             {outbound.total_amount && (
                                                                 <span className="ml-2 text-emerald-600">
-                                                                    = {outbound.total_amount.toLocaleString('sr-RS')} RSD
+                                                                    = {(outbound.total_amount ?? 0).toLocaleString('sr-RS')} RSD
                                                                 </span>
                                                             )}
                                                         </p>

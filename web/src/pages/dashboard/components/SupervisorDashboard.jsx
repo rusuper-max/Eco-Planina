@@ -12,6 +12,7 @@ import {
 } from '../../DashboardComponents';
 import DriverManagement from '../../DriverManagement';
 import { OverviewPage } from '../../../components/overview';
+import ErrorBoundary from '../../../components/common/ErrorBoundary';
 
 export const SupervisorDashboard = ({
     activeTab,
@@ -167,7 +168,11 @@ export const SupervisorDashboard = ({
     }
 
     if (activeTab === 'inventory') {
-        return <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />;
+        return (
+            <ErrorBoundary title="Greška u inventaru" message="Došlo je do greške pri učitavanju inventara. Pokušajte da osvežite stranicu.">
+                <InventoryPage wasteTypes={wasteTypes} regions={regions} userRole={userRole} userRegionId={user?.region_id} />
+            </ErrorBoundary>
+        );
     }
 
     if (activeTab === 'outbound') {
