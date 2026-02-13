@@ -1499,6 +1499,111 @@ export const styles = StyleSheet.create({
   weightUnitTextActive: {
     color: COLORS.white,
   },
+  // Bulk Action Styles
+  bulkHintContainer: {
+    backgroundColor: COLORS.blueLight,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 10,
+  },
+  bulkHintText: {
+    fontSize: 12,
+    color: COLORS.blue,
+    textAlign: 'center',
+  },
+  bulkActionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.orange,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  bulkActionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  bulkCancelButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bulkCancelText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.white,
+  },
+  bulkSelectedCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  bulkActionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  bulkPickupButton: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  bulkDeliveryButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  bulkButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.darkGray,
+  },
+  bulkSelectTouch: {
+    padding: 4,
+    marginRight: 8,
+  },
+  bulkCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.orange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  bulkCheckboxChecked: {
+    backgroundColor: COLORS.orange,
+    borderColor: COLORS.orange,
+  },
+  requestCardBulkSelected: {
+    borderLeftColor: COLORS.orange,
+    backgroundColor: COLORS.orangeLight,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectAllSectionButton: {
+    backgroundColor: COLORS.orangeLight,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  selectAllSectionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.orange,
+  },
 });
 
 export default styles;

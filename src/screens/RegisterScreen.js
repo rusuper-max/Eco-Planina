@@ -16,6 +16,7 @@ import { useLanguage } from '../context/LanguageContext';
 import LocationPicker from '../components/LocationPicker';
 
 const SUPABASE_URL = 'https://vmsfsstxxndpxbsdylog.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_IvJ2RkPfu_4HC2qffHi4bA_118ZZatm';
 
 const COLORS = {
   primary: '#10B981',
@@ -154,6 +155,7 @@ const RegisterScreen = ({ navigation }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           name: name.trim(),

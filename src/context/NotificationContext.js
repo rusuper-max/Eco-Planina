@@ -31,8 +31,73 @@ export const NotificationProvider = ({ children }) => {
   const [expoPushToken, setExpoPushToken] = useState(null);
   const [notification, setNotification] = useState(null);
   const [permissionStatus, setPermissionStatus] = useState(null);
+  const [userId, setUserId] = useState(null); // app users.id
   const notificationListener = useRef();
   const responseListener = useRef();
+  const realtimeChannel = useRef();
+
+  // Resolve current user.id (profile) so we can subscribe to their notifications
+  useEffect(() => {
+    let active = true;
+
+    const loadUserId = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authId = session?.user?.id;
+      if (!authId) {
+        setUserId(null);
+        return;
+      }
+      const { data: userRow, error } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', authId)
+        .single();
+      if (error) {
+        console.error('[Notifications] Failed to load user id:', error);
+        return;
+      }
+      if (active) setUserId(userRow?.id || null);
+    };
+
+    loadUserId();
+
+    const { data: authSub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setUserId(null);
+        return;
+      }
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', session.user.id)
+        .single();
+      setUserId(userRow?.id || null);
+    });
+
+    return () => {
+      active = false;
+      authSub?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  // Map notification type to android channel id
+  const getChannelId = (type) => {
+    switch (type) {
+      case 'assignment':
+      case 'new_assignment':
+        return 'assignments';
+      case 'unassignment':
+      case 'assignment_cancelled':
+        return 'unassignments';
+      case 'retroactive_assignment':
+        return 'retroactive';
+      case 'new_message':
+      case 'message':
+        return 'messages';
+      default:
+        return 'default';
+    }
+  };
 
   // Register for push notifications
   const registerForPushNotifications = useCallback(async () => {
@@ -186,6 +251,36 @@ export const NotificationProvider = ({ children }) => {
     }
   }, []);
 
+  // Real-time subscription to notifications table for the logged-in user (foreground fallback)
+  useEffect(() => {
+    if (realtimeChannel.current) {
+      supabase.removeChannel(realtimeChannel.current);
+      realtimeChannel.current = null;
+    }
+    if (!userId) return;
+
+    const channel = supabase.channel(`rt_notifications_${userId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${userId}`
+      }, (payload) => {
+        const n = payload.new;
+        scheduleLocalNotification(n.title, n.message || n.body, n.data || {}, getChannelId(n.type));
+      })
+      .subscribe();
+
+    realtimeChannel.current = channel;
+
+    return () => {
+      if (realtimeChannel.current) {
+        supabase.removeChannel(realtimeChannel.current);
+        realtimeChannel.current = null;
+      }
+    };
+  }, [userId, scheduleLocalNotification]);
+
   // Clear all notifications
   const clearAllNotifications = useCallback(async () => {
     await Notifications.dismissAllNotificationsAsync();
@@ -203,13 +298,16 @@ export const NotificationProvider = ({ children }) => {
     // Listen for user interaction with notifications
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('[Notifications] User interacted:', response);
-      const data = response.notification.request.content.data;
+      const data = response.notification.request.content.data || {};
 
-      // Handle navigation based on notification data
-      if (data?.type === 'assignment') {
-        // Navigate to assignments - handled in App.js navigation
-      } else if (data?.type === 'message') {
-        // Navigate to chat
+      // Navigate based on notification data
+      if (data.type === 'assignment' || data.type === 'new_assignment') {
+        // Set a nav intent flag in AsyncStorage so relevant screen can consume it
+        AsyncStorage.setItem('nav_intent', JSON.stringify({ screen: 'DriverView', request_id: data.request_id }));
+      } else if (data.type === 'unassignment') {
+        AsyncStorage.setItem('nav_intent', JSON.stringify({ screen: 'DriverView', request_id: data.request_id }));
+      } else if ((data.type === 'message' || data.type === 'new_message') && data.conversation_id) {
+        AsyncStorage.setItem('nav_intent', JSON.stringify({ screen: 'Chat', conversation_id: data.conversation_id }));
       }
     });
 
